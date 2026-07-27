@@ -21,7 +21,6 @@
 #include "sql_util/schema/database_info.h"
 #include "sql_util/stored_procedures/create_stored_procedures.h"
 #include "util/env.h"
-#include "util/logging.h"
 #include "util/secrets/secret_keys.h"
 #include "util/secrets/secrets_helper.h"
 
@@ -168,28 +167,12 @@ namespace {
 		// (App::app_secret_values) — a mismatch yields "Mail sender rejection".
 		const char* mailAppPasswordEnv =
 			Util::GetEnvWithFallback(kEnvMailAppPassword, kEnvMailAppPassword);
-		const std::string mailAppPassword =
-			mailAppPasswordEnv ? mailAppPasswordEnv : "";
 		transaction.RunSqlStatement(
 			std::string("UPDATE ") + std::string(DbSchema::kConfigSecretsTable) +
 				" SET " + std::string(DbSchema::kConfigSecretsValue) + " = $1 WHERE " +
 				std::string(DbSchema::kConfigSecretsName) + " = $2",
-			mailAppPassword,
+			std::string(mailAppPasswordEnv ? mailAppPasswordEnv : ""),
 			std::string(Secrets::kMailAppPassword));
-
-		// DIAGNOSTIC (Phase 5 mail bring-up): confirm the env password actually
-		// reached this process and that the sender address seeded, WITHOUT ever
-		// logging the password value (length only). Read the sender back so this
-		// reflects the row as stored, not just the source constant.
-		const std::string seededSender = transaction.RunSqlStatementReturningOneValue(
-			std::string("SELECT ") + std::string(DbSchema::kConfigSecretsValue) +
-				" FROM " + std::string(DbSchema::kConfigSecretsTable) + " WHERE " +
-				std::string(DbSchema::kConfigSecretsName) + " = $1",
-			std::string(Secrets::kMailSenderAddress));
-		LogInfo() << "[mail-seed] env " << kEnvMailAppPassword << "="
-			<< (mailAppPasswordEnv ? "present" : "MISSING")
-			<< " appPasswordLength=" << mailAppPassword.size()
-			<< " seededSender=" << seededSender << "\n";
 	}
 
 	void PopulateTables(

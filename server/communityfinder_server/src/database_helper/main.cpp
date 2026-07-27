@@ -67,25 +67,6 @@ int main(int argc, char** argv)
     InitializeLogging();
     absl::ParseCommandLine(argc, argv);
 
-    // DIAGNOSTIC (Phase 5 mail bring-up): dump the mail-relevant environment EXACTLY
-    // as THIS process sees it, to settle whether HONUWARE_MAIL_APP_PASSWORD is
-    // reaching the database_helper. HONUWARE_ALLOW_DESTRUCTIVE is printed as a
-    // known-good control — it is read the same way (Util::GetEnvWithFallback ->
-    // std::getenv) and is confirmed to arrive from the launch profile, so if it
-    // shows <set> while the mail password shows <UNSET>, the two vars are not
-    // arriving from the same source. The password VALUE is never logged.
-    {
-        const char* destructive = std::getenv("HONUWARE_ALLOW_DESTRUCTIVE");
-        const char* mailPw = std::getenv("HONUWARE_MAIL_APP_PASSWORD");
-        LogInfo() << "[env-trace] HONUWARE_ALLOW_DESTRUCTIVE="
-                  << (destructive ? destructive : "<UNSET>")
-                  << " | HONUWARE_MAIL_APP_PASSWORD="
-                  << (mailPw
-                          ? ("<set,length=" + std::to_string(std::string(mailPw).size()) + ">")
-                          : std::string("<UNSET>"))
-                  << "\n";
-    }
-
     bool recreate = absl::GetFlag(FLAGS_recreate_database);
     bool migrate = absl::GetFlag(FLAGS_migrate);
 

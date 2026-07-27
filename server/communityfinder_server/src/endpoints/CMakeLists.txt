@@ -12,4 +12,5 @@ target_sources(communityfinder_core PRIVATE
 # covered by the honuware component suite composed against CF's schema.
 target_sources(communityfinder_test_cases PUBLIC
     register_test.cpp
+    crud_test.cpp
 )
