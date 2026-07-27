@@ -5,3 +5,11 @@ target_sources(communityfinder_core PRIVATE
     endpoint_registrations.h
     web_app.cpp
 )
+
+# App-side HTTP tests for the framework account endpoints in CF's build (Phase 4).
+# register is app-side (its PostRegisterHook seam) + the open-registration policy is
+# CF-specific; login/verify/me/remember/set_user_info/update_user_password are
+# covered by the honuware component suite composed against CF's schema.
+target_sources(communityfinder_test_cases PUBLIC
+    register_test.cpp
+)
