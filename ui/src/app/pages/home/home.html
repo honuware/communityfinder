@@ -1,0 +1,14 @@
+<mat-card class="home-card">
+  <mat-card-header>
+    <mat-card-title>Welcome to {{ siteName() }}</mat-card-title>
+    <mat-card-subtitle>Find your community.</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <p>
+      Server health: <strong>{{ health() }}</strong>
+      @if (version()) {
+        <span> (v{{ version() }})</span>
+      }
+    </p>
+  </mat-card-content>
+</mat-card>

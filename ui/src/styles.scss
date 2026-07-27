@@ -1,0 +1,33 @@
+// CommunityFinder global styles + the Angular Material theme.
+//
+// @honuware/ui renders unstyled without a Material theme, so this is a hard
+// requirement (plan 3.1). Uses the Material 3 `mat.theme` mixin.
+@use '@angular/material' as mat;
+
+html {
+  color-scheme: light;
+  @include mat.theme((
+    color: (
+      theme-type: light,
+      primary: mat.$azure-palette,
+      tertiary: mat.$blue-palette,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+}
+
+// Toast/snackbar accents (mirrors knottyyoga's convention; @honuware/ui's
+// ToastService applies these panel classes).
+.toast-success { --mat-snackbar-container-color: #4caf50; --mat-snackbar-supporting-text-color: white; }
+.toast-error   { --mat-snackbar-container-color: #f44336; --mat-snackbar-supporting-text-color: white; }
+.toast-warning { --mat-snackbar-container-color: #ff9800; --mat-snackbar-supporting-text-color: white; }
+.toast-info    { --mat-snackbar-container-color: #2196f3; --mat-snackbar-supporting-text-color: white; }
