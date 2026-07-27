@@ -1,0 +1,27 @@
+# Line-ending policy.
+#
+# CommunityFinder is developed on Windows but its shell scripts run on Linux (the
+# Docker images and server/docker's Linux build/test client). Line endings are not
+# cosmetic there: with core.autocrlf=true (the Windows default) a checkout rewrites
+# files to CRLF, and a shell script with CRLF fails on Linux with a baffling error
+# — the shebang becomes "#!/usr/bin/env bash\r", so the kernel looks for an
+# interpreter named "bash\r" and reports "bad interpreter: No such file or
+# directory", or lines fail with "$'\r': command not found". (This bit the honuware
+# clone; pinning it up front avoids a repeat.)
+#
+# Rules are limited to the file types where the ending actually changes behaviour,
+# rather than a blanket `* text=auto`, so the policy stays explicit and predictable.
+
+# Must be LF — these are read/executed on Linux.
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.cmake     text eol=lf
+
+# Must be CRLF — cmd.exe is the only consumer.
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
+
+# Binary: never touch.
+*.pem       -text

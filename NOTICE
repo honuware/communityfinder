@@ -1,0 +1,19 @@
+CommunityFinder
+Copyright 2026 Knotty Yoga
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License in the LICENSE file in this repository or at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+CommunityFinder is the second consumer application built on the honuware server
+components (https://github.com/honuware/server_components) and the @honuware/ui
+Angular component library (https://github.com/honuware/web_components). Those
+components are separately licensed (Apache-2.0) in their own repositories.
+
+This product bundles no third-party source, but links the following libraries at
+build time, each under its own license (obtained via Conan): Boost, Crow, libpqxx,
+OpenSSL, libsodium, mailio, GoogleTest, Abseil, HowardHinnant/date, libcurl,
+libjpeg, libpng, libtiff, and zlib. The Angular client depends on @honuware/ui and
+its npm dependency tree, each under its own license.
