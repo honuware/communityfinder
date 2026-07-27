@@ -12,7 +12,13 @@ namespace {
 // 1.3). Consumers MUST look them up via SecretsHelper (e.g.
 // ::Mail::LoadSenderAddress) — never use the constant as the value.
 inline constexpr std::string_view kMailSenderNameValue = "CommunityFinder";
-inline constexpr std::string_view kMailSenderAddressValue = "noreply@communityfinder.local";
+// The dedicated Gmail sender account for CommunityFinder. mailio authenticates to
+// Gmail using this address as the SMTP username, so it MUST match the account the
+// app password (HONUWARE_MAIL_APP_PASSWORD, seeded in create_database) belongs to
+// — a mismatch is the "Mail sender rejection" 400 on /api/register. Not a secret
+// (it appears in every outbound From header); the password is the secret and stays
+// in the environment. Production moves to a verified-domain sender (SES).
+inline constexpr std::string_view kMailSenderAddressValue = "community.finder.seattle@gmail.com";
 inline constexpr std::string_view kMailActivationEmailSubjectValue = "CommunityFinder Account Activation";
 inline constexpr std::string_view kAdminAlertsDigestSubjectValue = "CommunityFinder Admin Alerts Digest";
 // Dev URLs. Production addresses are still TBD; both build modes currently point

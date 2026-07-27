@@ -4,4 +4,24 @@
 
 .app-header__brand {
   font-weight: 600;
+  text-decoration: none;
+  color: inherit;
+}
+
+.app-header__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-header__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.app-header__name {
+  margin: 0 2px;
 }

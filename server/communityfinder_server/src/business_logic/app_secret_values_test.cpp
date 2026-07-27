@@ -38,7 +38,7 @@ std::map<std::string, std::string> CollectFrameworkDefaults() {
 TEST(AppSecretValuesTest, RegistersBrandDefaultsForFrameworkKeys) {
     auto d = CollectAppDefaults();
     EXPECT_EQ(d[std::string(Secrets::kMailSenderName)], "CommunityFinder");
-    EXPECT_EQ(d[std::string(Secrets::kMailSenderAddress)], "noreply@communityfinder.local");
+    EXPECT_EQ(d[std::string(Secrets::kMailSenderAddress)], "community.finder.seattle@gmail.com");
     EXPECT_EQ(d[std::string(Secrets::kMailActivationEmailSubject)], "CommunityFinder Account Activation");
     EXPECT_EQ(d[std::string(Secrets::kAdminAlertsDigestSubject)], "CommunityFinder Admin Alerts Digest");
     // Website address is build-mode dependent; assert it is set and non-empty.

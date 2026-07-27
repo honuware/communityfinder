@@ -1,7 +1,27 @@
 <mat-toolbar color="primary" class="app-header">
-  <span class="app-header__brand">{{ siteName }}</span>
+  <a routerLink="/" class="app-header__brand">{{ siteName }}</a>
   <span class="app-header__spacer"></span>
-  <!-- Placeholders until Phase 5 wires hw-login / hw-register + the user chip. -->
-  <button mat-button disabled>Login</button>
-  <button mat-button disabled>Register</button>
+
+  @if (user(); as u) {
+    <button mat-button [matMenuTriggerFor]="menu" class="app-header__chip">
+      <img
+        class="app-header__avatar"
+        [src]="avatarUrl(u.personId)"
+        alt=""
+        (error)="onAvatarError($event)"
+      />
+      <span class="app-header__name">{{ u.firstName }} {{ u.lastName }}</span>
+      <mat-icon>arrow_drop_down</mat-icon>
+    </button>
+    <mat-menu #menu="matMenu">
+      <a mat-menu-item routerLink="/account">My account</a>
+      @if (u.isAdmin) {
+        <a mat-menu-item routerLink="/admin">Admin</a>
+      }
+      <button mat-menu-item (click)="logout()">Logout</button>
+    </mat-menu>
+  } @else {
+    <a mat-button routerLink="/login">Login</a>
+    <a mat-button routerLink="/register">Register</a>
+  }
 </mat-toolbar>

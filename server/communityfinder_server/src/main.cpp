@@ -67,6 +67,20 @@ int main() {
     Auth::CookieManagerFactoryPtr cookieManagerFactory = Auth::MakeCookieManagerFactory();
     TableHelpers::ColumnRedactionSet columnRedactions;
     transactionProvider->RunInTransaction([&](Transaction& transaction) {
+        // DIAGNOSTIC (Phase 5 mail bring-up): the mail configuration the server
+        // ACTUALLY resolved, after the encrypt-on-boot round-trip above — this is
+        // exactly what the SMTP client will use. A "Mail sender rejection" traces to
+        // the sender/host/method/password-length shown here. Never logs the password
+        // value, only its length (a length of 0 means the credential never seeded).
+        LogInfo() << "[mail-config] server="
+                  << secretsHelper->LookupSecret(transaction, Secrets::kMailServerName)
+                  << " port=" << secretsHelper->LookupSecret(transaction, Secrets::kMailServerPort)
+                  << " method=" << secretsHelper->LookupSecret(transaction, Secrets::kMailServerMethod)
+                  << " sender=" << secretsHelper->LookupSecret(transaction, Secrets::kMailSenderAddress)
+                  << " senderName='" << secretsHelper->LookupSecret(transaction, Secrets::kMailSenderName)
+                  << "' appPasswordLength="
+                  << secretsHelper->LookupSecret(transaction, Secrets::kMailAppPassword).size()
+                  << "\n";
         mailHelper = Mail::MakeMailHelper(transaction, secretsHelper);
 
         // Load the column redaction set once at startup — it's read on every CRUD

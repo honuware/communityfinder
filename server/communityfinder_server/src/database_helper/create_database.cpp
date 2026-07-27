@@ -20,9 +20,17 @@
 #include "sql_util/database_common.h"
 #include "sql_util/schema/database_info.h"
 #include "sql_util/stored_procedures/create_stored_procedures.h"
+#include "util/env.h"
+#include "util/logging.h"
+#include "util/secrets/secret_keys.h"
 #include "util/secrets/secrets_helper.h"
 
 namespace {
+
+	// The Gmail app password for the CommunityFinder sender account. Read from the
+	// environment (the local, gitignored VS launch profile / shell) so the live
+	// credential never lands in this PUBLIC repo. See PopulateConfigSecrets.
+	constexpr char kEnvMailAppPassword[] = "HONUWARE_MAIL_APP_PASSWORD";
 
 	DatabaseHelper CreateDatabaseHelper(DbSchema::DatabaseInfo databaseInfo) {
 		return MakeProductionDatabaseHelper(databaseInfo.GetDatabaseName());
@@ -146,6 +154,42 @@ namespace {
 		App::FillInAppSecretDefaults([&](std::string_view name, std::string_view value) {
 			AddRow(name, value);
 			});
+
+		// The mail app password comes from the environment, NEVER source control.
+		// honuware's PopulateFrameworkTables seeds a SHARED default app password
+		// that is committed to the public server_components repo — CommunityFinder
+		// must not inherit it. Overwrite the framework-seeded row (this is why we
+		// UPDATE rather than AddRow — the name already exists, and adding it app-side
+		// would also break the framework/app no-overlap invariant) with the value
+		// from HONUWARE_MAIL_APP_PASSWORD, or empty when it is unset so an
+		// unconfigured build simply cannot send mail rather than authenticating as
+		// the shared account. mailio logs into Gmail using the SENDER ADDRESS as the
+		// SMTP username, so this password must belong to kMailSenderAddress
+		// (App::app_secret_values) — a mismatch yields "Mail sender rejection".
+		const char* mailAppPasswordEnv =
+			Util::GetEnvWithFallback(kEnvMailAppPassword, kEnvMailAppPassword);
+		const std::string mailAppPassword =
+			mailAppPasswordEnv ? mailAppPasswordEnv : "";
+		transaction.RunSqlStatement(
+			std::string("UPDATE ") + std::string(DbSchema::kConfigSecretsTable) +
+				" SET " + std::string(DbSchema::kConfigSecretsValue) + " = $1 WHERE " +
+				std::string(DbSchema::kConfigSecretsName) + " = $2",
+			mailAppPassword,
+			std::string(Secrets::kMailAppPassword));
+
+		// DIAGNOSTIC (Phase 5 mail bring-up): confirm the env password actually
+		// reached this process and that the sender address seeded, WITHOUT ever
+		// logging the password value (length only). Read the sender back so this
+		// reflects the row as stored, not just the source constant.
+		const std::string seededSender = transaction.RunSqlStatementReturningOneValue(
+			std::string("SELECT ") + std::string(DbSchema::kConfigSecretsValue) +
+				" FROM " + std::string(DbSchema::kConfigSecretsTable) + " WHERE " +
+				std::string(DbSchema::kConfigSecretsName) + " = $1",
+			std::string(Secrets::kMailSenderAddress));
+		LogInfo() << "[mail-seed] env " << kEnvMailAppPassword << "="
+			<< (mailAppPasswordEnv ? "present" : "MISSING")
+			<< " appPasswordLength=" << mailAppPassword.size()
+			<< " seededSender=" << seededSender << "\n";
 	}
 
 	void PopulateTables(

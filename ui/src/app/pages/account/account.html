@@ -1,0 +1,51 @@
+<div class="account-page">
+  <h1 class="account-title">My Account</h1>
+
+  @if (isAuth) {
+    <mat-card class="account-card">
+      <mat-card-content>
+        <div class="photo-section">
+          <hw-photo-upload [tableName]="'people'" [tableItemId]="personId" [userMode]="true" />
+        </div>
+
+        <form [formGroup]="form" class="account-form">
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>First name</mat-label>
+            <input id="firstName" matInput type="text" formControlName="firstName" />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Last name</mat-label>
+            <input id="lastName" matInput type="text" formControlName="lastName" />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Email</mat-label>
+            <input id="email" matInput type="email" formControlName="email" />
+          </mat-form-field>
+        </form>
+
+        @if (saved()) {
+          <p class="status-message status-success">Your changes have been saved.</p>
+        }
+        @if (errored()) {
+          <p class="status-message status-error">Something went wrong. Please try again.</p>
+        }
+      </mat-card-content>
+
+      <mat-card-actions class="account-actions">
+        <button
+          id="save"
+          mat-raised-button
+          color="primary"
+          type="button"
+          [disabled]="saving()"
+          (click)="onSave()"
+        >
+          Save
+        </button>
+        <a id="change-password" mat-button routerLink="/account/password">Change password</a>
+      </mat-card-actions>
+    </mat-card>
+  }
+</div>

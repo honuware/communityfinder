@@ -12,7 +12,13 @@ import {
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideRouter, withInMemoryScrolling } from '@angular/router';
 import { CsrfInterceptor, HONUWARE_API_BASE, provideHonuwareAccess } from '@honuware/ui/access';
-import { AuthService, ErrorInterceptor, tryTokenLoginInitializer } from '@honuware/ui/auth';
+import {
+  AUTH_ROUTES,
+  AuthRoutes,
+  AuthService,
+  ErrorInterceptor,
+  tryTokenLoginInitializer,
+} from '@honuware/ui/auth';
 import { provideHonuwareAccessMock } from '@honuware/ui/testing';
 
 import { routes } from './app.routes';
@@ -45,6 +51,19 @@ export const appConfig: ApplicationConfig = {
     }),
     // Fetch the community branding before first render (never rejects).
     provideAppInitializer(() => inject(SiteConfigService).load()),
+    // CF's auth navigation targets: guards + the auth pages redirect through these
+    // instead of @honuware/ui's defaults. mustChangePasswordPath points at CF's own
+    // change-password page; the allowlist bounds post-login returnUrl redirects.
+    {
+      provide: AUTH_ROUTES,
+      useValue: {
+        loginPath: '/login',
+        registerPath: '/register',
+        postLogoutPath: '/',
+        mustChangePasswordPath: '/account/password',
+        returnUrlAllowlist: ['/account', '/'],
+      } satisfies AuthRoutes,
+    },
     provideRouter(routes, withInMemoryScrolling({ scrollPositionRestoration: 'enabled' })),
   ],
 };
