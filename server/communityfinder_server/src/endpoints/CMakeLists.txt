@@ -13,4 +13,5 @@ target_sources(communityfinder_core PRIVATE
 target_sources(communityfinder_test_cases PUBLIC
     register_test.cpp
     crud_test.cpp
+    roles_permissions_test.cpp
 )
