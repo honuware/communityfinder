@@ -1,6 +1,6 @@
-import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
-import { ActivatedRoute, NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter, take } from 'rxjs';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -11,14 +11,16 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { DatabaseSchema } from '@honuware/ui/access';
 import { DatabaseSchemaService } from '@honuware/ui/crud';
 
-// The admin portal shell: a root-table picker over the live get_db_schema, with the
-// selected table's CRUD editor (@honuware/ui/crud's TableView/Edit/New pages)
-// rendering in the outlet below. The library ships the per-table editor pages but no
-// dashboard, so this is CommunityFinder's. Reached via the /admin route (AdminGuard);
-// the child editor routes match the library's default basePath '/admin/tables'.
+// "Manage Data" — the table-picker shell (mounted at /admin/tables): a root-table
+// picker over the live get_db_schema, with the selected table's CRUD editor
+// (@honuware/ui/crud's TableView/Edit/New pages) rendering in the outlet below. The
+// library ships the per-table editor pages but no shell, so this is CommunityFinder's.
+// Its child routes sit directly under 'tables', matching the library's default
+// basePath '/admin/tables'. The dashboard landing is a sibling (AdminDashboard, /admin).
 @Component({
   selector: 'app-admin',
   imports: [
+    RouterLink,
     ReactiveFormsModule,
     RouterOutlet,
     MatFormFieldModule,
@@ -46,6 +48,16 @@ export class AdminPage implements OnInit {
   readonly loading = signal(false);
   readonly tableControl = new FormControl<string>('', { nonNullable: true });
 
+  // Tables shown in the picker: the top-level tables minus the nested/junction tables
+  // (role_assignments, role_permissions). Those are edited from their parent (roles /
+  // people) or a bespoke page — their generic New form is empty anyway, since the
+  // framework marks their FK columns readonly.
+  readonly pickerTables = computed(() => {
+    const schema = this.schema();
+    const nested = new Set(schema.nested_tables);
+    return schema.root_tables.filter((table) => !nested.has(table));
+  });
+
   ngOnInit(): void {
     this.loadSchema();
     this.syncSelectionFromRoute();
@@ -61,7 +73,7 @@ export class AdminPage implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((tableName) => {
         if (tableName) {
-          this.router.navigate(['tables', tableName, 'view', '10', '0'], {
+          this.router.navigate([tableName, 'view', '10', '0'], {
             relativeTo: this.route,
           });
         }
@@ -95,9 +107,10 @@ export class AdminPage implements OnInit {
           this.schema.set(schema);
           this.loading.set(false);
           this.tableControl.enable({ emitEvent: false });
-          // Landing on the bare /admin route: open the first table's editor.
-          if (!this.route.firstChild && schema.root_tables.length > 0) {
-            this.router.navigate(['tables', schema.root_tables[0], 'view', '10', '0'], {
+          // Landing on the bare /admin/tables route: open the first picker table.
+          const firstTable = this.pickerTables()[0];
+          if (!this.route.firstChild && firstTable) {
+            this.router.navigate([firstTable, 'view', '10', '0'], {
               relativeTo: this.route,
             });
           }

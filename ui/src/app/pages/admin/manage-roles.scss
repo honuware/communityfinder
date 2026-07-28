@@ -1,0 +1,48 @@
+.manage-roles {
+  padding: 16px;
+  max-width: 560px;
+}
+
+.manage-roles__title {
+  margin: 0 0 16px;
+  font-weight: 600;
+}
+
+.manage-roles__role {
+  width: 100%;
+}
+
+.manage-roles__panel {
+  margin-top: 8px;
+}
+
+.manage-roles__subtitle {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.manage-roles__empty,
+.manage-roles__hint {
+  opacity: 0.7;
+}
+
+.manage-roles__list {
+  margin-bottom: 8px;
+}
+
+.manage-roles__add {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.manage-roles__person {
+  flex: 1 1 auto;
+}
+
+.manage-roles__error {
+  color: var(--mat-sys-error, #b3261e);
+  margin: 4px 0 0;
+}

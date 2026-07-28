@@ -1,0 +1,117 @@
+<div class="manage-users">
+  <a mat-button routerLink="/admin" class="admin-back">
+    <mat-icon>arrow_back</mat-icon>
+    Admin Dashboard
+  </a>
+  <h1 class="manage-users__title">Users</h1>
+
+  <mat-form-field appearance="outline" class="manage-users__search">
+    <mat-label>Search accounts</mat-label>
+    <input
+      matInput
+      [formControl]="searchControl"
+      [matAutocomplete]="userAuto"
+      placeholder="First name, last name, or email"
+    />
+    <mat-autocomplete
+      #userAuto="matAutocomplete"
+      [displayWith]="displayPerson"
+      (optionSelected)="onUserSelected($event)"
+    >
+      @for (option of peopleOptions(); track option.value) {
+        <mat-option [value]="option">{{ option.display }}</mat-option>
+      }
+    </mat-autocomplete>
+  </mat-form-field>
+
+  @if (selectedUser(); as user) {
+    <mat-card appearance="outlined" class="manage-users__card">
+      <form [formGroup]="editForm" (ngSubmit)="save()">
+        <mat-form-field appearance="outline" class="manage-users__field">
+          <mat-label>First name</mat-label>
+          <input matInput formControlName="first_name" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="manage-users__field">
+          <mat-label>Last name</mat-label>
+          <input matInput formControlName="last_name" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="manage-users__field">
+          <mat-label>Email</mat-label>
+          <input matInput type="email" formControlName="email" />
+        </mat-form-field>
+
+        <div class="manage-users__actions">
+          <button mat-flat-button color="primary" type="submit" [disabled]="saving()">
+            Save changes
+          </button>
+          <button
+            mat-stroked-button
+            type="button"
+            (click)="resetPassword()"
+            [disabled]="saving()"
+          >
+            Reset password
+          </button>
+          <button
+            mat-stroked-button
+            color="warn"
+            type="button"
+            (click)="deleteUser()"
+            [disabled]="saving()"
+          >
+            Delete account
+          </button>
+        </div>
+      </form>
+
+      @if (message()) {
+        <p class="manage-users__message">{{ message() }}</p>
+      }
+      @if (error()) {
+        <p class="manage-users__error">{{ error() }}</p>
+      }
+    </mat-card>
+  } @else {
+    <p class="manage-users__hint">Search for an account to edit or delete it.</p>
+    @if (message()) {
+      <p class="manage-users__message">{{ message() }}</p>
+    }
+    @if (error()) {
+      <p class="manage-users__error">{{ error() }}</p>
+    }
+  }
+
+  <mat-card appearance="outlined" class="manage-users__card manage-users__create">
+    <h2 class="manage-users__subtitle">Create a new account</h2>
+    <p class="manage-users__hint">
+      The person is emailed a temporary password to sign in and set their own.
+    </p>
+    <form [formGroup]="createForm" (ngSubmit)="createUser()">
+      <mat-form-field appearance="outline" class="manage-users__field">
+        <mat-label>First name</mat-label>
+        <input matInput formControlName="first_name" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="manage-users__field">
+        <mat-label>Last name</mat-label>
+        <input matInput formControlName="last_name" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="manage-users__field">
+        <mat-label>Email</mat-label>
+        <input matInput type="email" formControlName="email" />
+      </mat-form-field>
+
+      <div class="manage-users__actions">
+        <button mat-flat-button color="primary" type="submit" [disabled]="creating()">
+          Create user
+        </button>
+      </div>
+    </form>
+
+    @if (createMessage()) {
+      <p class="manage-users__message">{{ createMessage() }}</p>
+    }
+    @if (createError()) {
+      <p class="manage-users__error">{{ createError() }}</p>
+    }
+  </mat-card>
+</div>

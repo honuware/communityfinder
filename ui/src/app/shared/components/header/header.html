@@ -16,7 +16,8 @@
     <mat-menu #menu="matMenu">
       <a mat-menu-item routerLink="/account">My account</a>
       @if (u.isAdmin) {
-        <a mat-menu-item routerLink="/admin">Admin</a>
+        <a mat-menu-item routerLink="/admin">Admin Dashboard</a>
+        <a mat-menu-item routerLink="/admin/tables">Manage Data</a>
       }
       <button mat-menu-item (click)="logout()">Logout</button>
     </mat-menu>

@@ -25,6 +25,11 @@ body {
   color: var(--mat-sys-on-surface);
 }
 
+// "Back to the admin dashboard" link at the top of each admin sub-page.
+.admin-back {
+  margin-bottom: 8px;
+}
+
 // Toast/snackbar accents (mirrors knottyyoga's convention; @honuware/ui's
 // ToastService applies these panel classes).
 .toast-success { --mat-snackbar-container-color: #4caf50; --mat-snackbar-supporting-text-color: white; }

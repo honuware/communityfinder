@@ -1,0 +1,51 @@
+.manage-users {
+  padding: 16px;
+  max-width: 560px;
+}
+
+.manage-users__title {
+  margin: 0 0 16px;
+  font-weight: 600;
+}
+
+.manage-users__search {
+  width: 100%;
+}
+
+.manage-users__card {
+  padding: 16px;
+}
+
+.manage-users__create {
+  margin-top: 24px;
+}
+
+.manage-users__subtitle {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.manage-users__field {
+  width: 100%;
+}
+
+.manage-users__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.manage-users__hint {
+  opacity: 0.7;
+}
+
+.manage-users__message {
+  color: var(--mat-sys-primary);
+  margin: 8px 0 0;
+}
+
+.manage-users__error {
+  color: var(--mat-sys-error, #b3261e);
+  margin: 8px 0 0;
+}

@@ -15,8 +15,11 @@ import { MockRow, ProvideHonuwareAccessMockOptions } from '@honuware/ui/testing'
 // returns this (and every table) from /api/get_db_schema; this is just enough to
 // demo the editor. `display_templates` drive FK-picker / reference labels.
 export const ADMIN_MOCK_SCHEMA: DatabaseSchema = {
-  root_tables: ['people', 'roles'],
-  nested_tables: [],
+  // role_assignments is a nested/junction table (mirrors the framework): it stays out
+  // of the Manage Data picker (AdminPage filters nested out) and is edited via the
+  // bespoke Roles & Permissions page, which reads it from `tables`/`seedRows` below.
+  root_tables: ['people', 'roles', 'role_assignments'],
+  nested_tables: ['role_assignments'],
   tables: [
     {
       table_name: 'people',
@@ -43,6 +46,23 @@ export const ADMIN_MOCK_SCHEMA: DatabaseSchema = {
         { column_name: 'description', type: 'VARCHAR', primary_key: false, unique: false, nullable: true, label: 'Description' },
       ],
     },
+    {
+      // "Roles & Permissions" — assigning people to roles. The person_id / role_id FK
+      // columns resolve to names via the people / roles display_templates above.
+      table_name: 'role_assignments',
+      table_friendly_name: 'Role Assignments',
+      description: 'Which roles each person holds.',
+      primary_key: 'id',
+      foreign_keys: [
+        { column_name: 'person_id', parent_table_name: 'people', parent_column_name: 'id' },
+        { column_name: 'role_id', parent_table_name: 'roles', parent_column_name: 'id' },
+      ],
+      columns: [
+        { column_name: 'id', type: 'SERIAL', primary_key: true, unique: false, nullable: false, label: 'ID', readonly: true },
+        { column_name: 'person_id', type: 'BIGINT', primary_key: false, unique: false, nullable: false, label: 'Person', required: true },
+        { column_name: 'role_id', type: 'BIGINT', primary_key: false, unique: false, nullable: false, label: 'Role', required: true },
+      ],
+    },
   ],
   display_templates: {
     people: '{first_name} {last_name}',
@@ -60,6 +80,10 @@ export const ADMIN_MOCK_SEED_ROWS: Record<string, MockRow[]> = {
   roles: [
     { id: '1', name: 'admin', description: 'Administrator' },
     { id: '2', name: 'user', description: 'Standard member' },
+  ],
+  role_assignments: [
+    { id: '1', person_id: '1', role_id: '1' }, // Demo Admin → admin
+    { id: '2', person_id: '2', role_id: '2' }, // Ada → user
   ],
 };
 

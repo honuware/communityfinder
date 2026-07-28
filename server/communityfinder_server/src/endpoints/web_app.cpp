@@ -12,6 +12,8 @@
 
 // Include each APP endpoint header here as it is added (Phase 4 account surface,
 // Phase 10 events), and add its `anchor = ...` line in RegisterAllEndpoints below.
+#include "admin_create_user.h"
+#include "admin_reset_password.h"
 
 namespace Endpoints {
 
@@ -36,11 +38,14 @@ void RegisterAllEndpoints() {
     // Framework endpoints are anchored by honuware.
     RegisterFrameworkEndpoints();
 
-    // App endpoints — none yet.
+    // App endpoints — anchor each TU so its self-registering RoutingBase runs
+    // (see the header comment: a static-archive object is dropped without a real
+    // reference, and the route silently 404s — worse at -O2).
     using AnchorFunc = void (*)();
     static AnchorFunc volatile anchor = nullptr;
     (void)anchor;
-    // e.g.: anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEvents);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminCreateUser);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminResetPassword);
 }
 
 }  // namespace Endpoints

@@ -4,6 +4,10 @@
 target_sources(communityfinder_core PRIVATE
     endpoint_registrations.h
     web_app.cpp
+    admin_create_user.h
+    admin_create_user.cpp
+    admin_reset_password.h
+    admin_reset_password.cpp
 )
 
 # App-side HTTP tests for the framework account endpoints in CF's build (Phase 4).
@@ -14,4 +18,5 @@ target_sources(communityfinder_test_cases PUBLIC
     register_test.cpp
     crud_test.cpp
     roles_permissions_test.cpp
+    admin_users_test.cpp
 )

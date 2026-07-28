@@ -1,0 +1,15 @@
+<div class="admin-dashboard">
+  <h1 class="admin-dashboard__title">Admin Dashboard</h1>
+
+  <div class="admin-dashboard__grid">
+    @for (tile of tiles; track tile.title) {
+      <a class="admin-dashboard__tile" [routerLink]="tile.link">
+        <mat-card class="admin-dashboard__card" appearance="outlined">
+          <mat-icon class="admin-dashboard__icon">{{ tile.icon }}</mat-icon>
+          <span class="admin-dashboard__label">{{ tile.title }}</span>
+          <span class="admin-dashboard__desc">{{ tile.description }}</span>
+        </mat-card>
+      </a>
+    }
+  </div>
+</div>
