@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import {
+  AdminGuard,
   AuthGuard,
   NoAuthGuard,
   LoginComponent,
@@ -24,6 +25,14 @@ export const routes: Routes = [
   { path: 'account', component: AccountPage, canActivate: [AuthGuard] },
   { path: 'account/password', component: ChangePasswordPage, canActivate: [AuthGuard] },
 
-  // The /admin CRUD editor arrives in Phase 7; events routes in Phase 11.
+  // The admin CRUD editor (@honuware/ui/crud), lazy-loaded so the editor pages stay
+  // out of the initial bundle. AuthGuard sends anonymous visitors to /login; the
+  // nested AdminGuard sends signed-in non-admins home. Events routes arrive Phase 11.
+  {
+    path: 'admin',
+    canActivate: [AuthGuard, AdminGuard],
+    loadChildren: () => import('./pages/admin/admin.routes'),
+  },
+
   { path: '**', redirectTo: '' },
 ];

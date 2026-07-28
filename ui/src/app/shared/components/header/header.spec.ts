@@ -37,7 +37,7 @@ describe('Header', () => {
     expect(text).toContain('Register');
   });
 
-  it('shows the user name when logged in', () => {
+  it('shows only the first name when logged in', () => {
     const user = {
       isAuth: true,
       personId: 7,
@@ -55,7 +55,8 @@ describe('Header', () => {
     fixture.detectChanges();
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Ada');
-    expect(text).toContain('Lovelace');
+    // Only the first name is shown in the chip — the last name feels too formal.
+    expect(text).not.toContain('Lovelace');
     expect(text).not.toContain('Login');
   });
 });

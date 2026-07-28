@@ -1,0 +1,30 @@
+<div class="admin">
+  <h1 class="admin__title">Admin Portal</h1>
+
+  <div class="admin__toolbar">
+    <mat-form-field appearance="outline" class="admin__picker">
+      <mat-label>Table</mat-label>
+      <mat-select [formControl]="tableControl">
+        @for (tableName of schema().root_tables; track tableName) {
+          <mat-option [value]="tableName">{{ friendlyName(tableName) }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <button
+      mat-icon-button
+      type="button"
+      (click)="refresh()"
+      [disabled]="loading()"
+      aria-label="Refresh table list"
+    >
+      <mat-icon>refresh</mat-icon>
+    </button>
+
+    @if (loading()) {
+      <mat-progress-spinner mode="indeterminate" diameter="24" />
+    }
+  </div>
+
+  <router-outlet />
+</div>

@@ -88,7 +88,7 @@ include(FetchContent)
 FetchContent_Declare(
     honuware
     GIT_REPOSITORY https://github.com/honuware/server_components.git
-    GIT_TAG        350c280c4cc89584fcc592ebb979492047f0eb44
+    GIT_TAG        3b1c3dc7e30adf20674dc5e6e3dce495f5e93fcb
 )
 FetchContent_MakeAvailable(honuware)
 

@@ -1,0 +1,19 @@
+.admin {
+  padding: 16px;
+}
+
+.admin__title {
+  margin: 0 0 16px;
+  font-weight: 600;
+}
+
+.admin__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.admin__picker {
+  min-width: 240px;
+}
