@@ -26,7 +26,12 @@ class Library(NamedTuple):
 # ${CROW_LIB}/${PQXX_LIB}/${GTEST_LIB}/... from THIS ConanLibImports). ftxui +
 # replxx are the app-only additions for the communityfinder_test_helper REPL.
 libraries = [
-    Library("abseil", "20220623.1", CMakeInfo("absl", "abseil::abseil")),
+    # DO NOT go back below 2025.x. Like libtiff 4.6.0, the 20220623.1 recipe
+    # tool_requires cmake/[>=3.16 <4], forcing a CMake 3.x that cannot emit the
+    # "Visual Studio 18 2026" generator -- it was the second of the two hard
+    # VS2026 blockers. Used here only for absl/flags in the database_helper and
+    # test_helper mains.
+    Library("abseil", "20250814.2", CMakeInfo("absl", "abseil::abseil")),
     Library("boost", "1.86.0", CMakeInfo("Boost", "boost::boost")),
     Library("ftxui", "5.0.0", CMakeInfo("ftxui", "ftxui::component")),
     Library("replxx", "0.0.4", CMakeInfo("replxx", "replxx::replxx")),
@@ -48,7 +53,7 @@ libraries = [
     # honuware_platform links libzip for the theme-bundle .zip codec (Tenant
     # Theming Phase 9). This list has to stay a superset of honuware's, so a new
     # framework dependency lands here even when nothing app-side calls it.
-    Library("libzip", "1.10.1", CMakeInfo("libzip", "libzip::zip")),
+    Library("libzip", "1.11.4", CMakeInfo("libzip", "libzip::zip")),
     Library("mailio", "0.25.3", CMakeInfo("mailio", "mailio::mailio")),
     # NOTE the capitalisation: Conan's openssl recipe sets cmake_file_name="OpenSSL",
     # so CMakeDeps emits OpenSSLConfig.cmake. find_package() filename lookup is
@@ -56,7 +61,7 @@ libraries = [
     # Windows (case-insensitive). The linked target stays lowercase openssl::openssl
     # (that IS what OpenSSLConfig.cmake declares), and ${OPENSSL_LIB} is unchanged
     # because the generator upper-cases the package name either way.
-    Library("openssl", "3.5.2", CMakeInfo("OpenSSL", "openssl::openssl")),
+    Library("openssl", "3.5.8", CMakeInfo("OpenSSL", "openssl::openssl")),
     Library("zlib", "1.3.2", CMakeInfo("ZLIB", "ZLIB::ZLIB")),
 ]
 
