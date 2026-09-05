@@ -30,15 +30,21 @@ libraries = [
     Library("boost", "1.86.0", CMakeInfo("Boost", "boost::boost")),
     Library("ftxui", "5.0.0", CMakeInfo("ftxui", "ftxui::component")),
     Library("replxx", "0.0.4", CMakeInfo("replxx", "replxx::replxx")),
-    Library("crowcpp-crow", "1.3.2", CMakeInfo("Crow", "Crow::Crow")),
-    Library("date", "3.0.4", CMakeInfo("date", "date::date")),
+    Library("crowcpp-crow", "1.3.3", CMakeInfo("Crow", "Crow::Crow")),
+    Library("date", "3.0.5", CMakeInfo("date", "date::date")),
     Library("gtest", "1.12.1", CMakeInfo("GTest", "gtest::gtest")),
-    Library("libcurl", "7.86.0", CMakeInfo("CURL", "CURL::libcurl")),
-    Library("libjpeg", "9e"),
-    Library("libpng", "1.6.40", CMakeInfo("PNG", "PNG::PNG")),
+    # 7.86.0 -> 8.21.0 looks like a major break and is not: curl kept its API
+    # across the 8 boundary, and CURL::libcurl is unchanged.
+    Library("libcurl", "8.21.0", CMakeInfo("CURL", "CURL::libcurl")),
+    Library("libjpeg", "9f"),
+    Library("libpng", "1.6.58", CMakeInfo("PNG", "PNG::PNG")),
     Library("libpqxx", "7.10.5", CMakeInfo("libpqxx", "libpqxx::pqxx", "PQXX_LIB")),
     Library("libsodium", "1.0.20", CMakeInfo("libsodium", "libsodium::libsodium")),
-    Library("libtiff", "4.6.0", CMakeInfo("TIFF", "TIFF::TIFF")),
+    # DO NOT go back below 4.7.x. The 4.6.0 recipe tool_requires cmake/[>=3.18 <4],
+    # which forces Conan to fetch a CMake 3.x -- and CMake 3.x cannot emit the
+    # "Visual Studio 18 2026" generator, so 4.6.0 makes the whole graph unbuildable
+    # on VS2026. One of the two hard VS2026 blockers (abseil is the other).
+    Library("libtiff", "4.7.2", CMakeInfo("TIFF", "TIFF::TIFF")),
     # honuware_platform links libzip for the theme-bundle .zip codec (Tenant
     # Theming Phase 9). This list has to stay a superset of honuware's, so a new
     # framework dependency lands here even when nothing app-side calls it.
@@ -51,7 +57,7 @@ libraries = [
     # (that IS what OpenSSLConfig.cmake declares), and ${OPENSSL_LIB} is unchanged
     # because the generator upper-cases the package name either way.
     Library("openssl", "3.5.2", CMakeInfo("OpenSSL", "openssl::openssl")),
-    Library("zlib", "1.3.1", CMakeInfo("ZLIB", "ZLIB::ZLIB")),
+    Library("zlib", "1.3.2", CMakeInfo("ZLIB", "ZLIB::ZLIB")),
 ]
 
 class CommunityFinderRecipe(ConanFile):

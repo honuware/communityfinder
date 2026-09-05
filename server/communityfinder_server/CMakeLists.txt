@@ -6,9 +6,20 @@ set(CMAKE_CXX_STANDARD 20)
 # CMP0167 (FindBoost removal) only exists in CMake 3.30+, and cmake_policy(SET) on
 # an unknown policy is a hard ERROR. Guard it so configure works on the 3.25 that
 # Debian bookworm (the gcc:14.2.0 docker/CI builder) installs. On <3.30 the policy
-# doesn't exist and FindBoost is the only lookup path anyway.
+# doesn't exist and FindBoost is the only lookup path anyway, so Linux is
+# unaffected by this setting either way.
+#
+# NEW (config mode) since the dev boxes moved to CMake 4.4 — VS2026 migration
+# Phase 1.3; honuware and knottyyoga made the same flip. Conan's CMakeDeps writes
+# the BoostConfig.cmake this now resolves through, and FindBoost is on the removal
+# track. Verified against this repo's generated conan/conan/ folder (Boost 1.86,
+# CMake 4.4.3): find_package(Boost 1.83 REQUIRED COMPONENTS filesystem) below
+# succeeds, and Boost::filesystem plus the boost::boost target behind ${BOOST_LIB}
+# are both declared. Caveat: config mode does not enforce COMPONENTS the way
+# FindBoost did (no Boost_filesystem_FOUND is set), so that clause is now
+# documentation rather than a check.
 if(POLICY CMP0167)
-    cmake_policy(SET CMP0167 OLD)
+    cmake_policy(SET CMP0167 NEW)
 endif()
 
 # NOTE: this block is intentionally INERT (carried over verbatim from knottyyoga).
@@ -66,9 +77,38 @@ endif()
 honuware_add_component(NAME communityfinder_core)
 honuware_add_component(NAME communityfinder_test_cases)
 
+# Compose the committed Windows profile into the provider's profile list.
+# conan_provider.cmake reads CONAN_HOST_PROFILE (its own default is
+# "default;auto-cmake") and turns each entry into a --profile:host= flag, so a
+# profile file that is merely committed to the repo does NOTHING until it is named
+# here.
+#
+# "default" -- the machine-local ~/.conan2/profiles/default -- is deliberately NOT
+# in the list. Every setting it carries is also produced by auto-cmake, which
+# composes after it and wins, so its only real contribution was stale values. It is
+# also disposable: the docker/CI images and package/build_linux_release.sh all run
+# `conan profile detect --force`, which overwrites anything hand-edited into it.
+# Leaving it out makes the host profile deterministic and version-controlled.
+# CONAN_BUILD_PROFILE still uses "default"; the build context is machine-specific.
+#
+# Ours goes BEFORE auto-cmake so the CMake-derived settings still win. It
+# contributes only a [tool_requires] floor for Boost's build engine, which applies
+# from the host profile alone (verified). See conan/profiles/windows for why.
+#
+# Normal variable, not a cache entry: the provider created the cache entry at
+# project() time and a normal variable in this scope shadows it for the
+# find_package() below, which is where the provider macro runs. WIN32-only -- it
+# addresses an MSVC toolset problem, and the Linux build drives Conan directly
+# without consulting CONAN_HOST_PROFILE.
+if(WIN32)
+    set(CONAN_HOST_PROFILE
+        "${CMAKE_CURRENT_LIST_DIR}/conan/profiles/windows;auto-cmake")
+endif()
+
 # The conan_provider.cmake language-service provider is DEFERRED and won't run until
 # something is requested, so ConanLibImports.cmake won't exist yet. A benign
-# find_package for a piece of Boost forces it.
+# find_package for a piece of Boost forces it. It is also the FIRST find_package in
+# the build, which is what makes the CONAN_HOST_PROFILE above take effect.
 find_package(Boost 1.83 REQUIRED COMPONENTS filesystem)
 
 # Conan2-generated find_package calls + ${..._LIB} vars (from conanfile init()).
