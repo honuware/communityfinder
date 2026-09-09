@@ -29,12 +29,22 @@ cf_build() {
     # cppstd=17 governs only the DEPENDENCY builds; the app itself compiles as
     # C++20 via CMAKE_CXX_STANDARD -- the same combination the release build ships.
     # --output-folder side-steps the recipe's Windows-oriented vs_layout.
+    #
+    # CMakeUserPresets.json is the OTHER file conan writes next to the recipe, and
+    # unlike ConanLibImports.cmake it is NOT harmless. Visual Studio switches to
+    # CMake Presets mode the moment it sees one and then ignores CMakeSettings.json
+    # -- where the CONAN_CMD / CMAKE_PROJECT_TOP_LEVEL_INCLUDES wiring lives --
+    # leaving VS with no launchable configuration and a Debug menu that silently
+    # does nothing. Since /src is a bind mount of the Windows tree, a Linux gate run
+    # would otherwise break the developer's IDE from inside the container. Verified:
+    # without this flag the file appears in the mounted tree; with it, it does not.
     echo "[communityfinder] conan install ..."
     conan install "$SRC_DIR" \
         --output-folder="$BUILD_DIR" \
         --build=missing \
         -s build_type=Release \
-        -s compiler.cppstd=17
+        -s compiler.cppstd=17 \
+        -c tools.cmake.cmaketoolchain:user_presets=''
 
     # Conan 2.28+ nests generators under conan/; older versions put the toolchain at
     # the output-folder root. Probe rather than assume.
