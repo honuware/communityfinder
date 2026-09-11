@@ -66,12 +66,29 @@ With the server running, the API is reachable **from Windows** at
 
 | Binary | Database |
 |---|---|
-| `communityfinder_tests` | `test_communityfinder` — **dropped and recreated** at startup |
+| `communityfinder_tests` | `test_communityfinder_linux` here, `test_communityfinder_windows` on Windows — **dropped and recreated** at startup |
 | `communityfinder_server` | `communityfinder` — real data. Nothing here creates or migrates it; use `communityfinder_database_helper`. |
 
-The honuware suite owns `honuware_test` and knottyyoga owns `test_knottyyoga`, so
-all three coexist on one server. **Never run the same suite from Windows and Linux
-at once** — each DROPs and CREATEs its database at startup.
+The honuware suite owns `honuware_test_*` and knottyyoga owns `test_knottyyoga_*`,
+so all three coexist on one server.
+
+**You can now run the same suite from Windows and Linux at once** (honuware Phase
+10.2). Test database names are platform-qualified: the app's test main supplies the
+base name `test_communityfinder`, and the harness appends a token derived at
+**compile time** — `_windows` under `_WIN32`, `_linux` otherwise. The two runs
+therefore DROP and CREATE *different* databases, so the previous warning here no
+longer applies. Three repos × two platforms = six test databases, all able to run
+concurrently against one PostgreSQL.
+
+Still true: **two Linux gates from two checkouts of this repo collide**, since they
+compile to the same suffix — accepted deliberately, see
+`global_database_test_support.h`.
+
+The old unsuffixed `test_communityfinder` is now **orphaned**; drop it by hand once.
+
+Watch `max_connections` when running several suites at once: six suites' worth of
+pooled connections against one dev PostgreSQL is the likeliest thing to break
+first, and it presents as connection errors rather than test failures.
 
 ## The honuware source override
 

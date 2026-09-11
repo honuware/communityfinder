@@ -11,10 +11,16 @@
 #   communityfinder_test_cases  app *_test.cpp
 #   honuware_tests              component *_test.cpp
 #
-# It drives the `test_communityfinder` database, which it DROPs and CREATEs at
-# startup. That is distinct from knottyyoga's `test_knottyyoga` and honuware's
-# `honuware_test`, so all three suites coexist on one server -- but never run the
-# SAME suite from Windows and Linux at once.
+# It drives `test_communityfinder_linux`, which it DROPs and CREATEs at startup.
+# honuware Phase 10.2 made the name PLATFORM-QUALIFIED: the test main supplies the
+# base name and the harness appends a compile-time token (_linux here, _windows on
+# Windows). That is distinct from knottyyoga's `test_knottyyoga_*` and honuware's
+# `honuware_test_*`, so all three suites coexist on one server -- and the same
+# suite may now run on Windows and Linux AT ONCE, which the old warning here
+# forbade.
+#
+# Two Linux gates from two checkouts of this repo still collide: same suffix.
+# The old unsuffixed `test_communityfinder` database is orphaned; drop it by hand.
 #
 # Overridable:
 #   SRC_DIR / BUILD_DIR / HONUWARE_SRC_DIR   see build_common.sh

@@ -105,7 +105,11 @@ pulled in (libpqxx does so transitively), so `POST`/`GET`/… all vanish too.
 - `HONUWARE_ALLOW_DESTRUCTIVE=1` — gates `--recreate_database`.
 - `SCHEDULER_SERVICE_ACCOUNT_PASSWORD` — the scheduler service account password.
 - `HONUWARE_SRC_DIR` → `-DFETCHCONTENT_SOURCE_DIR_HONUWARE` for local co-dev.
-- App databases: `communityfinder` (prod/dev), `test_communityfinder` (tests).
+- App databases: `communityfinder` (prod/dev); tests use a **platform-qualified**
+  name — `test_communityfinder_windows` / `test_communityfinder_linux`. The test
+  main supplies the base name `test_communityfinder` and honuware's harness
+  appends a compile-time token (honuware Phase 10.2), so a Windows run and a Linux
+  gate can run concurrently. The old unsuffixed `test_communityfinder` is orphaned.
 - App ports: server **18081**, `ng serve` **4201**.
 
 ## Naming

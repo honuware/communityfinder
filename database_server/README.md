@@ -39,13 +39,33 @@ default is to share the one container.)
 ## CommunityFinder's databases
 
 Created on this shared server by the server binaries, alongside knottyyoga's
-(`knottyyoga`, `test_knottyyoga`) and honuware's (`honuware_test`):
+(`knottyyoga`, `test_knottyyoga_*`) and honuware's (`honuware_test_*`):
 
 | Database | Created by | Purpose |
 |---|---|---|
 | `communityfinder` | `communityfinder_database_helper --recreate_database` | dev/real data |
-| `test_communityfinder` | `communityfinder_tests` at startup (DROP + CREATE) | the test suite |
+| `test_communityfinder_windows` | `communityfinder_tests` on Windows, at startup (DROP + CREATE) | the test suite |
+| `test_communityfinder_linux` | `communityfinder_tests` in the Linux gate, at startup (DROP + CREATE) | the test suite |
 
 Both arrive in **Phase 2** — Phase 2.5 wires `--recreate_database`, and Phase 2.6's
-test main drives `test_communityfinder`. Because they are distinct database *names*
-on the same server, they coexist with the existing databases without collision.
+test main drives the test database. Because they are distinct database *names* on
+the same server, they coexist with the existing databases without collision.
+
+**Test databases are platform-qualified** (honuware Phase 10.2). The app's test
+main supplies the base name `test_communityfinder`; the harness appends a token
+derived at **compile time** — `_windows` under `_WIN32`, `_linux` otherwise. So a
+Linux gate and a Windows run of this repo drive different physical databases and
+**can run concurrently**, which is the whole point: three repos × two platforms =
+six test databases, all able to run at once against one PostgreSQL.
+
+Two consequences worth knowing:
+
+- **Two Linux gates from two checkouts of the same repo still collide** — they
+  compile to the same suffix. Accepted deliberately; the suffix is compile-time
+  rather than an environment variable because the harness DROPs and CREATEs
+  whatever name it is handed, and an externally-supplied string inside a
+  destructive operation would need validation it does not currently have.
+- **The old unsuffixed databases are now orphaned**: `honuware_test`,
+  `test_knottyyoga`, `test_communityfinder`. They are dropped-and-recreated
+  scratch databases with nothing to preserve, so drop them by hand once and they
+  will not come back.

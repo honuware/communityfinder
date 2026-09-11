@@ -13,14 +13,19 @@
 #include "util/secrets/secrets_helper_test_util.h"
 
 namespace {
-// App-side test database name. Deliberately NOT honuware's lingering
-// kTestDatabaseName default ("test_knottyyoga") — CommunityFinder owns its own
-// test database name so the two suites' databases never collide on the shared
-// server.
+// App-side test database BASE name. CommunityFinder owns its own name so the
+// three suites' databases never collide on the shared server.
+//
 // Named kAppTestDatabaseName (not kTestDatabaseName) because honuware's global
-// default `kTestDatabaseName = "test_knottyyoga"` (global_database_test_support.h)
-// is unqualified and would be ambiguous with a same-named constant here. Removing
-// that legacy global default is honuware hygiene item 0.4.
+// `kTestDatabaseName` (global_database_test_support.h) is unqualified and would
+// be ambiguous with a same-named constant here. That global used to default to
+// "test_knottyyoga" — the framework naming one app's database; as of honuware
+// Phase 10.2b it is honuware's own "honuware_test", and every app names itself.
+//
+// The PHYSICAL name adds a compile-time platform token via
+// ComposeTestDatabaseName — "test_communityfinder_windows" /
+// "test_communityfinder_linux" — so a Linux gate and a Windows run of this repo
+// no longer collide.
 constexpr std::string_view kAppTestDatabaseName = "test_communityfinder";
 }  // namespace
 
@@ -44,7 +49,8 @@ int main(int argc, char** argv)
     // app-agnostic and never calls MakeDatabaseInfo itself. The control-plane
     // `tenants` table is composed in on top so the tenancy table-helper / resolver
     // tests (which live in honuware_tests) run against the ordinary test database.
-    DbSchema::DatabaseInfo databaseInfo = DbSchema::MakeDatabaseInfo(kAppTestDatabaseName);
+    const std::string testDatabaseName = ComposeTestDatabaseName(kAppTestDatabaseName);
+    DbSchema::DatabaseInfo databaseInfo = DbSchema::MakeDatabaseInfo(testDatabaseName);
     DbSchema::MakeTenantsTable(databaseInfo);
     if(!GlobalDatabaseTestSupport::Initialize(databaseInfo)) {
         std::cout << "Failed to initialize GlobalDatabaseTestSupport." << std::endl;
