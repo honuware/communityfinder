@@ -178,16 +178,27 @@ namespace {
 			});
 
 		// The mail app password comes from the environment, NEVER source control.
-		// honuware's PopulateFrameworkTables seeds a SHARED default app password
-		// that is committed to the public server_components repo — CommunityFinder
-		// must not inherit it. Overwrite the framework-seeded row (this is why we
-		// UPDATE rather than AddRow — the name already exists, and adding it app-side
-		// would also break the framework/app no-overlap invariant) with the value
-		// from HONUWARE_MAIL_APP_PASSWORD, or empty when it is unset so an
-		// unconfigured build simply cannot send mail rather than authenticating as
-		// the shared account. mailio logs into Gmail using the SENDER ADDRESS as the
-		// SMTP username, so this password must belong to kMailSenderAddress
-		// (App::app_secret_values) — a mismatch yields "Mail sender rejection".
+		//
+		// honuware's PopulateFrameworkTables seeds this row with an EMPTY default
+		// (server_components Phase 9.2). It did not always: until then the framework
+		// shipped a real, shared Gmail app password committed to the PUBLIC
+		// server_components repo, and this UPDATE existed to stop CommunityFinder
+		// inheriting it. That credential has since been removed and rotated, so
+		// there is no longer a shared password to avoid — but this UPDATE is still
+		// required, because an empty default means nothing else supplies the value.
+		//
+		// UPDATE rather than AddRow because the row already exists (the framework
+		// seeded it), config_secrets.name is UNIQUE, and adding it app-side would
+		// break the framework/app no-overlap invariant.
+		//
+		// Falls back to empty when the env var is unset, so an unconfigured build
+		// simply cannot send mail. MakeMailHelper now throws an operator-facing
+		// error on an empty password rather than attempting to authenticate with
+		// one, so that failure is diagnosable rather than an opaque SMTP rejection.
+		//
+		// mailio logs into Gmail using the SENDER ADDRESS as the SMTP username, so
+		// this password must belong to kMailSenderAddress (App::app_secret_values)
+		// — a mismatch yields "Mail sender rejection".
 		const char* mailAppPasswordEnv =
 			Util::GetEnvWithFallback(kEnvMailAppPassword, kEnvMailAppPassword);
 		transaction.RunSqlStatement(
