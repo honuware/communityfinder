@@ -39,8 +39,14 @@ cf_build() {
     # would otherwise break the developer's IDE from inside the container. Verified:
     # without this flag the file appears in the mounted tree; with it, it does not.
     echo "[communityfinder] conan install ..."
+    # --lockfile is what makes conan.lock load-bearing (honuware Phase 12.3). A
+    # lockfile that is merely committed does NOTHING -- without this flag Conan
+    # re-resolves, which is the exact behaviour the lockfile exists to stop.
+    # ONE lockfile covers both platforms: Windows and Linux resolve an identical
+    # version for every package (verified 2026-09-11).
     conan install "$SRC_DIR" \
         --output-folder="$BUILD_DIR" \
+        --lockfile="$SRC_DIR/conan.lock" \
         --build=missing \
         -s build_type=Release \
         -s compiler.cppstd=17 \
