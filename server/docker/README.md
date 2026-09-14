@@ -21,12 +21,13 @@ route**. Treat this container as a required check before a release, not a curios
 ## Prerequisites
 
 The shared PostgreSQL, on the `knotty-net` network. CommunityFinder does **not**
-run its own database container (Q6) — it reuses the one owned by knottyyoga's
-`database_server/` compose project (see `../../database_server/README.md`):
+run its own database container (Q6) — it reuses the single shared one, owned by
+**server_components'** `database_server/` compose project (see
+`../../database_server/README.md`):
 
 ```
-docker\create_network.cmd                          REM once (shared with knottyyoga)
-<knottyyoga>\database_server\load_container.cmd     REM starts knotty-postgres-docker
+<server_components>\database_server\create_network.cmd   REM once (shared by all three repos)
+<server_components>\database_server\load_container.cmd   REM starts knotty-postgres-docker
 ```
 
 No database configuration is needed: the framework's default Linux DB host is

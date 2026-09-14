@@ -14,7 +14,7 @@ REM   ./docker/run_server.sh        build + run communityfinder_server
 REM
 REM No database environment variables are set on purpose. The framework's default
 REM Linux DB host is literally "postgresql", and the shared docker-compose service
-REM (knottyyoga\database_server\) gets that alias on knotty-net -- so joining the
+REM (server_components\database_server\) gets that alias on knotty-net -- so joining the
 REM network is the whole configuration. Port 5432 and user/password docker/docker
 REM are defaults too.
 
@@ -53,7 +53,7 @@ docker network inspect %NETWORK% >nul 2>&1
 if errorlevel 1 (
     echo ERROR: Docker network "%NETWORK%" does not exist.
     echo        Create it with create_network.cmd, then start the shared PostgreSQL
-    echo        with knottyyoga\database_server\load_container.cmd.
+    echo        with server_components\database_server\load_container.cmd.
     exit /b 1
 )
 

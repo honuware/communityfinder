@@ -6,7 +6,9 @@ databases coexist on it, keyed by name.
 
 ## The shared container
 
-Owned by **knottyyoga's** `database_server/docker-compose.yml`:
+Owned by **server_components'** `database_server/docker-compose.yml` — it moved
+there from knottyyoga in migration plan Phase 14.2, because all three repos depend
+on it and it did not belong inside one of the applications:
 
 | Property | Value |
 |---|---|
@@ -28,13 +30,18 @@ of them with the `HONUWARE_DB_*` env vars if needed.
 If the container isn't already running (check `docker ps`):
 
 ```
-server\docker\create_network.cmd                    REM once, if knotty-net is missing
-<knottyyoga-checkout>\database_server\load_container.cmd   REM starts knotty-postgres-docker
+<server_components>\database_server\create_network.cmd    REM once, if knotty-net is missing
+<server_components>\database_server\load_container.cmd     REM starts knotty-postgres-docker
 ```
 
-`<knottyyoga-checkout>` is the sibling `knottyyoga` repo. (If knottyyoga is not
-available, copy its `database_server/` compose project here and run it — but the
-default is to share the one container.)
+`<server_components>` is the sibling `server_components` checkout — the framework
+this repo already consumes via FetchContent, so it is present on any machine set up
+to build CommunityFinder. See `server_components/database_server/README.md` for the
+data directory, the database inventory, and `postgres_shell.cmd`.
+
+Do **not** copy the compose project here. Two compose projects claiming the
+container name `knotty-postgres-docker` would fight over one cluster; sharing the
+single container is the decision (Q6), not a fallback.
 
 ## CommunityFinder's databases
 
