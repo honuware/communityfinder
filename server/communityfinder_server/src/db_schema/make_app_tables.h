@@ -5,9 +5,7 @@
 namespace DbSchema {
 
 	// Registers every app (CommunityFinder domain) table into the shared
-	// DatabaseInfo. **Currently empty** — CommunityFinder has no app tables yet;
-	// its first domain tables (events) arrive in Phase 10. The function exists so
-	// the app composition root (MakeDatabaseInfo) can call it unconditionally.
+	// DatabaseInfo, in FK order.
 	//
 	// Must be called AFTER MakeFrameworkTables: app tables reference framework
 	// tables (people, permissions, ...) as FK parents, which are validated

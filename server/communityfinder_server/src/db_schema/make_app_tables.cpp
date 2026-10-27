@@ -1,13 +1,22 @@
 #include "make_app_tables.h"
 
+#include "categories.h"
+#include "neighborhoods.h"
+#include "scene_tags.h"
+#include "venues.h"
+
 namespace DbSchema {
 
 	void MakeAppTables(DatabaseInfo databaseInfo) {
-		// Intentionally empty. CommunityFinder has no app tables yet; the first
-		// domain tables (events) arrive in Phase 10's events domain. When they
-		// do, register them here with the MakeXxxTable(databaseInfo) helpers, in
-		// FK-topological order (parents before children).
-		(void)databaseInfo;
+		// FK-topological order (parents before children) — DatabaseInfo validates
+		// FK parents eagerly. Keep AppTableCreationOrder (create_app_tables.cpp)
+		// in the same order; a test compares the two.
+
+		// EV1 Slice 1 — the shared vocabularies (GD1 §1–§3) + venues.
+		MakeCategoriesTable(databaseInfo);
+		MakeSceneTagsTable(databaseInfo);
+		MakeNeighborhoodsTable(databaseInfo);
+		MakeVenuesTable(databaseInfo);
 	}
 
 }  // namespace DbSchema

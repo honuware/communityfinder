@@ -7,6 +7,7 @@
 #include "business_logic/app_database_config.h"
 #include "business_logic/app_secret_values.h"
 #include "business_logic/auth/person.h"
+#include "business_logic/create_app_tables.h"
 #include "business_logic/create_framework_tables.h"
 #include "db_schema/config_secrets.h"
 #include "db_schema/make_database_info.h"
@@ -36,23 +37,20 @@ namespace {
 	}
 
 	/*
-	When adding a table, please be sure to modify all three:
-		create_database.cpp    - CreateTables
-		create_database.cpp    - PopulateTables
-		make_database_info.cpp - MakeDatabaseInfo
+	When adding an app table, please be sure to modify all three:
+		make_app_tables.cpp    - MakeAppTables
+		create_app_tables.cpp  - AppTableCreationOrder (what CreateTables builds)
+		create_app_tables.cpp  - PopulateAppTables (admin metadata + seed)
 	*/
 	void CreateTables(
 		Transaction& transaction, DbSchema::DatabaseInfo databaseInfo) {
 		// honuware provides the framework tables (schema_migrations, the admin
 		// metadata tables, allowed_tables, config_secrets, identity/auth, photos,
 		// idempotency_keys, login_attempts, auth_events) + their indexes. They are
-		// created first because the app tables will FK into them; no framework
-		// table references an app table.
+		// created first because the app tables FK into them; no framework table
+		// references an app table.
 		CreateFrameworkTables(transaction, databaseInfo);
-		// CommunityFinder has NO app tables yet — the app schema (its own
-		// roles/permissions beyond the framework baseline, and the domain tables)
-		// arrives in Phase 10. Until then the framework tables are the entire
-		// schema, so there is nothing else to create here.
+		CreateAppTables(transaction, databaseInfo);
 	}
 
 	std::pair<std::string, std::string> DbPair(std::string_view key, std::string_view value) {
@@ -217,9 +215,15 @@ namespace {
 		// framework tables' admin metadata). Order matters: the Administrator role
 		// assignment below requires the framework roles to already exist.
 		PopulateFrameworkTables(transaction, databaseHelper, databaseInfo);
+		// The app's own rows: the shared vocabularies (GD1 §1–§3), the admin CRUD
+		// metadata for every app table, and the public allowed_tables entries.
+		// Before the app permissions, whose admin_table_permissions rows will
+		// reference these tables.
+		PopulateAppTables(transaction, databaseHelper, databaseInfo);
 		// App roles/permissions beyond the framework base — seeded after the framework
 		// (which supplies admin/user + admin_portal/staff_access) so grants can look up
-		// framework roles by name, and before role assignments. Empty until Phase 10.
+		// framework roles by name, and before role assignments. Empty until EV1 Slice 2
+		// adds `manage_events`.
 		PopulateAppRolesAndPermissions(transaction, databaseHelper);
 		PopulatePeople(transaction, databaseHelper, databaseInfo);
 		PopulateRoleAssignments(transaction, databaseHelper, databaseInfo);
@@ -239,10 +243,10 @@ namespace {
 }  // namespace
 
 /*
-When adding a table, please be sure to modify all three:
-	create_database.cpp    - CreateTables
-	create_database.cpp    - PopulateTables
-	make_database_info.cpp - MakeDatabaseInfo
+When adding an app table, please be sure to modify all three:
+	make_app_tables.cpp    - MakeAppTables
+	create_app_tables.cpp  - AppTableCreationOrder (what CreateTables builds)
+	create_app_tables.cpp  - PopulateAppTables (admin metadata + seed)
 */
 void CreateSchemaAndPopulate(
 	DatabaseHelper databaseHelper, DbSchema::DatabaseInfo databaseInfo) {

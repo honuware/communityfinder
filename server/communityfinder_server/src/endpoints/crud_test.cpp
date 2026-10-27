@@ -1,4 +1,5 @@
 #include <string>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -7,6 +8,7 @@
 #include "business_logic/auth/cookie_manager_test_util.h"
 #include "business_logic/auth/person.h"
 #include "business_logic/auth/server_config.h"
+#include "business_logic/create_app_tables.h"
 #include "db_schema/config_secrets.h"
 #include "db_schema/people.h"
 #include "db_schema/roles.h"
@@ -201,6 +203,32 @@ TEST(CommunityFinderCrudTest, AnonymousGenericCrudDenied) {
         ASSERT_EQ(resp.code, 400) << resp.body;
         Json::Value body = Json::Value::FromText(resp.body);
         EXPECT_EQ(body["type"].Get<std::string>(), ErrorCodes::kValidationError);
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// EV1 OQ1 (Option A): the site reads the shared vocabularies — and venues —
+// through the generic table reads rather than bespoke endpoints, so a signed-out
+// visitor must get every seeded row. Runs the real seed, which is what puts
+// these tables on the public allowed_tables list.
+TEST(CommunityFinderCrudTest, AnonymousCanReadTheSeededVocabularies) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("CFAnonVocabularies", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        PopulateAppTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
+
+        const std::pair<std::string, size_t> kExpectedRows[] = {
+            {"categories", 12}, {"scene_tags", 11}, {"neighborhoods", 25},
+            {"venues", 0}};
+        for (const auto& [table, rowCount] : kExpectedRows) {
+            crow::response resp = Handle(
+                helper, crow::HTTPMethod::Get, "/api/get_table_rows/" + table);
+            ASSERT_EQ(resp.code, 200) << table << ": " << resp.body;
+            Json::Value body = Json::Value::FromText(resp.body);
+            EXPECT_EQ(body["dataTable"].GetArray().size(), rowCount) << table;
+        }
     });
     Auth::ServerConfig::Shutdown();
 }
