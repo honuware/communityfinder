@@ -8,6 +8,7 @@ target_include_directories(communityfinder_test_cases PUBLIC ${CMAKE_CURRENT_LIS
 
 add_subdirectory(business_logic)
 add_subdirectory(db_schema)
+add_subdirectory(sql_util/table_helpers)
 add_subdirectory(endpoints)
 add_subdirectory(database_helper)
 add_subdirectory(test_helper)

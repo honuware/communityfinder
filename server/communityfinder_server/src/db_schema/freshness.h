@@ -15,6 +15,12 @@ namespace DbSchema {
 	inline constexpr std::string_view kFreshnessStatusSqlValues =
 		"'open', 'closed', 'moved', 'seasonal', 'unverified'";
 
+	inline constexpr std::string_view kFreshnessStatusOpen = "open";
+	inline constexpr std::string_view kFreshnessStatusClosed = "closed";
+	inline constexpr std::string_view kFreshnessStatusMoved = "moved";
+	inline constexpr std::string_view kFreshnessStatusSeasonal = "seasonal";
+	inline constexpr std::string_view kFreshnessStatusUnverified = "unverified";
+
 	// `volatility_tier`: how often a listing needs re-verifying (EV5's cadence).
 	// Not rendered publicly.
 	inline constexpr std::string_view kVolatilityTierSqlValues =

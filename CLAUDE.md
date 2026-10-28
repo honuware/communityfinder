@@ -69,6 +69,9 @@ silently vanishing while the exit code stays 0).
   returns, endpoints' async writes re-enter the test's libpqxx connection, which is
   not thread-safe. Call `Shutdown()` before the first DB-touching assertion.
 - **Don't assume collection order** — find rows by a unique identifier, not index.
+- **A constraint violation aborts the test transaction** — make the `EXPECT_THROW`
+  the test's last statement. **`now_us()` is fixed for the whole transaction**, so
+  to prove an `Update*` bumps `updated_us`, insert the row with `updated_us = 0`.
 - **Add a test when you add a method.** App test sources are self-registering
   `TEST()`s in the `communityfinder_test_cases` bag, beside their sources.
 
