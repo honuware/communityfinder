@@ -1,8 +1,15 @@
 #include "make_app_tables.h"
 
 #include "categories.h"
+#include "event_category_assignments.h"
+#include "event_scene_tag_assignments.h"
+#include "event_sources.h"
+#include "events.h"
 #include "neighborhoods.h"
 #include "scene_tags.h"
+#include "series.h"
+#include "series_category_assignments.h"
+#include "series_scene_tag_assignments.h"
 #include "venues.h"
 
 namespace DbSchema {
@@ -17,6 +24,15 @@ namespace DbSchema {
 		MakeSceneTagsTable(databaseInfo);
 		MakeNeighborhoodsTable(databaseInfo);
 		MakeVenuesTable(databaseInfo);
+
+		// EV1 Slice 2 — the events core, then the four assignment tables.
+		MakeEventSourcesTable(databaseInfo);
+		MakeSeriesTable(databaseInfo);
+		MakeEventsTable(databaseInfo);
+		MakeEventCategoryAssignmentsTable(databaseInfo);
+		MakeEventSceneTagAssignmentsTable(databaseInfo);
+		MakeSeriesCategoryAssignmentsTable(databaseInfo);
+		MakeSeriesSceneTagAssignmentsTable(databaseInfo);
 	}
 
 }  // namespace DbSchema

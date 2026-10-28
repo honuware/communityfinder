@@ -134,29 +134,6 @@ namespace {
 		AddRow(kCalebId, DbSchema::kRoleNameAdmin);  // Caleb  -> admin
 	}
 
-	// App roles + permissions beyond the framework base. honuware's
-	// PopulateFrameworkTables already seeds the `admin` and `user` roles and the
-	// `admin_portal` / `staff_access` permissions (admin gets all admin tables via
-	// the admin ROLE, so admins need no app permission to use the CRUD editor). This
-	// is the hook CommunityFinder's own permissions plug into as the features that
-	// ENFORCE them land — none exist yet:
-	//   - Phase 10 (events domain): `manage_events` — lets a non-admin events role
-	//     reach the event tables via the generic CRUD.
-	//   - Phase 14 (multi-community): `manage_site_meta` — community-settings admin.
-	// The pattern (mirroring knottyyoga's create_database) per permission: add the row
-	// to `permissions` (name + description [+ is_pricing_eligible]); grant it to a role
-	// via `role_permissions` looking BOTH ids up BY NAME (they are framework-assigned);
-	// and add an `admin_table_permissions` row for each table a non-admin holder should
-	// reach. Seed `permission_implications` edges only if a tier graph is needed
-	// (knottyyoga leaves it empty and edits it at runtime via the admin CRUD).
-	void PopulateAppRolesAndPermissions(
-		Transaction& transaction, DatabaseHelper databaseHelper) {
-		// No app roles/permissions yet — see the pattern above. Phase 10 adds the
-		// first (`manage_events`).
-		(void)transaction;
-		(void)databaseHelper;
-	}
-
 	void PopulateConfigSecrets(
 		Transaction& transaction, DatabaseHelper databaseHelper, DbSchema::DatabaseInfo databaseInfo) {
 		auto AddRow = [&](
@@ -216,15 +193,11 @@ namespace {
 		// assignment below requires the framework roles to already exist.
 		PopulateFrameworkTables(transaction, databaseHelper, databaseInfo);
 		// The app's own rows: the shared vocabularies (GD1 §1–§3), the admin CRUD
-		// metadata for every app table, and the public allowed_tables entries.
-		// Before the app permissions, whose admin_table_permissions rows will
-		// reference these tables.
+		// metadata for every app table, the app permissions (`manage_events`,
+		// granted to the framework Administrator role by name), photo support, and
+		// the public allowed_tables entries. After the framework, whose roles the
+		// grants look up; before role assignments.
 		PopulateAppTables(transaction, databaseHelper, databaseInfo);
-		// App roles/permissions beyond the framework base — seeded after the framework
-		// (which supplies admin/user + admin_portal/staff_access) so grants can look up
-		// framework roles by name, and before role assignments. Empty until EV1 Slice 2
-		// adds `manage_events`.
-		PopulateAppRolesAndPermissions(transaction, databaseHelper);
 		PopulatePeople(transaction, databaseHelper, databaseInfo);
 		PopulateRoleAssignments(transaction, databaseHelper, databaseInfo);
 		PopulateConfigSecrets(transaction, databaseHelper, databaseInfo);
@@ -232,8 +205,8 @@ namespace {
 		// DEFERRED to Phase 12 (scheduler): the scheduler service account is
 		// provisioned by Auth::EnsureSchedulerServiceAccount, which currently hard-
 		// requires the `manage_subscriptions` permission (a knottyyoga coupling) and
-		// throws if it is absent. CommunityFinder has no app permissions yet (they
-		// arrive with the events domain / roles in Phase 10), and
+		// throws if it is absent. CommunityFinder's only app permission is
+		// `manage_events` (EV1), and
 		// communityfinder_helper (the scheduler exe) is Phase 12 — so the account is
 		// seeded then, once CF's permission model exists and honuware's
 		// EnsureSchedulerServiceAccount is parameterized on the required

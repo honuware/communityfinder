@@ -7,17 +7,32 @@
 
 #include "db_schema/admin_column_data_info.h"
 #include "db_schema/admin_column_friendly_names.h"
+#include "db_schema/admin_nested_tables.h"
 #include "db_schema/admin_table_display_template.h"
 #include "db_schema/admin_table_friendly_names.h"
+#include "db_schema/admin_table_permissions.h"
 #include "db_schema/admin_top_level_tables.h"
 #include "db_schema/allowed_tables.h"
 #include "db_schema/categories.h"
+#include "db_schema/event_category_assignments.h"
+#include "db_schema/event_scene_tag_assignments.h"
+#include "db_schema/event_sources.h"
+#include "db_schema/events.h"
 #include "db_schema/neighborhoods.h"
+#include "db_schema/permissions.h"
+#include "db_schema/photos.h"
+#include "db_schema/role_permissions.h"
+#include "db_schema/roles.h"
 #include "db_schema/scene_tags.h"
+#include "db_schema/series.h"
+#include "db_schema/series_category_assignments.h"
+#include "db_schema/series_scene_tag_assignments.h"
 #include "db_schema/venues.h"
 #include "sql_util/database_access/database_crud_helpers.h"
 #include "sql_util/database_access/db_and_table_operations.h"
 #include "sql_util/database_common.h"
+#include "sql_util/table_helpers/permissions.h"
+#include "sql_util/table_helpers/roles.h"
 #include "util/types.h"
 
 namespace {
@@ -236,6 +251,66 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kVenuesTable, DbSchema::kVenuesVolatilityTier, "Re-check Cadence", "weekly | monthly | quarterly | semiannual | annual: how often the facts need re-verifying", "text", "true");
         AddRow(DbSchema::kVenuesTable, DbSchema::kVenuesCreatedUs, "Created", "When this venue was created", "date", "false", "true");
         AddRow(DbSchema::kVenuesTable, DbSchema::kVenuesUpdatedUs, "Updated", "When this venue was last updated", "date", "false", "true");
+
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesName, "Name", "Name of the source, e.g. the venue or feed it reads", "text", "true");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesUrl, "URL", "Where the source is read: the feed, calendar page, or profile", "text", "false");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesKind, "Kind", "ics_feed | venue_site | ticketing_org | aggregator | editorial_monitor | submission | social", "text", "true");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesVenueId, "Venue", "The venue this source covers, when it covers exactly one (venues.id)", "number", "false");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesEnabled, "Enabled", "Whether the scanner reads this source", "bool", "true");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesScanHints, "Scan Hints", "Notes for the scanner: what to read and what to skip", "text", "false");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesVolatilityTier, "Scan Cadence", "weekly | monthly | quarterly | semiannual | annual: how often to re-scan", "text", "true");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesLastScannedAtUs, "Last Scanned", "When the scanner last read this source", "date", "false", "true");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesNotes, "Notes", "Internal notes about this source", "text", "false");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesCreatedUs, "Created", "When this source was created", "date", "false", "true");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesUpdatedUs, "Updated", "When this source was last updated", "date", "false", "true");
+
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesTitle, "Title", "Name of the series, e.g. T4T", "text", "true");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesSlug, "Slug", kSlugHint, "text", "true");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesDescription, "Description", "What the series is", "text", "false");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesCadenceText, "Cadence", "How it recurs, in words, e.g. 2nd Saturdays. Display only; it does not create events.", "text", "false");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesUrl, "Website", "The series' own page", "text", "false");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesVenueId, "Venue", "Where it usually happens (venues.id); leave empty if it moves around", "number", "false");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesStatus, "Status", "open | closed | moved | seasonal | unverified. Close a series rather than deleting it — deleting also deletes all its events.", "text", "true");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesLastVerifiedAtUs, "Verified", "When a person last confirmed the series is still running as described. Set it only when you have checked; routine edits leave it alone.", "date", "false");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesVolatilityTier, "Re-check Cadence", "weekly | monthly | quarterly | semiannual | annual: how often the series needs re-verifying", "text", "true");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesCreatedUs, "Created", "When this series was created", "date", "false", "true");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesUpdatedUs, "Updated", "When this series was last updated", "date", "false", "true");
+
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsTitle, "Title", "Name of the event", "text", "true");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsDescription, "Description", "What the event is", "text", "false");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsStartsAtUs, "Starts", "When it starts", "date", "true");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsEndsAtUs, "Ends", "When it ends; leave empty if no end is stated", "date", "false");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsVenueId, "Venue", "Where it happens (venues.id); for a place with no venue row, leave empty and fill in Location", "number", "false");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsLocationText, "Location", "Where it is when there is no venue row, e.g. a park", "text", "false");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsUrl, "Website", "The event page or tickets", "text", "false");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsCostText, "Cost", "As stated, e.g. Free, or $10–20 sliding scale", "text", "false");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsSourceId, "Source", "The source it was ingested from (event_sources.id); empty for hand-entered events", "number", "false");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsSeriesId, "Series", "The series this is an instance of (series.id); empty for a one-off", "number", "false");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsExternalKey, "External Key", "The source's own id for this item, set by the ingest. Leave empty for hand-entered events.", "text", "false");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsOrigin, "Origin", "scanned | manual | user_submitted", "text", "true");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsStatus, "Status", "pending | approved | rejected | archived. Only approved events are public.", "text", "true");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsCreatedByPersonId, "Created By", "The person who entered it (people.id)", "number", "false", "true");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsReviewedByPersonId, "Reviewed By", "The person who last approved or rejected it (people.id)", "number", "false", "true");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsReviewedUs, "Reviewed", "When it was last approved or rejected", "date", "false", "true");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsReviewNotes, "Review Notes", "Why it was approved or rejected. A re-scan that changes the date or venue adds a note here when it sends the event back to pending.", "text", "false");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsCreatedUs, "Created", "When this event was created", "date", "false", "true");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsUpdatedUs, "Updated", "When this event was last updated", "date", "false", "true");
+
+        AddRow(DbSchema::kEventCategoryAssignmentsTable, DbSchema::kEventCategoryAssignmentsEventId, "Event", "The event (events.id)", "number", "true");
+        AddRow(DbSchema::kEventCategoryAssignmentsTable, DbSchema::kEventCategoryAssignmentsCategoryId, "Category", "The category (categories.id). An event's own categories replace its series' categories.", "number", "true");
+        AddRow(DbSchema::kEventCategoryAssignmentsTable, DbSchema::kEventCategoryAssignmentsCreatedUs, "Created", "When this assignment was created", "date", "false", "true");
+
+        AddRow(DbSchema::kEventSceneTagAssignmentsTable, DbSchema::kEventSceneTagAssignmentsEventId, "Event", "The event (events.id)", "number", "true");
+        AddRow(DbSchema::kEventSceneTagAssignmentsTable, DbSchema::kEventSceneTagAssignmentsSceneTagId, "Scene Tag", "The scene tag (scene_tags.id). An event's own scene tags replace its series' scene tags.", "number", "true");
+        AddRow(DbSchema::kEventSceneTagAssignmentsTable, DbSchema::kEventSceneTagAssignmentsCreatedUs, "Created", "When this assignment was created", "date", "false", "true");
+
+        AddRow(DbSchema::kSeriesCategoryAssignmentsTable, DbSchema::kSeriesCategoryAssignmentsSeriesId, "Series", "The series (series.id)", "number", "true");
+        AddRow(DbSchema::kSeriesCategoryAssignmentsTable, DbSchema::kSeriesCategoryAssignmentsCategoryId, "Category", "The category (categories.id). Instances without categories of their own inherit these.", "number", "true");
+        AddRow(DbSchema::kSeriesCategoryAssignmentsTable, DbSchema::kSeriesCategoryAssignmentsCreatedUs, "Created", "When this assignment was created", "date", "false", "true");
+
+        AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsSeriesId, "Series", "The series (series.id)", "number", "true");
+        AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsSceneTagId, "Scene Tag", "The scene tag (scene_tags.id). Instances without scene tags of their own inherit these.", "number", "true");
+        AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsCreatedUs, "Created", "When this assignment was created", "date", "false", "true");
     }
 
     // --- Column friendly names: the list view's headers ----------------------
@@ -292,6 +367,73 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kVenuesTable, DbSchema::kVenuesVolatilityTier, "Re-check Cadence");
         AddRow(DbSchema::kVenuesTable, DbSchema::kVenuesCreatedUs, "Created");
         AddRow(DbSchema::kVenuesTable, DbSchema::kVenuesUpdatedUs, "Updated");
+
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesId, "ID");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesName, "Name");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesUrl, "URL");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesKind, "Kind");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesVenueId, "Venue");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesEnabled, "Enabled");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesScanHints, "Scan Hints");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesVolatilityTier, "Scan Cadence");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesLastScannedAtUs, "Last Scanned");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesNotes, "Notes");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesCreatedUs, "Created");
+        AddRow(DbSchema::kEventSourcesTable, DbSchema::kEventSourcesUpdatedUs, "Updated");
+
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesId, "ID");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesTitle, "Title");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesSlug, "Slug");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesDescription, "Description");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesCadenceText, "Cadence");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesUrl, "Website");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesVenueId, "Venue");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesStatus, "Status");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesLastVerifiedAtUs, "Verified");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesVolatilityTier, "Re-check Cadence");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesCreatedUs, "Created");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesUpdatedUs, "Updated");
+
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsId, "ID");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsTitle, "Title");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsDescription, "Description");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsStartsAtUs, "Starts");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsEndsAtUs, "Ends");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsVenueId, "Venue");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsLocationText, "Location");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsUrl, "Website");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsCostText, "Cost");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsSourceId, "Source");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsSeriesId, "Series");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsExternalKey, "External Key");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsOrigin, "Origin");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsStatus, "Status");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsCreatedByPersonId, "Created By");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsReviewedByPersonId, "Reviewed By");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsReviewedUs, "Reviewed");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsReviewNotes, "Review Notes");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsCreatedUs, "Created");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsUpdatedUs, "Updated");
+
+        AddRow(DbSchema::kEventCategoryAssignmentsTable, DbSchema::kEventCategoryAssignmentsId, "ID");
+        AddRow(DbSchema::kEventCategoryAssignmentsTable, DbSchema::kEventCategoryAssignmentsEventId, "Event");
+        AddRow(DbSchema::kEventCategoryAssignmentsTable, DbSchema::kEventCategoryAssignmentsCategoryId, "Category");
+        AddRow(DbSchema::kEventCategoryAssignmentsTable, DbSchema::kEventCategoryAssignmentsCreatedUs, "Created");
+
+        AddRow(DbSchema::kEventSceneTagAssignmentsTable, DbSchema::kEventSceneTagAssignmentsId, "ID");
+        AddRow(DbSchema::kEventSceneTagAssignmentsTable, DbSchema::kEventSceneTagAssignmentsEventId, "Event");
+        AddRow(DbSchema::kEventSceneTagAssignmentsTable, DbSchema::kEventSceneTagAssignmentsSceneTagId, "Scene Tag");
+        AddRow(DbSchema::kEventSceneTagAssignmentsTable, DbSchema::kEventSceneTagAssignmentsCreatedUs, "Created");
+
+        AddRow(DbSchema::kSeriesCategoryAssignmentsTable, DbSchema::kSeriesCategoryAssignmentsId, "ID");
+        AddRow(DbSchema::kSeriesCategoryAssignmentsTable, DbSchema::kSeriesCategoryAssignmentsSeriesId, "Series");
+        AddRow(DbSchema::kSeriesCategoryAssignmentsTable, DbSchema::kSeriesCategoryAssignmentsCategoryId, "Category");
+        AddRow(DbSchema::kSeriesCategoryAssignmentsTable, DbSchema::kSeriesCategoryAssignmentsCreatedUs, "Created");
+
+        AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsId, "ID");
+        AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsSeriesId, "Series");
+        AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsSceneTagId, "Scene Tag");
+        AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsCreatedUs, "Created");
     }
 
     // --- Table friendly names ------------------------------------------------
@@ -308,6 +450,13 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kSceneTagsTable, "Scene Tags", "Whose crowd it is (bears, leather, sober, ...), with each scene's coverage posture. Shared by events and the guide.");
         AddRow(DbSchema::kNeighborhoodsTable, "Neighborhoods", "King County neighborhoods, grouped by region. Shared by events and the guide.");
         AddRow(DbSchema::kVenuesTable, "Venues", "Places events happen. The guide's venue profiles attach to these.");
+        AddRow(DbSchema::kEventSourcesTable, "Event Sources", "Where events come from (feeds, venue sites, ticketing orgs) and how often each is re-scanned.");
+        AddRow(DbSchema::kSeriesTable, "Event Series", "Recurring events' durable pages, e.g. T4T, 2nd Saturdays. Instances inherit a series' categories and scene tags.");
+        AddRow(DbSchema::kEventsTable, "Events", "One row per dated occurrence. Only approved events are public.");
+        AddRow(DbSchema::kEventCategoryAssignmentsTable, "Event Categories", "An event's own categories. When an event has any, they replace its series' categories.");
+        AddRow(DbSchema::kEventSceneTagAssignmentsTable, "Event Scene Tags", "An event's own scene tags. When an event has any, they replace its series' scene tags.");
+        AddRow(DbSchema::kSeriesCategoryAssignmentsTable, "Series Categories", "A series' categories, inherited by instances that have none of their own.");
+        AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, "Series Scene Tags", "A series' scene tags, inherited by instances that have none of their own.");
     }
 
     // --- Table display templates: how a row reads in an FK picker ------------
@@ -322,13 +471,107 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kSceneTagsTable, "{display_name}");
         AddRow(DbSchema::kNeighborhoodsTable, "{display_name}");
         AddRow(DbSchema::kVenuesTable, "{name}");
+        AddRow(DbSchema::kEventSourcesTable, "{name}");
+        AddRow(DbSchema::kSeriesTable, "{title}");
+        AddRow(DbSchema::kEventsTable, "{title}");
+        AddRow(DbSchema::kEventCategoryAssignmentsTable, "{event_id} — {category_id}");
+        AddRow(DbSchema::kEventSceneTagAssignmentsTable, "{event_id} — {scene_tag_id}");
+        AddRow(DbSchema::kSeriesCategoryAssignmentsTable, "{series_id} — {category_id}");
+        AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, "{series_id} — {scene_tag_id}");
+    }
+
+    // --- Nested tables: edited from their parent's row -----------------------
+    // The assignment tables open under an event or a series rather than as
+    // tables of their own. They stay top-level too (above): the column metadata
+    // FKs onto admin_top_level_tables.
+    {
+        for (std::string_view table :
+             { DbSchema::kEventCategoryAssignmentsTable,
+               DbSchema::kEventSceneTagAssignmentsTable,
+               DbSchema::kSeriesCategoryAssignmentsTable,
+               DbSchema::kSeriesSceneTagAssignmentsTable }) {
+            MakeAddRowLambda(
+                transaction, databaseHelper, DbSchema::kAdminNestedTablesTable)(
+                { DbPair(DbSchema::kAdminNestedTablesName, table) });
+        }
+    }
+}
+
+// The events domain: EV1's eleven tables. manage_events reaches every one of
+// them in the generic CRUD editor. Listed explicitly rather than taken from
+// AppTableCreationOrder, which will also hold the guide's tables (GD2).
+constexpr std::string_view kEventsDomainTables[] = {
+    DbSchema::kCategoriesTable,
+    DbSchema::kSceneTagsTable,
+    DbSchema::kNeighborhoodsTable,
+    DbSchema::kVenuesTable,
+    DbSchema::kEventSourcesTable,
+    DbSchema::kSeriesTable,
+    DbSchema::kEventsTable,
+    DbSchema::kEventCategoryAssignmentsTable,
+    DbSchema::kEventSceneTagAssignmentsTable,
+    DbSchema::kSeriesCategoryAssignmentsTable,
+    DbSchema::kSeriesSceneTagAssignmentsTable,
+};
+
+// App permissions beyond the framework base. honuware's PopulateFrameworkTables
+// seeds the Administrator and User roles and the admin_portal / staff_access
+// permissions; the app's own plug in here as the features that enforce them
+// land. Per permission (knottyyoga's pattern): a `permissions` row; a
+// `role_permissions` grant, looking both ids up by NAME because the framework
+// assigns them; and an `admin_table_permissions` row for each table a non-admin
+// holder should reach in the generic CRUD editor. Admins reach every top-level
+// table through their role and need no such rows. Next to land here:
+// `manage_site_meta` (community settings, multi-community).
+void PopulateAppPermissions(
+    Transaction& transaction, DatabaseHelper databaseHelper) {
+    MakeAddRowLambda(transaction, databaseHelper, DbSchema::kPermissionsTable)(
+        { DbPair(DbSchema::kPermissionsName, DbSchema::kPermissionManageEvents),
+          DbPair(DbSchema::kPermissionsDescription,
+                 "Permission to curate events: ingest and review them, and edit "
+                 "events, series, sources, venues, and the shared vocabularies."),
+          DbPair(DbSchema::kPermissionsIsPricingEligible, "false") });
+
+    TableHelpers::Roles rolesHelper(databaseHelper);
+    TableHelpers::Permissions permissionsHelper(databaseHelper);
+    const std::string adminRoleId =
+        rolesHelper.GetRole(transaction, DbSchema::kRoleNameAdmin)
+            .at(std::string(DbSchema::kRolesId));
+    const std::string manageEventsId =
+        permissionsHelper.GetPermission(transaction, DbSchema::kPermissionManageEvents)
+            .at(std::string(DbSchema::kPermissionsId));
+
+    MakeAddRowLambda(transaction, databaseHelper, DbSchema::kRolePermissionsTable)(
+        { DbPair(DbSchema::kRolePermissionsRoleId, adminRoleId),
+          DbPair(DbSchema::kRolePermissionsPermissionId, manageEventsId) });
+
+    for (std::string_view table : kEventsDomainTables) {
+        MakeAddRowLambda(
+            transaction, databaseHelper, DbSchema::kAdminTablePermissionsTable)(
+            { DbPair(DbSchema::kAdminTablePermissionsTableName, table),
+              DbPair(DbSchema::kAdminTablePermissionsPermissionId, manageEventsId) });
+    }
+}
+
+// Tables whose rows can carry photos through the framework pipeline
+// (table_item_photos). honuware lists `people`; venue and event images ride the
+// same pipeline instead of image columns.
+void PopulatePhotoSupportTables(
+    Transaction& transaction, DatabaseHelper databaseHelper) {
+    for (std::string_view table :
+         { DbSchema::kVenuesTable, DbSchema::kEventsTable }) {
+        MakeAddRowLambda(
+            transaction, databaseHelper, DbSchema::kPhotoSupportTables)(
+            { DbPair(DbSchema::kPhotoSupportTablesTableName, table) });
     }
 }
 
 // Tables anyone, signed in or not, may read through the framework's generic
 // table-read endpoints. EV1 OQ1 (Option A): the site fetches the vocabularies
 // this way rather than through bespoke list endpoints, so they must be here.
-// Everything listed holds public display data only.
+// Everything listed holds public display data only — which is why `events` (its
+// pending and rejected rows, and its review notes), `series`, and
+// `event_sources` are not: the public reads those through the events endpoints.
 void PopulateAllowedTables(
     Transaction& transaction, DatabaseHelper databaseHelper) {
     for (std::string_view table :
@@ -349,6 +592,14 @@ const std::vector<std::string_view>& AppTableCreationOrder() {
         DbSchema::kSceneTagsTable,
         DbSchema::kNeighborhoodsTable,
         DbSchema::kVenuesTable,
+        // EV1 Slice 2 — the events core, then the four assignment tables.
+        DbSchema::kEventSourcesTable,
+        DbSchema::kSeriesTable,
+        DbSchema::kEventsTable,
+        DbSchema::kEventCategoryAssignmentsTable,
+        DbSchema::kEventSceneTagAssignmentsTable,
+        DbSchema::kSeriesCategoryAssignmentsTable,
+        DbSchema::kSeriesSceneTagAssignmentsTable,
     };
     return tables;
 }
@@ -361,6 +612,7 @@ void CreateAppTables(
     // Indexes exist only on a live database — the test harness builds tables
     // from MakeDatabaseInfo and never calls this.
     DbSchema::CreateVenuesIndexes(transaction);
+    DbSchema::CreateEventsIndexes(transaction);
 }
 
 void PopulateAppTables(
@@ -369,5 +621,7 @@ void PopulateAppTables(
     (void)databaseInfo;
     PopulateVocabularies(transaction, databaseHelper);
     PopulateAdminMetadata(transaction, databaseHelper);
+    PopulateAppPermissions(transaction, databaseHelper);
+    PopulatePhotoSupportTables(transaction, databaseHelper);
     PopulateAllowedTables(transaction, databaseHelper);
 }

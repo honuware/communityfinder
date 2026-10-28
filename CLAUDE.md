@@ -60,7 +60,9 @@ silently vanishing while the exit code stays 0).
   Tests do NOT create tables. **The harness does NOT run `create_database`'s seed**
   (it builds the schema from `MakeDatabaseInfo`). The app's DDL list + seed live in
   `business_logic/create_app_tables.cpp` (not the database_helper exe) precisely so
-  `create_app_tables_test.cpp` can run them in a test transaction — but still
+  `create_app_tables_test.cpp` can run them in a test transaction (after
+  `PopulateFrameworkTables`, as the live seed does — app permission grants look up
+  the framework's Administrator role by name) — but still
   confirm DDL/seed changes with a live `--recreate_database`. A new app table
   touches three places: `MakeAppTables`, `AppTableCreationOrder`, `PopulateAppTables`.
 - **`ThreadPool::Shutdown()` before the next DB read.** After `handle_full()`

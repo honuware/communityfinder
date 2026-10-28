@@ -8,23 +8,34 @@
 
 #include <gtest/gtest.h>
 
+#include "business_logic/create_framework_tables.h"
 #include "db_schema/admin_column_data_info.h"
+#include "db_schema/admin_nested_tables.h"
 #include "db_schema/admin_table_display_template.h"
 #include "db_schema/admin_table_friendly_names.h"
 #include "db_schema/admin_top_level_tables.h"
 #include "db_schema/allowed_tables.h"
 #include "db_schema/categories.h"
+#include "db_schema/event_category_assignments.h"
+#include "db_schema/event_scene_tag_assignments.h"
+#include "db_schema/event_sources.h"
+#include "db_schema/events.h"
 #include "db_schema/make_database_info.h"
 #include "db_schema/make_framework_tables.h"
 #include "db_schema/neighborhoods.h"
+#include "db_schema/photos.h"
+#include "db_schema/roles.h"
 #include "db_schema/scene_tags.h"
+#include "db_schema/series.h"
+#include "db_schema/series_category_assignments.h"
+#include "db_schema/series_scene_tag_assignments.h"
 #include "db_schema/venues.h"
 #include "sql_util/database_access/transaction.h"
 #include "test/src/util/database_test_helper.h"
 
 // The app halves of create_database. The harness pre-creates tables from
-// MakeDatabaseInfo but seeds no rows, so these run PopulateAppTables in a test
-// transaction — the only place the gate executes the seed. Running it is itself a
+// MakeDatabaseInfo but seeds no rows, so these run the seed in a test
+// transaction — the only place the gate executes it. Running it is itself a
 // check: every admin-metadata row lands against the database's own foreign keys.
 namespace {
 
@@ -33,6 +44,37 @@ using Rows = StringTable;
 Rows Query(Transaction& transaction, const std::string& sql) {
     return transaction.RunSqlStatementReturningStringTable(sql);
 }
+
+// The seed exactly as --recreate_database runs it: the framework baseline
+// first (it creates the Administrator role the app's manage_events grant looks
+// up by name), then the app's rows.
+void SeedAsRecreateDatabaseDoes(Transaction& transaction, TestDatabaseUtil& testDb) {
+    PopulateFrameworkTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
+    PopulateAppTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
+}
+
+// EV1's eleven tables — the ones manage_events reaches in the admin editor.
+const std::set<std::string> kEventsDomainTables = {
+    std::string(DbSchema::kCategoriesTable),
+    std::string(DbSchema::kSceneTagsTable),
+    std::string(DbSchema::kNeighborhoodsTable),
+    std::string(DbSchema::kVenuesTable),
+    std::string(DbSchema::kEventSourcesTable),
+    std::string(DbSchema::kSeriesTable),
+    std::string(DbSchema::kEventsTable),
+    std::string(DbSchema::kEventCategoryAssignmentsTable),
+    std::string(DbSchema::kEventSceneTagAssignmentsTable),
+    std::string(DbSchema::kSeriesCategoryAssignmentsTable),
+    std::string(DbSchema::kSeriesSceneTagAssignmentsTable),
+};
+
+// The tables whose rows are only ever edited from a parent's row.
+const std::string_view kAssignmentTables[] = {
+    DbSchema::kEventCategoryAssignmentsTable,
+    DbSchema::kEventSceneTagAssignmentsTable,
+    DbSchema::kSeriesCategoryAssignmentsTable,
+    DbSchema::kSeriesSceneTagAssignmentsTable,
+};
 
 std::set<std::string> NamesIn(
     Transaction& transaction, std::string_view table, std::string_view column) {
@@ -77,7 +119,7 @@ TEST(CreateAppTablesTest, CreationOrderMatchesMakeAppTables) {
 TEST(CreateAppTablesTest, SeedsTheTwelveCategoriesVerbatimFromGd1) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction("SeedsCategories", [&](Transaction& transaction) {
-        PopulateAppTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
 
         EXPECT_EQ(Query(transaction,
                       "SELECT slug, display_name, enabled FROM categories "
@@ -103,7 +145,7 @@ TEST(CreateAppTablesTest, SeedsTheTwelveCategoriesVerbatimFromGd1) {
 TEST(CreateAppTablesTest, SeedsTheElevenSceneTagsWithTheirCoverageFromGd1) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction("SeedsSceneTags", [&](Transaction& transaction) {
-        PopulateAppTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
 
         EXPECT_EQ(Query(transaction,
                       "SELECT slug, display_name, coverage FROM scene_tags "
@@ -129,7 +171,7 @@ TEST(CreateAppTablesTest, SeedsTheElevenSceneTagsWithTheirCoverageFromGd1) {
 TEST(CreateAppTablesTest, SeedsTheNeighborhoodsWithTheirRegionsFromGd1) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction("SeedsNeighborhoods", [&](Transaction& transaction) {
-        PopulateAppTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
 
         EXPECT_EQ(Query(transaction,
                       "SELECT slug, region FROM neighborhoods ORDER BY sort_order, id"),
@@ -173,7 +215,7 @@ TEST(CreateAppTablesTest, SeedsTheNeighborhoodsWithTheirRegionsFromGd1) {
 TEST(CreateAppTablesTest, MakesTheVocabulariesAndVenuesPublic) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction("PublicTables", [&](Transaction& transaction) {
-        PopulateAppTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
 
         const std::set<std::string> allowed = NamesIn(
             transaction, DbSchema::kAllowedTablesTable, DbSchema::kAllowedTablesName);
@@ -192,7 +234,7 @@ TEST(CreateAppTablesTest, MakesTheVocabulariesAndVenuesPublic) {
 TEST(CreateAppTablesTest, RegistersEveryAppTableWithTheAdminEditor) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction("AdminMetadata", [&](Transaction& transaction) {
-        PopulateAppTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
 
         const std::set<std::string> topLevel = NamesIn(transaction,
             DbSchema::kAdminTopLevelTablesTable, DbSchema::kAdminTopLevelTablesName);
@@ -226,6 +268,9 @@ TEST(CreateAppTablesTest, RegistersEveryAppTableWithTheAdminEditor) {
         };
         EXPECT_EQ(displayTemplate(DbSchema::kNeighborhoodsTable), "{display_name}");
         EXPECT_EQ(displayTemplate(DbSchema::kVenuesTable), "{name}");
+        EXPECT_EQ(displayTemplate(DbSchema::kEventSourcesTable), "{name}");
+        EXPECT_EQ(displayTemplate(DbSchema::kSeriesTable), "{title}");
+        EXPECT_EQ(displayTemplate(DbSchema::kEventsTable), "{title}");
 
         // The verification stamp edits as a date, and the bookkeeping
         // timestamps cannot be edited at all.
@@ -241,6 +286,105 @@ TEST(CreateAppTablesTest, RegistersEveryAppTableWithTheAdminEditor) {
                       "WHERE column_name IN ('created_us', 'updated_us') "
                       "AND readonly IS NOT TRUE"),
                   "0");
+
+        // An event's times edit as dates, which the admin editor renders as a
+        // date picker plus a time picker over the microsecond value.
+        auto eventInputType = [&](std::string_view column) {
+            return transaction.RunSqlStatementReturningOneValue(
+                "SELECT html_input_type FROM admin_column_data_info "
+                "WHERE table_name = $1 AND column_name = $2",
+                std::string(DbSchema::kEventsTable), std::string(column));
+        };
+        EXPECT_EQ(eventInputType(DbSchema::kEventsStartsAtUs), "date");
+        EXPECT_EQ(eventInputType(DbSchema::kEventsEndsAtUs), "date");
+    });
+}
+
+// The assignment tables open under their event or series row. They are ALSO
+// top-level, because the column metadata FKs onto admin_top_level_tables
+// (knottyyoga's #1 trap) — RegistersEveryAppTableWithTheAdminEditor covers that.
+TEST(CreateAppTablesTest, NestsTheAssignmentTablesUnderTheirParents) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("NestedTables", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        const std::set<std::string> nested = NamesIn(transaction,
+            DbSchema::kAdminNestedTablesTable, DbSchema::kAdminNestedTablesName);
+        for (std::string_view table : kAssignmentTables) {
+            EXPECT_EQ(nested.count(std::string(table)), 1u) << table;
+        }
+        // The parents themselves are not nested.
+        EXPECT_EQ(nested.count(std::string(DbSchema::kEventsTable)), 0u);
+        EXPECT_EQ(nested.count(std::string(DbSchema::kSeriesTable)), 0u);
+    });
+}
+
+// EV1 §2.6: manage_events exists, the Administrator role holds it, and it opens
+// exactly the eleven events-domain tables in the generic CRUD editor — so a
+// future curator role can work without being a full admin.
+TEST(CreateAppTablesTest, GrantsManageEventsToTheAdministratorRole) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("ManageEvents", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        EXPECT_EQ(transaction.RunSqlStatementReturningOneValue(
+                      "SELECT is_pricing_eligible FROM permissions WHERE name = $1",
+                      std::string(DbSchema::kPermissionManageEvents)),
+                  "f");
+        EXPECT_EQ(transaction.RunSqlStatementReturningOneValue(
+                      "SELECT count(*) FROM role_permissions rp "
+                      "JOIN roles r ON r.id = rp.role_id "
+                      "JOIN permissions p ON p.id = rp.permission_id "
+                      "WHERE r.name = $1 AND p.name = $2",
+                      std::string(DbSchema::kRoleNameAdmin),
+                      std::string(DbSchema::kPermissionManageEvents)),
+                  "1");
+
+        std::set<std::string> gated;
+        for (const auto& row : Query(transaction,
+                 "SELECT atp.table_name FROM admin_table_permissions atp "
+                 "JOIN permissions p ON p.id = atp.permission_id "
+                 "WHERE p.name = 'manage_events'")) {
+            gated.insert(row.at(0));
+        }
+        EXPECT_EQ(gated, kEventsDomainTables);
+    });
+}
+
+// Venue and event images ride the framework photo pipeline; it serves only the
+// tables listed in photo_support_tables.
+TEST(CreateAppTablesTest, EnablesPhotosForVenuesAndEvents) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("PhotoSupport", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        const std::set<std::string> photoTables = NamesIn(transaction,
+            DbSchema::kPhotoSupportTables, DbSchema::kPhotoSupportTablesTableName);
+        EXPECT_EQ(photoTables.count(std::string(DbSchema::kVenuesTable)), 1u);
+        EXPECT_EQ(photoTables.count(std::string(DbSchema::kEventsTable)), 1u);
+        // The framework's own entry survives alongside the app's.
+        EXPECT_EQ(photoTables.count("people"), 1u);
+    });
+}
+
+// The generic table reads serve allowed_tables to anyone. Pending and rejected
+// events, review notes, and source scan notes must never be among them; the
+// public sees approved events only, through the events endpoints.
+TEST(CreateAppTablesTest, KeepsTheEventPipelineOffThePublicList) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("PipelineNotPublic", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        const std::set<std::string> allowed = NamesIn(
+            transaction, DbSchema::kAllowedTablesTable, DbSchema::kAllowedTablesName);
+        for (std::string_view table :
+             {DbSchema::kEventSourcesTable, DbSchema::kSeriesTable,
+              DbSchema::kEventsTable}) {
+            EXPECT_EQ(allowed.count(std::string(table)), 0u) << table;
+        }
+        for (std::string_view table : kAssignmentTables) {
+            EXPECT_EQ(allowed.count(std::string(table)), 0u) << table;
+        }
     });
 }
 

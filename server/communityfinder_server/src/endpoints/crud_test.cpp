@@ -9,6 +9,7 @@
 #include "business_logic/auth/person.h"
 #include "business_logic/auth/server_config.h"
 #include "business_logic/create_app_tables.h"
+#include "business_logic/create_framework_tables.h"
 #include "db_schema/config_secrets.h"
 #include "db_schema/people.h"
 #include "db_schema/roles.h"
@@ -207,6 +208,13 @@ TEST(CommunityFinderCrudTest, AnonymousGenericCrudDenied) {
     Auth::ServerConfig::Shutdown();
 }
 
+// The real seed, in --recreate_database's order: the framework baseline first
+// (the app's manage_events grant looks up its Administrator role), then the app.
+void SeedAsRecreateDatabaseDoes(Transaction& transaction, TestDatabaseUtil& testDb) {
+    PopulateFrameworkTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
+    PopulateAppTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
+}
+
 // EV1 OQ1 (Option A): the site reads the shared vocabularies — and venues —
 // through the generic table reads rather than bespoke endpoints, so a signed-out
 // visitor must get every seeded row. Runs the real seed, which is what puts
@@ -217,7 +225,7 @@ TEST(CommunityFinderCrudTest, AnonymousCanReadTheSeededVocabularies) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction("CFAnonVocabularies", [&](Transaction& transaction) {
         EndpointTestHelper helper(transaction, testDb);
-        PopulateAppTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
 
         const std::pair<std::string, size_t> kExpectedRows[] = {
             {"categories", 12}, {"scene_tags", 11}, {"neighborhoods", 25},
@@ -228,6 +236,28 @@ TEST(CommunityFinderCrudTest, AnonymousCanReadTheSeededVocabularies) {
             ASSERT_EQ(resp.code, 200) << table << ": " << resp.body;
             Json::Value body = Json::Value::FromText(resp.body);
             EXPECT_EQ(body["dataTable"].GetArray().size(), rowCount) << table;
+        }
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// The other half of OQ1: the events pipeline is NOT generically readable. A
+// pending or rejected event, or a reviewer's notes, must never reach a
+// signed-out visitor; approved events go public only through the events
+// endpoints. Refused as 400 (not an allowed table), per the generic contract.
+TEST(CommunityFinderCrudTest, AnonymousCannotReadTheEventPipeline) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("CFAnonEventPipeline", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        for (const std::string table :
+             {"events", "series", "event_sources", "event_category_assignments"}) {
+            crow::response resp = Handle(
+                helper, crow::HTTPMethod::Get, "/api/get_table_rows/" + table);
+            EXPECT_EQ(resp.code, 400) << table << ": " << resp.body;
         }
     });
     Auth::ServerConfig::Shutdown();

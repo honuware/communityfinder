@@ -34,11 +34,14 @@ const std::vector<std::string_view>& AppTableCreationOrder();
 //     verbatim from GD1 §1–§3,
 //   - the admin CRUD editor's metadata for every app table: top-level
 //     registration, column data-info + friendly names, table friendly names,
-//     and display templates,
+//     display templates, and the nested (child) tables,
+//   - the app permissions: `manage_events`, granted to the framework
+//     Administrator role and mapped to every events-domain table,
+//   - photo support for venues and events,
 //   - the public `allowed_tables` entries — the vocabularies and venues are
 //     read anonymously through the framework's generic table reads (EV1 OQ1).
-// Runs after PopulateFrameworkTables, and before the app permissions, whose
-// admin_table_permissions rows reference these tables.
+// Runs after PopulateFrameworkTables, which seeds the Administrator role the
+// grant looks up by name — so a test must run both, in that order.
 void PopulateAppTables(
     Transaction& transaction, DatabaseHelper databaseHelper,
     DbSchema::DatabaseInfo databaseInfo);
