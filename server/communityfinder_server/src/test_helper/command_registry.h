@@ -57,6 +57,7 @@ private:
 
 // Parse a command line string into command name + args
 // e.g. "peek --table=people --limit=5" → ("peek", {{"table","people"},{"limit","5"}})
+// Double quotes keep spaces in a value: --name="The Cuff" → {"name","The Cuff"}.
 struct ParsedCommand {
     std::string name;
     Args args;

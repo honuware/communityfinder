@@ -2,6 +2,7 @@
 
 #include <iostream>
 
+#include "commands/events_commands.h"
 #include "commands/utility_commands.h"
 #include "console_colors.h"
 #include "business_logic/app_database_config.h"
@@ -60,9 +61,9 @@ std::unique_ptr<TestHelperContext> CreateContext(bool sendRealEmail) {
 }
 
 void RegisterAllCommands(CommandRegistry& registry) {
-    // Login is framework-level: it needs LoginAsUser (below). Everything else
-    // (help / status / peek + later-phase simulation commands) lives in the
-    // utility command file.
+    // Login is framework-level: it needs LoginAsUser (below). help / status /
+    // peek live in the utility command file; each domain's simulation commands
+    // live in their own file under commands/.
     registry.Register({
         "login", "", "Utility",
         "Switch the current user context",
@@ -100,6 +101,7 @@ void RegisterAllCommands(CommandRegistry& registry) {
     });
 
     RegisterUtilityCommands(registry);
+    RegisterEventsCommands(registry);
 }
 
 int ExecuteCommand(TestHelperContext& ctx, const std::string& commandName, const Args& args) {

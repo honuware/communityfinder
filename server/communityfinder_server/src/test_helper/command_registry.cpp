@@ -1,9 +1,9 @@
 #include "command_registry.h"
 
 #include <algorithm>
+#include <cctype>
 #include <iostream>
 #include <iomanip>
-#include <sstream>
 
 #include "console_colors.h"
 
@@ -130,17 +130,50 @@ void CommandRegistry::PrintCommandHelp(const std::string& nameOrAlias) const {
     }
 }
 
+namespace {
+
+// Splits on whitespace, except inside double quotes, which are dropped — so
+// --name="The Cuff" is one token, --name=The Cuff, and --notes="" keeps its
+// (empty) value.
+std::vector<std::string> SplitTokens(const std::string& line) {
+    std::vector<std::string> tokens;
+    std::string current;
+    bool inQuotes = false;
+    bool inToken = false;
+    for (char c : line) {
+        if (c == '"') {
+            inQuotes = !inQuotes;
+            inToken = true;
+        } else if (!inQuotes && std::isspace(static_cast<unsigned char>(c))) {
+            if (inToken) {
+                tokens.push_back(current);
+                current.clear();
+                inToken = false;
+            }
+        } else {
+            current += c;
+            inToken = true;
+        }
+    }
+    if (inToken) {
+        tokens.push_back(current);
+    }
+    return tokens;
+}
+
+}  // namespace
+
 ParsedCommand ParseCommandLine(const std::string& line) {
     ParsedCommand result;
-    std::istringstream stream(line);
-    std::string token;
+    std::vector<std::string> tokens = SplitTokens(line);
 
     // First token is the command name
-    if (!(stream >> token)) return result;
-    result.name = token;
+    if (tokens.empty()) return result;
+    result.name = tokens[0];
 
     // Remaining tokens are flags: --key=value or --flag
-    while (stream >> token) {
+    for (size_t index = 1; index < tokens.size(); ++index) {
+        const std::string& token = tokens[index];
         if (token.substr(0, 2) != "--") continue;
         std::string flagBody = token.substr(2);
         auto eqPos = flagBody.find('=');

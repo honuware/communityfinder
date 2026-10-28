@@ -23,6 +23,19 @@ ABSL_FLAG(std::string, value, "", "Generic value");
 ABSL_FLAG(std::string, table, "", "Table name (for peek)");
 ABSL_FLAG(int64_t, limit, 0, "Row limit (for peek)");
 
+// EV1 events commands (create-venue / create-event / ingest-demo / list-upcoming).
+ABSL_FLAG(std::string, name, "", "Venue name (for create-venue)");
+ABSL_FLAG(std::string, neighborhood, "", "Neighborhood slug (for create-venue, list-upcoming)");
+ABSL_FLAG(std::string, title, "", "Event title (for create-event)");
+ABSL_FLAG(std::string, starts_in_hours, "", "Hours from now the event starts (for create-event)");
+ABSL_FLAG(std::string, venue_id, "", "Venue id (for create-event)");
+ABSL_FLAG(std::string, status, "", "pending or approved (for create-event)");
+ABSL_FLAG(bool, past, false, "Start that many hours ago instead (for create-event)");
+ABSL_FLAG(bool, changed, false, "Send the edited demo batch (for ingest-demo)");
+ABSL_FLAG(bool, approve, false, "Approve the demo events left pending (for ingest-demo)");
+ABSL_FLAG(std::string, category, "", "Category slug filter (for list-upcoming)");
+ABSL_FLAG(std::string, scene, "", "Scene tag slug filter (for list-upcoming)");
+
 int main(int argc, char** argv) {
     absl::ParseCommandLine(argc, argv);
     TestHelper::EnableAnsiColors();
@@ -65,6 +78,17 @@ int main(int argc, char** argv) {
         addStr("table", absl::GetFlag(FLAGS_table));
         int64_t limit = absl::GetFlag(FLAGS_limit);
         if (limit != 0) args["limit"] = std::to_string(limit);
+        addStr("name", absl::GetFlag(FLAGS_name));
+        addStr("neighborhood", absl::GetFlag(FLAGS_neighborhood));
+        addStr("title", absl::GetFlag(FLAGS_title));
+        addStr("starts_in_hours", absl::GetFlag(FLAGS_starts_in_hours));
+        addStr("venue_id", absl::GetFlag(FLAGS_venue_id));
+        addStr("status", absl::GetFlag(FLAGS_status));
+        if (absl::GetFlag(FLAGS_past)) args["past"] = "true";
+        if (absl::GetFlag(FLAGS_changed)) args["changed"] = "true";
+        if (absl::GetFlag(FLAGS_approve)) args["approve"] = "true";
+        addStr("category", absl::GetFlag(FLAGS_category));
+        addStr("scene", absl::GetFlag(FLAGS_scene));
 
         return TestHelper::ExecuteCommand(*ctx, command, args);
     }
