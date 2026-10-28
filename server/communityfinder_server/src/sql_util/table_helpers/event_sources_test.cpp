@@ -70,7 +70,7 @@ TEST(EventSourcesTest, UpdateBumpsUpdatedUs) {
     testDb.RunInTransaction("UpdateBumpsUpdatedUs", [&](Transaction& transaction) {
         EventSources sources(testDb.GetDatabaseHelper());
         KeyValueTable values = MakeSource("Kremwerk");
-        // updated_us = 0 makes the bump observable (now_us() is fixed per transaction).
+        // updated_us = 0 makes the bump observable (insert and update can share a microsecond).
         values[std::string(DbSchema::kEventSourcesUpdatedUs)] = "0";
         int64_t id = sources.AddSource(transaction, values);
 

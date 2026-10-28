@@ -197,7 +197,7 @@ TEST(EventsTest, UpdateBumpsUpdatedUsAndCanClearAColumn) {
         Events events(testDb.GetDatabaseHelper());
         KeyValueTable values = MakeEvent("Bear Happy Hour", 1000);
         values[std::string(DbSchema::kEventsEndsAtUs)] = "2000";
-        // updated_us = 0 makes the bump observable (now_us() is fixed per transaction).
+        // updated_us = 0 makes the bump observable (insert and update can share a microsecond).
         values[std::string(DbSchema::kEventsUpdatedUs)] = "0";
         int64_t id = events.AddEvent(transaction, values);
 

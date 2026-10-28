@@ -131,8 +131,8 @@ TEST(VenuesTest, UpdateBumpsUpdatedUsAndCanClearAColumn) {
         int64_t neighborhoodId = AddNeighborhood(transaction, databaseHelper, "fremont");
         KeyValueTable values = MakeVenue("Fremont Abbey");
         values[std::string(DbSchema::kVenuesNeighborhoodId)] = StringFromInt(neighborhoodId);
-        // Inserted with updated_us = 0 so the bump is observable: now_us() is
-        // fixed for the whole transaction, so "after >= before" proves nothing.
+        // Inserted with updated_us = 0 so the bump is observable: an insert and
+        // update can land in the same microsecond, so "after > before" could flake.
         values[std::string(DbSchema::kVenuesUpdatedUs)] = "0";
         int64_t id = venues.AddVenue(transaction, values);
 

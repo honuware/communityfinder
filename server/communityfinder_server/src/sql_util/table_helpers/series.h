@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string_view>
+#include <vector>
 
 #include "sql_util/database_access/database_helper.h"
 #include "sql_util/database_common.h"
@@ -25,6 +26,11 @@ public:
 
     // READ — by slug (the public page's URL key); empty when there is none.
     KeyValueTable GetSeriesBySlug(Transaction& transaction, std::string_view slug) const;
+
+    // READ — many series in one query (event-list assembly), ordered by id.
+    // Unknown ids are skipped; empty input, empty result.
+    KeyValueTableArray GetSeriesByIds(
+        Transaction& transaction, const std::vector<int64_t>& ids) const;
 
     // READ — the series index: every series still running, ordered by title
     // then id. Active = any status but `closed` and `moved` — so `seasonal`

@@ -19,4 +19,5 @@ target_sources(communityfinder_test_cases PUBLIC
     create_app_tables_test.cpp
 )
 
+add_subdirectory(events)
 add_subdirectory(migration)

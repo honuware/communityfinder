@@ -1,5 +1,6 @@
 #include "series.h"
 
+#include "bigint_array_literal.h"
 #include "db_schema/freshness.h"
 #include "db_schema/series.h"
 #include "sql_util/database_access/database_crud_helpers.h"
@@ -8,6 +9,10 @@
 namespace TableHelpers {
 
 namespace {
+
+// $1 is a Postgres array literal, "{1,2,3}".
+constexpr std::string_view kSqlGetByIds =
+    "SELECT * FROM series WHERE id = ANY($1::bigint[]) ORDER BY id ASC";
 
 // $1, $2 = the two retired statuses (closed, moved).
 constexpr std::string_view kSqlGetActive =
@@ -45,6 +50,15 @@ KeyValueTable Series::GetSeriesBySlug(Transaction& transaction, std::string_view
         DbSchema::kSeriesTable,
         DbSchema::kSeriesSlug,
         slug);
+}
+
+KeyValueTableArray Series::GetSeriesByIds(
+    Transaction& transaction, const std::vector<int64_t>& ids) const {
+    if (ids.empty()) {
+        return {};
+    }
+    return transaction.RunSqlStatementReturningKeyValueTableArray(
+        std::string(kSqlGetByIds), BigintArrayLiteral(ids));
 }
 
 KeyValueTableArray Series::GetActiveSeries(Transaction& transaction) const {

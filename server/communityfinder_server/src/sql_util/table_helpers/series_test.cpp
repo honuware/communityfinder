@@ -49,6 +49,25 @@ TEST(SeriesTest, MissesAreEmpty) {
     });
 }
 
+TEST(SeriesTest, GetSeriesByIdsReturnsTheKnownOnes) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GetSeriesByIdsReturnsTheKnownOnes", [&](Transaction& transaction) {
+        Series series(testDb.GetDatabaseHelper());
+        int64_t first = series.AddSeries(transaction, MakeSeries("T4T", "t4t"));
+        int64_t second = series.AddSeries(transaction, MakeSeries("Bear Happy Hour", "bhh"));
+        int64_t unasked = series.AddSeries(transaction, MakeSeries("Unasked", "unasked"));
+
+        KeyValueTableArray rows = series.GetSeriesByIds(transaction, { second, first, 999999 });
+        ASSERT_EQ(rows.size(), 2u);
+        // Ordered by id, whatever order they were asked for in.
+        EXPECT_EQ(rows[0].at(std::string(DbSchema::kSeriesId)), StringFromInt(first));
+        EXPECT_EQ(rows[1].at(std::string(DbSchema::kSeriesId)), StringFromInt(second));
+        EXPECT_NE(rows[1].at(std::string(DbSchema::kSeriesId)), StringFromInt(unasked));
+
+        EXPECT_TRUE(series.GetSeriesByIds(transaction, {}).empty());
+    });
+}
+
 TEST(SeriesTest, GetActiveSeriesDropsClosedAndMovedAndSortsByTitle) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction(
@@ -85,7 +104,7 @@ TEST(SeriesTest, UpdateBumpsUpdatedUs) {
     testDb.RunInTransaction("UpdateBumpsUpdatedUs", [&](Transaction& transaction) {
         Series series(testDb.GetDatabaseHelper());
         KeyValueTable values = MakeSeries("T4T", "t4t");
-        // updated_us = 0 makes the bump observable (now_us() is fixed per transaction).
+        // updated_us = 0 makes the bump observable (insert and update can share a microsecond).
         values[std::string(DbSchema::kSeriesUpdatedUs)] = "0";
         int64_t id = series.AddSeries(transaction, values);
 
