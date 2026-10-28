@@ -3,7 +3,8 @@ import { firstValueFrom, of, throwError } from 'rxjs';
 import { COMMUNITY_ACCESS, CommunityAccess } from '../community-access/community-access';
 import { DEFAULT_SITE_CONFIG, SiteConfigService } from './site-config.service';
 
-function makeService(access: CommunityAccess | null): SiteConfigService {
+// Only what SiteConfigService calls; the events methods aren't needed here.
+function makeService(access: Partial<CommunityAccess> | null): SiteConfigService {
   TestBed.configureTestingModule({
     providers: access ? [{ provide: COMMUNITY_ACCESS, useValue: access }] : [],
   });

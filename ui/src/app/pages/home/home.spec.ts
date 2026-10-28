@@ -4,7 +4,8 @@ import { of } from 'rxjs';
 import { COMMUNITY_ACCESS, CommunityAccess } from '../../core/community-access/community-access';
 import { Home } from './home';
 
-const mockAccess: CommunityAccess = {
+// Only what Home calls; the events methods aren't needed here.
+const mockAccess: Partial<CommunityAccess> = {
   getHealth: () => of({ status: 'ok', version: '1.2.3' }),
   getSiteInfo: () => of({ display_name: 'CommunityFinder', website_url: '', logo_url: '' }),
 };
