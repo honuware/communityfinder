@@ -35,6 +35,7 @@ KeyValueTable PublicEventToKeyValueTable(const PublicEvent& event) {
     table["ends_at_us"] = OptionalIdString(event.endsAtUs);
     table["venue_id"] = OptionalIdString(event.venueId);
     table["venue_name"] = event.venueName;
+    table["venue_address"] = event.venueAddress;
     table["neighborhood_slug"] = event.neighborhoodSlug;
     table["location_text"] = event.locationText;
     table["url"] = event.url;

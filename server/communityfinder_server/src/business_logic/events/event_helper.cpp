@@ -75,6 +75,7 @@ bool Contains(const std::vector<std::string>& values, const std::string& value) 
 // Where a venue is, as the public shapes show it.
 struct Place {
     std::string venueName;
+    std::string venueAddress;      // FormatVenueAddress of its parts
     std::string neighborhoodSlug;  // empty when unset or the neighborhood is disabled
 };
 using PlacesById = std::map<int64_t, Place>;
@@ -96,6 +97,9 @@ PlacesById LookupPlaces(Transaction& transaction, const TableHelpers::Venues& ve
     for (const KeyValueTable& venue : venues.GetVenuesByIds(transaction, venueIds)) {
         Place& place = places[std::stoll(Column(venue, DbSchema::kVenuesId))];
         place.venueName = Column(venue, DbSchema::kVenuesName);
+        place.venueAddress = FormatVenueAddress(
+            Column(venue, DbSchema::kVenuesAddress), Column(venue, DbSchema::kVenuesCity),
+            Column(venue, DbSchema::kVenuesState), Column(venue, DbSchema::kVenuesZip));
         if (auto neighborhoodId = OptionalIdColumn(venue, DbSchema::kVenuesNeighborhoodId)) {
             auto slugIt = neighborhoodSlugs.find(*neighborhoodId);
             if (slugIt != neighborhoodSlugs.end()) place.neighborhoodSlug = slugIt->second;
@@ -167,6 +171,27 @@ UpcomingWindow ClampUpcomingWindow(int64_t nowUs, int64_t fromUs, int64_t toUs) 
     // A backwards request is an empty window, not an error.
     window.toUs = std::max(window.toUs, window.fromUs);
     return window;
+}
+
+std::string FormatVenueAddress(std::string_view street, std::string_view city,
+                               std::string_view state, std::string_view zip) {
+    std::string stateZip(state);
+    if (!stateZip.empty() && !zip.empty()) {
+        stateZip += " ";
+    }
+    stateZip += zip;
+
+    std::string line;
+    for (std::string_view part : { street, city, std::string_view(stateZip) }) {
+        if (part.empty()) {
+            continue;
+        }
+        if (!line.empty()) {
+            line += ", ";
+        }
+        line += part;
+    }
+    return line;
 }
 
 EventHelper::EventHelper(DatabaseHelper databaseHelper)
@@ -446,6 +471,17 @@ UpcomingEvents EventHelper::GetUpcomingPublic(
     return result;
 }
 
+// The feed rides GetUpcomingPublic, so the clamp must allow its whole window.
+static_assert(kFeedLookBackDays <= kUpcomingLookBackDays);
+static_assert(kFeedLookBackDays + kFeedWindowDays <= kUpcomingMaxWindowDays);
+
+UpcomingEvents EventHelper::GetFeedEvents(Transaction& transaction, UpcomingQuery filters) {
+    const int64_t nowUs = NowUs(transaction);
+    filters.fromUs = nowUs - kFeedLookBackDays * kUsPerDay;
+    filters.toUs = nowUs + kFeedWindowDays * kUsPerDay;
+    return GetUpcomingPublic(transaction, filters);
+}
+
 std::optional<EventDetail> EventHelper::GetEventDetail(Transaction& transaction, int64_t eventId) {
     KeyValueTable row = events_.GetEvent(transaction, eventId);
     if (row.empty()) {
@@ -599,6 +635,7 @@ std::vector<PublicEvent> EventHelper::AssemblePublicEvents(
             auto placeIt = places.find(*event.venueId);
             if (placeIt != places.end()) {
                 event.venueName = placeIt->second.venueName;
+                event.venueAddress = placeIt->second.venueAddress;
                 event.neighborhoodSlug = placeIt->second.neighborhoodSlug;
             }
         }

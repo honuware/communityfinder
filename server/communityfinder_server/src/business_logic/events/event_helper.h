@@ -63,6 +63,10 @@ inline constexpr int64_t kUpcomingDefaultWindowDays = 42;
 inline constexpr int64_t kUpcomingMaxWindowDays = 92;
 inline constexpr int64_t kUpcomingLookBackDays = 1;
 
+// The ICS subscribe feed's window (EV2 pin): now − 1 day → now + 60 days.
+inline constexpr int64_t kFeedLookBackDays = 1;
+inline constexpr int64_t kFeedWindowDays = 60;
+
 // One item from a feed. Optional fields follow one rule: **absent = not
 // stated** — a new event takes the column default, an existing one keeps what
 // it has (so a curator's edit survives a feed that never mentions the field).
@@ -141,6 +145,8 @@ struct PublicEvent {
     std::optional<int64_t> endsAtUs;
     std::optional<int64_t> venueId;
     std::string venueName;
+    // One line from the venue's parts (FormatVenueAddress); empty without a venue.
+    std::string venueAddress;
     std::string neighborhoodSlug;
     std::string locationText;
     std::string url;
@@ -197,6 +203,11 @@ struct SeriesDetail {
 // The clamp itself, separate so tests can pin it without a DB.
 UpcomingWindow ClampUpcomingWindow(int64_t nowUs, int64_t fromUs, int64_t toUs);
 
+// A venue's address parts as one line — "1533 13th Ave, Seattle, WA 98122" —
+// skipping whatever is blank.
+std::string FormatVenueAddress(std::string_view street, std::string_view city,
+                               std::string_view state, std::string_view zip);
+
 class EventHelper {
 public:
     explicit EventHelper(DatabaseHelper databaseHelper);
@@ -229,6 +240,11 @@ public:
     // resolved in a handful of batch queries. Category and scene filters match
     // the effective sets (the OQ5 inheritance pin).
     UpcomingEvents GetUpcomingPublic(Transaction& transaction, const UpcomingQuery& query);
+
+    // The ICS feed's events: GetUpcomingPublic over now − kFeedLookBackDays →
+    // now + kFeedWindowDays with the caller's filters. Any window in `filters`
+    // is ignored — the feed's window is fixed.
+    UpcomingEvents GetFeedEvents(Transaction& transaction, UpcomingQuery filters);
 
     // One event in the public shape, any status; nullopt when there is no such
     // event. Visibility is the caller's call (approved-only for the public).

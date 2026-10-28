@@ -12,8 +12,8 @@ namespace {
 
 // The free-text fields of each shape — the ones that must stay strings.
 constexpr std::string_view kEventTextKeys[] = {
-    "title", "description", "venue_name", "neighborhood_slug", "location_text",
-    "url", "cost_text", "series_slug", "series_title", "origin",
+    "title", "description", "venue_name", "venue_address", "neighborhood_slug",
+    "location_text", "url", "cost_text", "series_slug", "series_title", "origin",
 };
 constexpr std::string_view kSeriesTextKeys[] = {
     "title", "slug", "description", "cadence_text", "url", "venue_name",

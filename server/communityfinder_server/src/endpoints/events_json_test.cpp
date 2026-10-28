@@ -40,12 +40,14 @@ TEST(EventsJsonTest, AllDigitTextStaysAString) {
     event.costText = "10";
     event.locationText = "21";
     event.venueName = "2020";
+    event.venueAddress = "98122";
     event.seriesTitle = "7";
     Json::Value json = PublicEventToJson(event);
     EXPECT_EQ(json["title"].Get<std::string>(), "1999");
     EXPECT_EQ(json["cost_text"].Get<std::string>(), "10");
     EXPECT_EQ(json["location_text"].Get<std::string>(), "21");
     EXPECT_EQ(json["venue_name"].Get<std::string>(), "2020");
+    EXPECT_EQ(json["venue_address"].Get<std::string>(), "98122");
     EXPECT_EQ(json["series_title"].Get<std::string>(), "7");
 
     Events::PublicSeries series;

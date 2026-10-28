@@ -1,6 +1,7 @@
 # The app endpoint registration table (web_app.cpp) — anchors the framework
 # endpoints (via honuware's RegisterFrameworkEndpoints) plus the app's own
-# endpoints: the Phase 9 account admin pair and the EV1 events surface.
+# endpoints: the Phase 9 account admin pair, the EV1 events surface and the EV2
+# calendar (ICS) endpoints.
 target_sources(communityfinder_core PRIVATE
     endpoint_registrations.h
     web_app.cpp
@@ -16,8 +17,12 @@ target_sources(communityfinder_core PRIVATE
     events_json.cpp
     get_event_detail.h
     get_event_detail.cpp
+    get_event_ics.h
+    get_event_ics.cpp
     get_event_series.h
     get_event_series.cpp
+    get_events_ics_feed.h
+    get_events_ics_feed.cpp
     get_upcoming_events.h
     get_upcoming_events.cpp
     register_app_services.h
@@ -41,7 +46,9 @@ target_sources(communityfinder_test_cases PUBLIC
     admin_review_event_test.cpp
     events_json_test.cpp
     get_event_detail_test.cpp
+    get_event_ics_test.cpp
     get_event_series_test.cpp
+    get_events_ics_feed_test.cpp
     get_upcoming_events_test.cpp
     register_app_services_test.cpp
 )

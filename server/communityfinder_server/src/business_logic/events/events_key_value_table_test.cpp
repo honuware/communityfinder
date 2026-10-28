@@ -16,6 +16,7 @@ PublicEvent MakeEvent() {
     event.endsAtUs = 1793510800000000LL;
     event.venueId = 7;
     event.venueName = "The Cuff";
+    event.venueAddress = "1533 13th Ave, Seattle, WA 98122";
     event.neighborhoodSlug = "capitol-hill";
     event.locationText = "Back patio";
     event.url = "https://example.org/t4t";
@@ -38,6 +39,7 @@ TEST(EventsKeyValueTableTest, PublicEventConvertsEveryField) {
     EXPECT_EQ(table["ends_at_us"], "1793510800000000");
     EXPECT_EQ(table["venue_id"], "7");
     EXPECT_EQ(table["venue_name"], "The Cuff");
+    EXPECT_EQ(table["venue_address"], "1533 13th Ave, Seattle, WA 98122");
     EXPECT_EQ(table["neighborhood_slug"], "capitol-hill");
     EXPECT_EQ(table["location_text"], "Back patio");
     EXPECT_EQ(table["url"], "https://example.org/t4t");
@@ -48,7 +50,7 @@ TEST(EventsKeyValueTableTest, PublicEventConvertsEveryField) {
     EXPECT_EQ(table["series_slug"], "t4t");
     EXPECT_EQ(table["series_title"], "T4T");
     EXPECT_EQ(table["origin"], "scanned");
-    EXPECT_EQ(table.size(), 17u);
+    EXPECT_EQ(table.size(), 18u);
 }
 
 // The public shape has no review fields to leak — pinned so a later "just add

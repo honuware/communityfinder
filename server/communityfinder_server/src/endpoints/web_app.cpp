@@ -17,7 +17,9 @@
 #include "admin_reset_password.h"
 #include "admin_review_event.h"
 #include "get_event_detail.h"
+#include "get_event_ics.h"
 #include "get_event_series.h"
+#include "get_events_ics_feed.h"
 #include "get_upcoming_events.h"
 
 namespace Endpoints {
@@ -54,8 +56,10 @@ void RegisterAllEndpoints() {
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminResetPassword);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminReviewEvent);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEventDetail);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEventICal);
     // One anchor pulls in the whole TU, so both series routes register.
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEventSeriesList);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEventsICalFeed);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetUpcomingEvents);
 }
 

@@ -51,6 +51,10 @@ World MakeWorld(Transaction& transaction, DatabaseHelper databaseHelper) {
     TableHelpers::Venues venues(databaseHelper);
     world.theCuff = venues.AddVenue(transaction, {
         { std::string(DbSchema::kVenuesName), "The Cuff" },
+        { std::string(DbSchema::kVenuesAddress), "1533 13th Ave" },
+        { std::string(DbSchema::kVenuesCity), "Seattle" },
+        { std::string(DbSchema::kVenuesState), "WA" },
+        { std::string(DbSchema::kVenuesZip), "98122" },
         { std::string(DbSchema::kVenuesNeighborhoodId), StringFromInt(capitolHill) },
     });
     world.sunsetTavern = venues.AddVenue(transaction, {
@@ -196,6 +200,18 @@ TEST(ClampUpcomingWindowTest, BackwardsRequestIsAnEmptyWindow) {
     UpcomingWindow window =
         ClampUpcomingWindow(kNow, kNow + 5 * kUsPerDay, kNow + 2 * kUsPerDay);
     EXPECT_EQ(window.toUs, window.fromUs);
+}
+
+// ---- The venue address line (no database) ----
+
+TEST(FormatVenueAddressTest, JoinsThePartsItHas) {
+    EXPECT_EQ(FormatVenueAddress("1533 13th Ave", "Seattle", "WA", "98122"),
+              "1533 13th Ave, Seattle, WA 98122");
+    EXPECT_EQ(FormatVenueAddress("1533 13th Ave", "", "", ""), "1533 13th Ave");
+    EXPECT_EQ(FormatVenueAddress("", "Seattle", "WA", ""), "Seattle, WA");
+    EXPECT_EQ(FormatVenueAddress("1533 13th Ave", "Seattle", "", "98122"),
+              "1533 13th Ave, Seattle, 98122");
+    EXPECT_EQ(FormatVenueAddress("", "", "", ""), "");
 }
 
 // ---- Ingest ----
@@ -682,6 +698,46 @@ TEST(EventHelperTest, TheWindowDefaultsTo42DaysAndCapsAt92) {
     });
 }
 
+// The subscribe feed's window is fixed (EV2 pin): a day back, 60 days out —
+// further than the list's 42-day default. Filters still apply.
+TEST(EventHelperTest, FeedEventsReachBackADayAndSixtyDaysOut) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("FeedEventsReachBackADayAndSixtyDaysOut", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        int64_t nowUs = NowUs(transaction);
+        auto addApproved = [&](std::string_view key, int64_t startsAtUs) {
+            IngestItem item = Item(world.feed, key, startsAtUs);
+            item.categorySlugs = std::vector<std::string>{ "drag" };
+            int64_t id = IngestOne(transaction, helper, item).eventId;
+            Approve(transaction, helper, id);
+            return id;
+        };
+        addApproved("two-days-ago", nowUs - 2 * kUsPerDay);
+        int64_t thisMorning = addApproved("this-morning", nowUs - 12 * kUsPerHour);
+        int64_t inFiftyDays = addApproved("in-fifty-days", nowUs + 50 * kUsPerDay);
+        addApproved("in-sixty-one-days", nowUs + 61 * kUsPerDay);
+        IngestOne(transaction, helper, Item(world.feed, "pending", nowUs + kUsPerDay));
+
+        // A window in the filters is ignored.
+        UpcomingQuery filters;
+        filters.fromUs = nowUs + 40 * kUsPerDay;
+        filters.toUs = nowUs + 41 * kUsPerDay;
+        UpcomingEvents feed = helper.GetFeedEvents(transaction, filters);
+        EXPECT_EQ(IdsOf(feed), (std::vector<int64_t>{ thisMorning, inFiftyDays }));
+        // now_us() is the wall clock, so the helper's "now" is a little later.
+        EXPECT_GE(feed.window.fromUs, nowUs - kFeedLookBackDays * kUsPerDay);
+        EXPECT_GE(feed.window.toUs, nowUs + kFeedWindowDays * kUsPerDay);
+        EXPECT_LT(feed.window.toUs, nowUs + (kFeedWindowDays + 1) * kUsPerDay);
+
+        filters.categorySlug = "dance";
+        EXPECT_TRUE(helper.GetFeedEvents(transaction, filters).events.empty());
+        filters.categorySlug = "drag";
+        EXPECT_EQ(helper.GetFeedEvents(transaction, filters).events.size(), 2u);
+    });
+}
+
 TEST(EventHelperTest, UpcomingResolvesVenueNeighborhoodAndSeriesInStartOrder) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction("UpcomingResolvesVenueNeighborhoodAndSeriesInStartOrder", [&](Transaction& transaction) {
@@ -720,6 +776,7 @@ TEST(EventHelperTest, UpcomingResolvesVenueNeighborhoodAndSeriesInStartOrder) {
         EXPECT_EQ(t4t.endsAtUs, later.endsAtUs);
         EXPECT_EQ(t4t.venueId, world.theCuff);
         EXPECT_EQ(t4t.venueName, "The Cuff");
+        EXPECT_EQ(t4t.venueAddress, "1533 13th Ave, Seattle, WA 98122");
         EXPECT_EQ(t4t.neighborhoodSlug, "capitol-hill");
         EXPECT_EQ(t4t.locationText, "Back patio");
         EXPECT_EQ(t4t.url, "https://example.org/t4t");
@@ -730,9 +787,11 @@ TEST(EventHelperTest, UpcomingResolvesVenueNeighborhoodAndSeriesInStartOrder) {
         EXPECT_EQ(t4t.origin, DbSchema::kEventsOriginScanned);
 
         EXPECT_EQ(events[0].neighborhoodSlug, "ballard");
+        EXPECT_EQ(events[0].venueAddress, "");  // Sunset Tavern has no address on file
         EXPECT_FALSE(events[0].seriesId.has_value());
         EXPECT_FALSE(events[2].venueId.has_value());
         EXPECT_EQ(events[2].venueName, "");
+        EXPECT_EQ(events[2].venueAddress, "");
         EXPECT_FALSE(events[2].endsAtUs.has_value());
     });
 }
