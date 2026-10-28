@@ -59,6 +59,11 @@ TEST(GetEventICalTest, DownloadsOneApprovedEvent) {
         EXPECT_NE(resp.body.find("DESCRIPTION:https://cf.example/events/" + StringFromInt(eventId)
                                  + "\r\n"),
                   std::string::npos);
+        // A download goes into the person's own calendar, so it names none,
+        // and is read once, so it asks for no refresh.
+        EXPECT_EQ(resp.body.find("X-WR-CALNAME"), std::string::npos);
+        EXPECT_EQ(resp.body.find("REFRESH-INTERVAL"), std::string::npos);
+        EXPECT_EQ(resp.body.find("X-PUBLISHED-TTL"), std::string::npos);
     });
     Auth::ServerConfig::Shutdown();
 }

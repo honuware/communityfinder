@@ -76,4 +76,14 @@ std::vector<ICalGenerator::ICalEvent> BuildICalEventsFromPublicEvents(
     return entries;
 }
 
+std::string BuildFeedCalendarName(
+    std::string_view brand, const std::vector<std::string>& filterNames) {
+    std::string name(brand);
+    for (size_t index = 0; index < filterNames.size(); ++index) {
+        name += index == 0 ? ": " : ", ";
+        name += filterNames[index];
+    }
+    return name + " events";
+}
+
 }  // namespace Events

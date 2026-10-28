@@ -738,6 +738,48 @@ TEST(EventHelperTest, FeedEventsReachBackADayAndSixtyDaysOut) {
     });
 }
 
+TEST(EventHelperTest, FeedFilterNamesAreDisplayNamesInQueryOrder) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("FeedFilterNamesAreDisplayNamesInQueryOrder", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        // The shared world's display names are its slugs, so these differ.
+        TableHelpers::Categories(databaseHelper).AddCategory(transaction, {
+            { std::string(DbSchema::kCategoriesSlug), "karaoke" },
+            { std::string(DbSchema::kCategoriesDisplayName), "Karaoke Nights" },
+        });
+        TableHelpers::SceneTags(databaseHelper).AddSceneTag(transaction, {
+            { std::string(DbSchema::kSceneTagsSlug), "otters" },
+            { std::string(DbSchema::kSceneTagsDisplayName), "Otters" },
+        });
+        TableHelpers::Neighborhoods(databaseHelper).AddNeighborhood(transaction, {
+            { std::string(DbSchema::kNeighborhoodsSlug), "fremont" },
+            { std::string(DbSchema::kNeighborhoodsDisplayName), "Fremont" },
+            { std::string(DbSchema::kNeighborhoodsRegion),
+              std::string(DbSchema::kNeighborhoodsRegionSeattleNorth) },
+        });
+
+        EXPECT_TRUE(helper.GetFeedFilterNames(transaction, UpcomingQuery()).empty());
+
+        UpcomingQuery all;
+        all.categorySlug = "karaoke";
+        all.sceneTagSlug = "otters";
+        all.neighborhoodSlug = "fremont";
+        all.seriesId = world.t4t;
+        all.fromUs = 1;
+        all.venueId = world.theCuff;
+        EXPECT_EQ(helper.GetFeedFilterNames(transaction, all),
+                  (std::vector<std::string>{ "Karaoke Nights", "Otters", "Fremont", "T4T" }));
+
+        UpcomingQuery unknown;
+        unknown.categorySlug = "no-such-category";
+        unknown.seriesId = 999999;
+        EXPECT_EQ(helper.GetFeedFilterNames(transaction, unknown),
+                  (std::vector<std::string>{ "no-such-category", "999999" }));
+    });
+}
+
 TEST(EventHelperTest, UpcomingResolvesVenueNeighborhoodAndSeriesInStartOrder) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction("UpcomingResolvesVenueNeighborhoodAndSeriesInStartOrder", [&](Transaction& transaction) {

@@ -45,4 +45,10 @@ std::vector<ICalGenerator::ICalEvent> BuildICalEventsFromPublicEvents(
     const std::vector<PublicEvent>& events, std::string_view uidDomain,
     std::string_view siteAddress);
 
+// The subscribe feed's calendar name (EV2 §1.5), from the names of its filters
+// (EventHelper::GetFeedFilterNames): "{brand} events" with none,
+// "{brand}: Drag, Capitol Hill events" with some.
+std::string BuildFeedCalendarName(
+    std::string_view brand, const std::vector<std::string>& filterNames);
+
 }  // namespace Events

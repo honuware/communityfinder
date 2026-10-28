@@ -482,6 +482,32 @@ UpcomingEvents EventHelper::GetFeedEvents(Transaction& transaction, UpcomingQuer
     return GetUpcomingPublic(transaction, filters);
 }
 
+std::vector<std::string> EventHelper::GetFeedFilterNames(
+    Transaction& transaction, const UpcomingQuery& filters) {
+    std::vector<std::string> names;
+    auto add = [&](const std::string& given, const KeyValueTable& row, std::string_view nameColumn) {
+        std::string name = Column(row, nameColumn);
+        names.push_back(name.empty() ? given : name);
+    };
+    if (!filters.categorySlug.empty()) {
+        add(filters.categorySlug, categories_.GetBySlug(transaction, filters.categorySlug),
+            DbSchema::kCategoriesDisplayName);
+    }
+    if (!filters.sceneTagSlug.empty()) {
+        add(filters.sceneTagSlug, sceneTags_.GetBySlug(transaction, filters.sceneTagSlug),
+            DbSchema::kSceneTagsDisplayName);
+    }
+    if (!filters.neighborhoodSlug.empty()) {
+        add(filters.neighborhoodSlug, neighborhoods_.GetBySlug(transaction, filters.neighborhoodSlug),
+            DbSchema::kNeighborhoodsDisplayName);
+    }
+    if (filters.seriesId > 0) {
+        add(StringFromInt(filters.seriesId), series_.GetSeries(transaction, filters.seriesId),
+            DbSchema::kSeriesTitle);
+    }
+    return names;
+}
+
 std::optional<EventDetail> EventHelper::GetEventDetail(Transaction& transaction, int64_t eventId) {
     KeyValueTable row = events_.GetEvent(transaction, eventId);
     if (row.empty()) {

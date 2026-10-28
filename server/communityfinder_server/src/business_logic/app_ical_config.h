@@ -18,6 +18,10 @@ inline constexpr std::string_view kICalProdId = "-//CommunityFinder//Events//EN"
 // fallback.
 inline constexpr std::string_view kICalUidDomain = "communityfinder.local";
 
+// What a subscribed calendar is named after. The events feed adds its filters:
+// "CommunityFinder events", "CommunityFinder: Drag events".
+inline constexpr std::string_view kICalCalendarBrand = "CommunityFinder";
+
 // The calendar config passed to ICalGenerator::GenerateICalendar.
 inline ICalGenerator::ICalConfig AppICalConfig() {
     return ICalGenerator::ICalConfig{

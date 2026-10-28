@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <string>
+#include <string_view>
 
 #include "business_logic/app_ical_config.h"
 #include "business_logic/events/event_helper.h"
@@ -14,6 +15,11 @@
 
 namespace Endpoints {
 namespace {
+
+// How often a subscribing calendar should re-read the feed. It goes in the
+// file (ICalConfig::refreshInterval), where calendar apps look for it, and
+// matches the Cache-Control max-age below.
+constexpr std::string_view kFeedRefreshInterval = "PT1H";
 
 // Reads an int query param; returns `fallback` when absent or unparseable.
 int64_t ParseIntParam(const crow::request& req, const char* key, int64_t fallback) {
@@ -78,14 +84,19 @@ void GetEventsICalFeed(
         Events::UpcomingEvents feed = helper.GetFeedEvents(transaction, filters);
         std::string siteAddress = endpointAuthHelper.GetSecretsHelper()->LookupSecret(
             transaction, Secrets::kWebsiteAddressLogin);
+        // Named for what it holds, so a subscription reads "CommunityFinder:
+        // Drag events" in the calendar app, not the feed's URL.
+        ICalGenerator::ICalConfig config = App::AppICalConfig();
+        config.calendarName = Events::BuildFeedCalendarName(
+            App::kICalCalendarBrand, helper.GetFeedFilterNames(transaction, filters));
+        config.refreshInterval = std::string(kFeedRefreshInterval);
 
         resp.code = 200;
         resp.set_header("Content-Type", "text/calendar; charset=utf-8");
-        resp.set_header("X-PUBLISHED-TTL", "PT1H");
         resp.set_header("Cache-Control", "max-age=3600");
         resp.body = ICalGenerator::GenerateICalendar(
             Events::BuildICalEventsFromPublicEvents(feed.events, App::kICalUidDomain, siteAddress),
-            App::AppICalConfig());
+            config);
     });
 }
 

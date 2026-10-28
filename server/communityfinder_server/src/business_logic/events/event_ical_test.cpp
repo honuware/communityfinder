@@ -143,5 +143,23 @@ TEST(EventICalTest, GeneratesACalendarWithTheAppIdentity) {
     EXPECT_NE(ics.find("DTEND:20261101T052640Z\r\n"), std::string::npos);
 }
 
+TEST(EventICalTest, FeedCalendarNameListsTheFilters) {
+    EXPECT_EQ(BuildFeedCalendarName("CommunityFinder", {}), "CommunityFinder events");
+    EXPECT_EQ(BuildFeedCalendarName("CommunityFinder", { "Drag" }), "CommunityFinder: Drag events");
+    EXPECT_EQ(BuildFeedCalendarName("CommunityFinder", { "Drag", "Bears", "Capitol Hill" }),
+              "CommunityFinder: Drag, Bears, Capitol Hill events");
+}
+
+// The name goes out through honuware's generator as X-WR-CALNAME, escaped.
+TEST(EventICalTest, NamedFeedCarriesTheCalendarName) {
+    ICalGenerator::ICalConfig config = App::AppICalConfig();
+    config.calendarName = BuildFeedCalendarName(App::kICalCalendarBrand, { "Drag", "Capitol Hill" });
+    std::string ics = ICalGenerator::GenerateICalendar(
+        BuildICalEventsFromPublicEvents({ MakeEvent() }, App::kICalUidDomain, ""), config);
+    EXPECT_NE(ics.find("X-WR-CALNAME:CommunityFinder: Drag\\, Capitol Hill events\r\n"),
+              std::string::npos)
+        << ics;
+}
+
 }  // namespace
 }  // namespace Events

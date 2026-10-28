@@ -61,10 +61,15 @@ TEST(GetEventsICalFeedTest, ServesApprovedEventsAsACalendar) {
         crow::response resp = GetFeed(helper);
         ASSERT_EQ(resp.code, 200) << resp.body;
         EXPECT_EQ(resp.get_header_value("Content-Type"), "text/calendar; charset=utf-8");
-        EXPECT_EQ(resp.get_header_value("X-PUBLISHED-TTL"), "PT1H");
         EXPECT_EQ(resp.get_header_value("Cache-Control"), "max-age=3600");
         EXPECT_EQ(resp.body.rfind("BEGIN:VCALENDAR\r\n", 0), 0u);
         EXPECT_NE(resp.body.find("END:VCALENDAR\r\n"), std::string::npos);
+        EXPECT_NE(resp.body.find("X-WR-CALNAME:CommunityFinder events\r\n"), std::string::npos);
+        // The hourly refresh hint is in the file, where calendar apps read it,
+        // not in an HTTP header (EV2 OQ7).
+        EXPECT_NE(resp.body.find("REFRESH-INTERVAL;VALUE=DURATION:PT1H\r\n"), std::string::npos);
+        EXPECT_NE(resp.body.find("X-PUBLISHED-TTL:PT1H\r\n"), std::string::npos);
+        EXPECT_EQ(resp.get_header_value("X-PUBLISHED-TTL"), "");
 
         EXPECT_TRUE(HasEvent(resp.body, tomorrow));
         EXPECT_TRUE(HasEvent(resp.body, inFiftyDays));
@@ -116,6 +121,34 @@ TEST(GetEventsICalFeedTest, FiltersIncludeAndExclude) {
         EXPECT_EQ(EntryCount(none.body), 0u);
         EXPECT_NE(none.body.find("BEGIN:VCALENDAR\r\n"), std::string::npos);
         EXPECT_NE(none.body.find("END:VCALENDAR\r\n"), std::string::npos);
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// EV2 §1.5 — a subscription is named for its filters (this world's display
+// names are its slugs; a series by its title), not the feed's URL.
+TEST(GetEventsICalFeedTest, CalendarIsNamedForItsFilters) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("CalendarIsNamedForItsFilters", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+
+        auto nameLine = [&](const std::string& query) {
+            crow::response resp = GetFeed(helper, query);
+            EXPECT_EQ(resp.code, 200) << query << ": " << resp.body;
+            size_t start = resp.body.find("X-WR-CALNAME:");
+            if (start == std::string::npos) return std::string();
+            return resp.body.substr(start, resp.body.find("\r\n", start) - start);
+        };
+        EXPECT_EQ(nameLine(""), "X-WR-CALNAME:CommunityFinder events");
+        EXPECT_EQ(nameLine("category=drag"), "X-WR-CALNAME:CommunityFinder: drag events");
+        EXPECT_EQ(nameLine("series_id=" + StringFromInt(world.t4t)),
+                  "X-WR-CALNAME:CommunityFinder: T4T events");
+        EXPECT_EQ(nameLine("category=drag&neighborhood=capitol-hill"),
+                  "X-WR-CALNAME:CommunityFinder: drag\\, capitol-hill events");
     });
     Auth::ServerConfig::Shutdown();
 }

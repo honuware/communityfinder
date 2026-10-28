@@ -246,6 +246,13 @@ public:
     // is ignored — the feed's window is fixed.
     UpcomingEvents GetFeedEvents(Transaction& transaction, UpcomingQuery filters);
 
+    // The feed's filters by name, for its calendar name: the category's,
+    // scene's and neighborhood's display names and the series' title, in that
+    // order, skipping the unset ones. A value that names nothing is shown as
+    // given. The window and venueId (the feed takes no venue) are not filters here.
+    std::vector<std::string> GetFeedFilterNames(
+        Transaction& transaction, const UpcomingQuery& filters);
+
     // One event in the public shape, any status; nullopt when there is no such
     // event. Visibility is the caller's call (approved-only for the public).
     std::optional<EventDetail> GetEventDetail(Transaction& transaction, int64_t eventId);
