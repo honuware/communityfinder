@@ -5,6 +5,7 @@
 #include "db_schema/make_database_info.h"
 #include "endpoints/web_app.h"
 #include "endpoints/endpoint_registrations.h"
+#include "endpoints/register_app_services.h"
 #include "endpoints/security_headers.h"
 #include "util/secrets/secrets_helper.h"
 #include "util/secrets/secret_keys.h"
@@ -87,6 +88,9 @@ int main() {
     // framework); the app opts in with its brand.
     webApp.GetApp().get_middleware<Endpoints::SecurityHeaders>().SetServerBanner(
         "CommunityFinder");
+    // The app's framework seams (public event and venue photos). The tests call
+    // the same function, so they cover this configuration.
+    Endpoints::RegisterAppServices(webApp);
     // Install a tenant resolver + resource registry on the WebApp per the
     // HONUWARE_TENANT_MODE switch. CommunityFinder uses the framework's default
     // per-tenant resources factory (no per-tenant app services yet — no Square);

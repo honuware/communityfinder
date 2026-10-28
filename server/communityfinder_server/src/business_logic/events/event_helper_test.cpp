@@ -9,6 +9,7 @@
 #include "db_schema/categories.h"
 #include "db_schema/event_sources.h"
 #include "db_schema/events.h"
+#include "db_schema/freshness.h"
 #include "db_schema/neighborhoods.h"
 #include "db_schema/scene_tags.h"
 #include "db_schema/series.h"
@@ -149,6 +150,10 @@ std::vector<int64_t> IdsOf(const std::vector<PublicEvent>& events) {
         ids.push_back(event.id);
     }
     return ids;
+}
+
+std::vector<int64_t> IdsOf(const UpcomingEvents& upcoming) {
+    return IdsOf(upcoming.events);
 }
 
 const PublicEvent* FindEvent(const std::vector<PublicEvent>& events, int64_t id) {
@@ -668,8 +673,12 @@ TEST(EventHelperTest, TheWindowDefaultsTo42DaysAndCapsAt92) {
         UpcomingQuery asMuchAsAllowed;
         asMuchAsAllowed.fromUs = nowUs - 30 * kUsPerDay;  // clamped to now - 1 day
         asMuchAsAllowed.toUs = nowUs + 365 * kUsPerDay;   // clamped to from + 92 days
-        EXPECT_EQ(IdsOf(helper.GetUpcomingPublic(transaction, asMuchAsAllowed)),
-                  (std::vector<int64_t>{ tonight, inTwoMonths }));
+        UpcomingEvents upcoming = helper.GetUpcomingPublic(transaction, asMuchAsAllowed);
+        EXPECT_EQ(IdsOf(upcoming), (std::vector<int64_t>{ tonight, inTwoMonths }));
+        // The window served comes back, clamped, for the caller to page from.
+        EXPECT_GE(upcoming.window.fromUs, nowUs - kUpcomingLookBackDays * kUsPerDay);
+        EXPECT_EQ(upcoming.window.toUs - upcoming.window.fromUs,
+                  kUpcomingMaxWindowDays * kUsPerDay);
     });
 }
 
@@ -697,7 +706,8 @@ TEST(EventHelperTest, UpcomingResolvesVenueNeighborhoodAndSeriesInStartOrder) {
             Approve(transaction, helper, item.eventId);
         }
 
-        std::vector<PublicEvent> events = helper.GetUpcomingPublic(transaction, UpcomingQuery());
+        std::vector<PublicEvent> events =
+            helper.GetUpcomingPublic(transaction, UpcomingQuery()).events;
         ASSERT_EQ(events.size(), 3u);
         EXPECT_EQ(IdsOf(events), (std::vector<int64_t>{ ingested.items[1].eventId,
                                                         ingested.items[0].eventId,
@@ -795,7 +805,8 @@ TEST(EventHelperTest, InstancesInheritTheirSeriesAssignmentsPerAxis) {
             Approve(transaction, helper, item.eventId);
         }
 
-        std::vector<PublicEvent> events = helper.GetUpcomingPublic(transaction, UpcomingQuery());
+        std::vector<PublicEvent> events =
+            helper.GetUpcomingPublic(transaction, UpcomingQuery()).events;
         const PublicEvent* plainEvent = FindEvent(events, plainId);
         const PublicEvent* dragEvent = FindEvent(events, dragId);
         ASSERT_NE(plainEvent, nullptr);
@@ -818,6 +829,119 @@ TEST(EventHelperTest, InstancesInheritTheirSeriesAssignmentsPerAxis) {
         EXPECT_EQ(idsFor([&](UpcomingQuery& q) { q.seriesId = world.t4t; }),
                   (Ids{ plainId, dragId }));
         EXPECT_EQ(idsFor([](UpcomingQuery&) {}), (Ids{ plainId, dragId, unrelatedId }));
+    });
+}
+
+// ---- Detail pages ----
+
+TEST(EventHelperTest, EventDetailReturnsAnyStatusWithItsReviewFields) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("EventDetailReturnsAnyStatusWithItsReviewFields", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        IngestItem item = Item(world.cuffSite, "cuff-1", NowUs(transaction) + kUsPerDay);
+        item.seriesSlug = "t4t";
+        int64_t eventId = IngestOne(transaction, helper, item).eventId;
+
+        std::optional<EventDetail> pending = helper.GetEventDetail(transaction, eventId);
+        ASSERT_TRUE(pending.has_value());
+        EXPECT_EQ(pending->status, DbSchema::kEventsStatusPending);
+        EXPECT_EQ(pending->reviewNotes, "");
+        // The same resolved public shape the list carries.
+        EXPECT_EQ(pending->event.id, eventId);
+        EXPECT_EQ(pending->event.venueName, "The Cuff");
+        EXPECT_EQ(pending->event.neighborhoodSlug, "capitol-hill");
+        EXPECT_EQ(pending->event.seriesSlug, "t4t");
+        EXPECT_EQ(pending->event.categorySlugs, std::vector<std::string>{ "dance" });
+
+        ASSERT_TRUE(helper.ReviewEvent(transaction, eventId, ReviewAction::Reject,
+                                       kReviewerPersonId, "Duplicate").ok);
+        std::optional<EventDetail> rejected = helper.GetEventDetail(transaction, eventId);
+        ASSERT_TRUE(rejected.has_value());
+        EXPECT_EQ(rejected->status, DbSchema::kEventsStatusRejected);
+        EXPECT_EQ(rejected->reviewNotes, "Duplicate");
+
+        EXPECT_FALSE(helper.GetEventDetail(transaction, 999999).has_value());
+    });
+}
+
+TEST(EventHelperTest, ActiveSeriesCarryTheirOwnSlugsAndPlaceInTitleOrder) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("ActiveSeriesCarryTheirOwnSlugsAndPlaceInTitleOrder", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        TableHelpers::Series series(databaseHelper);
+        int64_t bearHappyHour = series.AddSeries(transaction, {
+            { std::string(DbSchema::kSeriesTitle), "Bear Happy Hour" },
+            { std::string(DbSchema::kSeriesSlug), "bear-happy-hour" },
+            { std::string(DbSchema::kSeriesCadenceText), "Fridays" },
+            { std::string(DbSchema::kSeriesVenueId), StringFromInt(world.sunsetTavern) },
+            { std::string(DbSchema::kSeriesStatus), std::string(DbSchema::kFreshnessStatusSeasonal) },
+        });
+        series.AddSeries(transaction, {
+            { std::string(DbSchema::kSeriesTitle), "Closed Night" },
+            { std::string(DbSchema::kSeriesSlug), "closed-night" },
+            { std::string(DbSchema::kSeriesStatus), std::string(DbSchema::kFreshnessStatusClosed) },
+        });
+
+        std::vector<PublicSeries> active = helper.GetActiveSeries(transaction);
+        ASSERT_EQ(active.size(), 2u);
+        const PublicSeries& bears = active[0];  // "Bear…" sorts before "T4T"
+        EXPECT_EQ(bears.id, bearHappyHour);
+        EXPECT_EQ(bears.slug, "bear-happy-hour");
+        EXPECT_EQ(bears.cadenceText, "Fridays");
+        EXPECT_EQ(bears.venueId, world.sunsetTavern);
+        EXPECT_EQ(bears.venueName, "Sunset Tavern");
+        EXPECT_EQ(bears.neighborhoodSlug, "ballard");
+        EXPECT_EQ(bears.status, DbSchema::kFreshnessStatusSeasonal);
+        EXPECT_TRUE(bears.categorySlugs.empty());
+
+        const PublicSeries& t4t = active[1];
+        EXPECT_EQ(t4t.id, world.t4t);
+        EXPECT_EQ(t4t.categorySlugs, std::vector<std::string>{ "dance" });
+        EXPECT_EQ(t4t.sceneTagSlugs, std::vector<std::string>{ "trans" });
+        EXPECT_FALSE(t4t.venueId.has_value());
+        EXPECT_EQ(t4t.venueName, "");
+    });
+}
+
+TEST(EventHelperTest, SeriesDetailCarriesOnlyItsApprovedUpcomingInstances) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("SeriesDetailCarriesOnlyItsApprovedUpcomingInstances", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        int64_t startsAtUs = NowUs(transaction) + kUsPerDay;
+        IngestItem approved = Item(world.cuffSite, "t4t-1", startsAtUs);
+        approved.seriesSlug = "t4t";
+        IngestItem pending = Item(world.cuffSite, "t4t-2", startsAtUs + kUsPerHour);
+        pending.seriesSlug = "t4t";
+        IngestItem elsewhere = Item(world.feed, "feed-1", startsAtUs);
+        IngestResult ingested = helper.IngestEvents(transaction, { approved, pending, elsewhere });
+        ASSERT_TRUE(ingested.ok) << ingested.errorCode;
+        Approve(transaction, helper, ingested.items[0].eventId);
+        Approve(transaction, helper, ingested.items[2].eventId);
+
+        std::optional<SeriesDetail> detail = helper.GetSeriesDetail(transaction, "t4t");
+        ASSERT_TRUE(detail.has_value());
+        EXPECT_EQ(detail->series.id, world.t4t);
+        EXPECT_EQ(detail->series.title, "T4T");
+        EXPECT_EQ(IdsOf(detail->upcoming), std::vector<int64_t>{ ingested.items[0].eventId });
+
+        // A closed series keeps its page.
+        TableHelpers::Series(databaseHelper).AddSeries(transaction, {
+            { std::string(DbSchema::kSeriesTitle), "Closed Night" },
+            { std::string(DbSchema::kSeriesSlug), "closed-night" },
+            { std::string(DbSchema::kSeriesStatus), std::string(DbSchema::kFreshnessStatusClosed) },
+        });
+        std::optional<SeriesDetail> closed = helper.GetSeriesDetail(transaction, "closed-night");
+        ASSERT_TRUE(closed.has_value());
+        EXPECT_EQ(closed->series.status, DbSchema::kFreshnessStatusClosed);
+        EXPECT_TRUE(closed->upcoming.events.empty());
+
+        EXPECT_FALSE(helper.GetSeriesDetail(transaction, "no-such-series").has_value());
     });
 }
 

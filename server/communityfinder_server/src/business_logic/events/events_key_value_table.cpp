@@ -57,4 +57,32 @@ KeyValueTableArray PublicEventsToKeyValueTableArray(const std::vector<PublicEven
     return array;
 }
 
+KeyValueTable PublicSeriesToKeyValueTable(const PublicSeries& series) {
+    KeyValueTable table;
+    table["id"] = StringFromInt(series.id);
+    table["title"] = series.title;
+    table["slug"] = series.slug;
+    table["description"] = series.description;
+    table["cadence_text"] = series.cadenceText;
+    table["url"] = series.url;
+    table["venue_id"] = OptionalIdString(series.venueId);
+    table["venue_name"] = series.venueName;
+    table["neighborhood_slug"] = series.neighborhoodSlug;
+    table["status"] = series.status;
+    table["last_verified_at_us"] = OptionalIdString(series.lastVerifiedAtUs);
+    table["category_slugs"] = JoinSlugs(series.categorySlugs);
+    table["scene_tag_slugs"] = JoinSlugs(series.sceneTagSlugs);
+    return table;
+}
+
+KeyValueTableArray PublicSeriesListToKeyValueTableArray(
+    const std::vector<PublicSeries>& seriesList) {
+    KeyValueTableArray array;
+    array.reserve(seriesList.size());
+    for (const auto& series : seriesList) {
+        array.push_back(PublicSeriesToKeyValueTable(series));
+    }
+    return array;
+}
+
 }  // namespace Events

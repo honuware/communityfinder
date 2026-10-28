@@ -13,7 +13,12 @@
 // Include each APP endpoint header here as it is added (Phase 4 account surface,
 // Phase 10 events), and add its `anchor = ...` line in RegisterAllEndpoints below.
 #include "admin_create_user.h"
+#include "admin_ingest_events.h"
 #include "admin_reset_password.h"
+#include "admin_review_event.h"
+#include "get_event_detail.h"
+#include "get_event_series.h"
+#include "get_upcoming_events.h"
 
 namespace Endpoints {
 
@@ -45,7 +50,13 @@ void RegisterAllEndpoints() {
     static AnchorFunc volatile anchor = nullptr;
     (void)anchor;
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminCreateUser);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminIngestEvents);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminResetPassword);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminReviewEvent);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEventDetail);
+    // One anchor pulls in the whole TU, so both series routes register.
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEventSeriesList);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetUpcomingEvents);
 }
 
 }  // namespace Endpoints

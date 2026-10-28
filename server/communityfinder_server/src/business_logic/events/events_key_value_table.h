@@ -23,4 +23,10 @@ namespace Events {
 KeyValueTable PublicEventToKeyValueTable(const PublicEvent& event);
 KeyValueTableArray PublicEventsToKeyValueTableArray(const std::vector<PublicEvent>& events);
 
+// A series for the index and its page: no volatility tier or timestamps (those
+// are the verifier's bookkeeping), but `status` and `last_verified_at_us` — the
+// freshness a visitor is shown.
+KeyValueTable PublicSeriesToKeyValueTable(const PublicSeries& series);
+KeyValueTableArray PublicSeriesListToKeyValueTableArray(const std::vector<PublicSeries>& seriesList);
+
 }  // namespace Events

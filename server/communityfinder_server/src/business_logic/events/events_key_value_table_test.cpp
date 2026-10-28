@@ -78,6 +78,58 @@ TEST(EventsKeyValueTableTest, AbsentOptionalsAreEmptyStrings) {
     EXPECT_EQ(table["scene_tag_slugs"], "");
 }
 
+PublicSeries MakeSeries() {
+    PublicSeries series;
+    series.id = 3;
+    series.title = "T4T";
+    series.slug = "t4t";
+    series.description = "A dance party.";
+    series.cadenceText = "2nd Saturdays";
+    series.url = "https://example.org/t4t";
+    series.venueId = 7;
+    series.venueName = "The Cuff";
+    series.neighborhoodSlug = "capitol-hill";
+    series.status = "open";
+    series.lastVerifiedAtUs = 1793000000000000LL;
+    series.categorySlugs = { "dance" };
+    series.sceneTagSlugs = { "trans", "qtpoc" };
+    return series;
+}
+
+TEST(EventsKeyValueTableTest, PublicSeriesConvertsEveryField) {
+    KeyValueTable table = PublicSeriesToKeyValueTable(MakeSeries());
+    EXPECT_EQ(table["id"], "3");
+    EXPECT_EQ(table["title"], "T4T");
+    EXPECT_EQ(table["slug"], "t4t");
+    EXPECT_EQ(table["description"], "A dance party.");
+    EXPECT_EQ(table["cadence_text"], "2nd Saturdays");
+    EXPECT_EQ(table["url"], "https://example.org/t4t");
+    EXPECT_EQ(table["venue_id"], "7");
+    EXPECT_EQ(table["venue_name"], "The Cuff");
+    EXPECT_EQ(table["neighborhood_slug"], "capitol-hill");
+    EXPECT_EQ(table["status"], "open");
+    EXPECT_EQ(table["last_verified_at_us"], "1793000000000000");
+    EXPECT_EQ(table["category_slugs"], "dance");
+    EXPECT_EQ(table["scene_tag_slugs"], "trans,qtpoc");
+    EXPECT_EQ(table.size(), 13u);
+    // The verifier's bookkeeping stays in.
+    EXPECT_EQ(table.count("volatility_tier"), 0u);
+}
+
+TEST(EventsKeyValueTableTest, SeriesAbsentOptionalsAreEmptyStrings) {
+    PublicSeries series = MakeSeries();
+    series.venueId.reset();
+    series.lastVerifiedAtUs.reset();
+    KeyValueTable table = PublicSeriesToKeyValueTable(series);
+    EXPECT_EQ(table["venue_id"], "");
+    EXPECT_EQ(table["last_verified_at_us"], "");
+
+    KeyValueTableArray array = PublicSeriesListToKeyValueTableArray({ MakeSeries(), series });
+    ASSERT_EQ(array.size(), 2u);
+    EXPECT_EQ(array[0]["venue_id"], "7");
+    EXPECT_EQ(array[1]["venue_id"], "");
+}
+
 TEST(EventsKeyValueTableTest, ArrayKeepsOrder) {
     PublicEvent first = MakeEvent();
     PublicEvent second = MakeEvent();

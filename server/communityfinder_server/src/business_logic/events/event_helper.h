@@ -154,8 +154,47 @@ struct PublicEvent {
     std::string origin;
 };
 
-// The clamp itself, separate so endpoints can echo the window they served
-// (EV2's calendar pages through windows) and tests can pin it without a DB.
+// GetUpcomingPublic's answer: the window actually served (after the clamp), so
+// a client paging through windows (EV2's calendar) knows where the next starts.
+struct UpcomingEvents {
+    UpcomingWindow window;
+    std::vector<PublicEvent> events;
+};
+
+// One event, whatever its status, for the detail page. `status` and
+// `reviewNotes` are for a curator's preview; the endpoint decides who sees them.
+struct EventDetail {
+    PublicEvent event;
+    std::string status;
+    std::string reviewNotes;
+};
+
+// A series as the public sees it: the durable label plus its OWN category and
+// scene-tag slugs (what its instances inherit). `status` is the freshness
+// status (open / seasonal / unverified / closed / moved), which is public.
+struct PublicSeries {
+    int64_t id = 0;
+    std::string title;
+    std::string slug;
+    std::string description;
+    std::string cadenceText;
+    std::string url;
+    std::optional<int64_t> venueId;
+    std::string venueName;
+    std::string neighborhoodSlug;
+    std::string status;
+    std::optional<int64_t> lastVerifiedAtUs;
+    std::vector<std::string> categorySlugs;
+    std::vector<std::string> sceneTagSlugs;
+};
+
+// A series page: the series plus its approved instances in the default window.
+struct SeriesDetail {
+    PublicSeries series;
+    UpcomingEvents upcoming;
+};
+
+// The clamp itself, separate so tests can pin it without a DB.
 UpcomingWindow ClampUpcomingWindow(int64_t nowUs, int64_t fromUs, int64_t toUs);
 
 class EventHelper {
@@ -189,8 +228,19 @@ public:
     // its venue, neighborhood, series and EFFECTIVE category / scene-tag slugs
     // resolved in a handful of batch queries. Category and scene filters match
     // the effective sets (the OQ5 inheritance pin).
-    std::vector<PublicEvent> GetUpcomingPublic(
-        Transaction& transaction, const UpcomingQuery& query);
+    UpcomingEvents GetUpcomingPublic(Transaction& transaction, const UpcomingQuery& query);
+
+    // One event in the public shape, any status; nullopt when there is no such
+    // event. Visibility is the caller's call (approved-only for the public).
+    std::optional<EventDetail> GetEventDetail(Transaction& transaction, int64_t eventId);
+
+    // The series index: every active series (Series::GetActiveSeries — all but
+    // closed and moved), ordered by title, with its own slugs.
+    std::vector<PublicSeries> GetActiveSeries(Transaction& transaction);
+
+    // A series page by slug, any freshness status (a closed series keeps its
+    // page); nullopt when there is no such series.
+    std::optional<SeriesDetail> GetSeriesDetail(Transaction& transaction, std::string_view slug);
 
 private:
     DatabaseHelper databaseHelper_;
@@ -207,6 +257,13 @@ private:
     TableHelpers::SeriesSceneTagAssignments seriesSceneTags_;
 
     int64_t NowUs(Transaction& transaction) const;
+
+    // Event / series rows → public shapes, resolving venues, neighborhoods,
+    // series and slugs in batch queries (a fixed number, however many rows).
+    std::vector<PublicEvent> AssemblePublicEvents(
+        Transaction& transaction, const KeyValueTableArray& rows);
+    std::vector<PublicSeries> AssemblePublicSeries(
+        Transaction& transaction, const KeyValueTableArray& rows);
 };
 
 }  // namespace Events

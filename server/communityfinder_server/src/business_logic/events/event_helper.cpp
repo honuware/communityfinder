@@ -72,6 +72,38 @@ bool Contains(const std::vector<std::string>& values, const std::string& value) 
     return std::find(values.begin(), values.end(), value) != values.end();
 }
 
+// Where a venue is, as the public shapes show it.
+struct Place {
+    std::string venueName;
+    std::string neighborhoodSlug;  // empty when unset or the neighborhood is disabled
+};
+using PlacesById = std::map<int64_t, Place>;
+
+// Venue id → place, in two queries: the venues by id, then the (enabled)
+// neighborhood list. Unknown ids are left out.
+PlacesById LookupPlaces(Transaction& transaction, const TableHelpers::Venues& venues,
+                        const TableHelpers::Neighborhoods& neighborhoods,
+                        const std::vector<int64_t>& venueIds) {
+    PlacesById places;
+    if (venueIds.empty()) {
+        return places;
+    }
+    std::map<int64_t, std::string> neighborhoodSlugs;
+    for (const KeyValueTable& neighborhood : neighborhoods.GetAll(transaction)) {
+        neighborhoodSlugs[std::stoll(Column(neighborhood, DbSchema::kNeighborhoodsId))] =
+            Column(neighborhood, DbSchema::kNeighborhoodsSlug);
+    }
+    for (const KeyValueTable& venue : venues.GetVenuesByIds(transaction, venueIds)) {
+        Place& place = places[std::stoll(Column(venue, DbSchema::kVenuesId))];
+        place.venueName = Column(venue, DbSchema::kVenuesName);
+        if (auto neighborhoodId = OptionalIdColumn(venue, DbSchema::kVenuesNeighborhoodId)) {
+            auto slugIt = neighborhoodSlugs.find(*neighborhoodId);
+            if (slugIt != neighborhoodSlugs.end()) place.neighborhoodSlug = slugIt->second;
+        }
+    }
+    return places;
+}
+
 // The item's stated assignments for one axis, resolved against the enabled
 // vocabulary. Unresolvable slugs are dropped and reported, not fatal.
 struct StatedAssignments {
@@ -373,18 +405,20 @@ ReviewResult EventHelper::ReviewEvent(
     return result;
 }
 
-std::vector<PublicEvent> EventHelper::GetUpcomingPublic(
+UpcomingEvents EventHelper::GetUpcomingPublic(
     Transaction& transaction, const UpcomingQuery& query) {
-    const UpcomingWindow window = ClampUpcomingWindow(NowUs(transaction), query.fromUs, query.toUs);
-    if (window.toUs <= window.fromUs) {
-        return {};
+    UpcomingEvents result;
+    result.window = ClampUpcomingWindow(NowUs(transaction), query.fromUs, query.toUs);
+    if (result.window.toUs <= result.window.fromUs) {
+        return result;
     }
 
-    // The single-column filters first, so the batch reads below only cover
-    // events that can still be returned.
-    std::vector<KeyValueTable> candidates;
+    // The single-column filters first, so the batch reads in
+    // AssemblePublicEvents only cover events that can still be returned.
+    KeyValueTableArray candidates;
     for (KeyValueTable& row : events_.GetEventsInRange(
-             transaction, window.fromUs, window.toUs, DbSchema::kEventsStatusApproved)) {
+             transaction, result.window.fromUs, result.window.toUs,
+             DbSchema::kEventsStatusApproved)) {
         if (query.venueId > 0
             && OptionalIdColumn(row, DbSchema::kEventsVenueId) != query.venueId) {
             continue;
@@ -395,31 +429,121 @@ std::vector<PublicEvent> EventHelper::GetUpcomingPublic(
         }
         candidates.push_back(std::move(row));
     }
-    if (candidates.empty()) {
+
+    // The rest match the resolved, effective values.
+    for (PublicEvent& event : AssemblePublicEvents(transaction, candidates)) {
+        if (!query.neighborhoodSlug.empty() && event.neighborhoodSlug != query.neighborhoodSlug) {
+            continue;
+        }
+        if (!query.categorySlug.empty() && !Contains(event.categorySlugs, query.categorySlug)) {
+            continue;
+        }
+        if (!query.sceneTagSlug.empty() && !Contains(event.sceneTagSlugs, query.sceneTagSlug)) {
+            continue;
+        }
+        result.events.push_back(std::move(event));
+    }
+    return result;
+}
+
+std::optional<EventDetail> EventHelper::GetEventDetail(Transaction& transaction, int64_t eventId) {
+    KeyValueTable row = events_.GetEvent(transaction, eventId);
+    if (row.empty()) {
+        return std::nullopt;
+    }
+    EventDetail detail;
+    detail.status = Column(row, DbSchema::kEventsStatus);
+    detail.reviewNotes = Column(row, DbSchema::kEventsReviewNotes);
+    detail.event = std::move(AssemblePublicEvents(transaction, { row }).front());
+    return detail;
+}
+
+std::vector<PublicSeries> EventHelper::GetActiveSeries(Transaction& transaction) {
+    return AssemblePublicSeries(transaction, series_.GetActiveSeries(transaction));
+}
+
+std::optional<SeriesDetail> EventHelper::GetSeriesDetail(
+    Transaction& transaction, std::string_view slug) {
+    KeyValueTable row = series_.GetSeriesBySlug(transaction, slug);
+    if (row.empty()) {
+        return std::nullopt;
+    }
+    SeriesDetail detail;
+    detail.series = std::move(AssemblePublicSeries(transaction, { row }).front());
+    UpcomingQuery instances;
+    instances.seriesId = detail.series.id;
+    detail.upcoming = GetUpcomingPublic(transaction, instances);
+    return detail;
+}
+
+std::vector<PublicSeries> EventHelper::AssemblePublicSeries(
+    Transaction& transaction, const KeyValueTableArray& rows) {
+    if (rows.empty()) {
         return {};
     }
+    std::vector<int64_t> seriesIds;
+    std::set<int64_t> venueIdSet;
+    for (const KeyValueTable& row : rows) {
+        seriesIds.push_back(std::stoll(Column(row, DbSchema::kSeriesId)));
+        if (auto venueId = OptionalIdColumn(row, DbSchema::kSeriesVenueId)) venueIdSet.insert(*venueId);
+    }
+    const PlacesById places = LookupPlaces(
+        transaction, venues_, neighborhoods_, std::vector<int64_t>(venueIdSet.begin(), venueIdSet.end()));
+    const IdToSlugs categories = SlugsByOwner(
+        seriesCategories_.GetForSeriesIds(transaction, seriesIds),
+        DbSchema::kSeriesCategoryAssignmentsSeriesId,
+        TableHelpers::kSeriesCategoryAssignmentsCategorySlug);
+    const IdToSlugs sceneTags = SlugsByOwner(
+        seriesSceneTags_.GetForSeriesIds(transaction, seriesIds),
+        DbSchema::kSeriesSceneTagAssignmentsSeriesId,
+        TableHelpers::kSeriesSceneTagAssignmentsSceneTagSlug);
 
+    std::vector<PublicSeries> result;
+    result.reserve(rows.size());
+    for (const KeyValueTable& row : rows) {
+        PublicSeries series;
+        series.id = std::stoll(Column(row, DbSchema::kSeriesId));
+        series.title = Column(row, DbSchema::kSeriesTitle);
+        series.slug = Column(row, DbSchema::kSeriesSlug);
+        series.description = Column(row, DbSchema::kSeriesDescription);
+        series.cadenceText = Column(row, DbSchema::kSeriesCadenceText);
+        series.url = Column(row, DbSchema::kSeriesUrl);
+        series.venueId = OptionalIdColumn(row, DbSchema::kSeriesVenueId);
+        series.status = Column(row, DbSchema::kSeriesStatus);
+        series.lastVerifiedAtUs = OptionalIdColumn(row, DbSchema::kSeriesLastVerifiedAtUs);
+        if (series.venueId) {
+            auto placeIt = places.find(*series.venueId);
+            if (placeIt != places.end()) {
+                series.venueName = placeIt->second.venueName;
+                series.neighborhoodSlug = placeIt->second.neighborhoodSlug;
+            }
+        }
+        auto categoryIt = categories.find(series.id);
+        if (categoryIt != categories.end()) series.categorySlugs = categoryIt->second;
+        auto sceneTagIt = sceneTags.find(series.id);
+        if (sceneTagIt != sceneTags.end()) series.sceneTagSlugs = sceneTagIt->second;
+        result.push_back(std::move(series));
+    }
+    return result;
+}
+
+std::vector<PublicEvent> EventHelper::AssemblePublicEvents(
+    Transaction& transaction, const KeyValueTableArray& rows) {
+    if (rows.empty()) {
+        return {};
+    }
     std::vector<int64_t> eventIds;
     std::set<int64_t> venueIdSet;
     std::set<int64_t> seriesIdSet;
-    for (const KeyValueTable& row : candidates) {
+    for (const KeyValueTable& row : rows) {
         eventIds.push_back(std::stoll(Column(row, DbSchema::kEventsId)));
         if (auto venueId = OptionalIdColumn(row, DbSchema::kEventsVenueId)) venueIdSet.insert(*venueId);
         if (auto seriesId = OptionalIdColumn(row, DbSchema::kEventsSeriesId)) seriesIdSet.insert(*seriesId);
     }
-    const std::vector<int64_t> venueIds(venueIdSet.begin(), venueIdSet.end());
     const std::vector<int64_t> seriesIds(seriesIdSet.begin(), seriesIdSet.end());
 
-    std::map<int64_t, KeyValueTable> venuesById;
-    for (KeyValueTable& venue : venues_.GetVenuesByIds(transaction, venueIds)) {
-        int64_t id = std::stoll(Column(venue, DbSchema::kVenuesId));
-        venuesById[id] = std::move(venue);
-    }
-    std::map<int64_t, std::string> neighborhoodSlugs;
-    for (const KeyValueTable& neighborhood : neighborhoods_.GetAll(transaction)) {
-        neighborhoodSlugs[std::stoll(Column(neighborhood, DbSchema::kNeighborhoodsId))] =
-            Column(neighborhood, DbSchema::kNeighborhoodsSlug);
-    }
+    const PlacesById places = LookupPlaces(
+        transaction, venues_, neighborhoods_, std::vector<int64_t>(venueIdSet.begin(), venueIdSet.end()));
     std::map<int64_t, KeyValueTable> seriesById;
     for (KeyValueTable& seriesRow : series_.GetSeriesByIds(transaction, seriesIds)) {
         int64_t id = std::stoll(Column(seriesRow, DbSchema::kSeriesId));
@@ -456,7 +580,8 @@ std::vector<PublicEvent> EventHelper::GetUpcomingPublic(
     };
 
     std::vector<PublicEvent> events;
-    for (const KeyValueTable& row : candidates) {
+    events.reserve(rows.size());
+    for (const KeyValueTable& row : rows) {
         PublicEvent event;
         event.id = std::stoll(Column(row, DbSchema::kEventsId));
         event.title = Column(row, DbSchema::kEventsTitle);
@@ -471,14 +596,10 @@ std::vector<PublicEvent> EventHelper::GetUpcomingPublic(
         event.origin = Column(row, DbSchema::kEventsOrigin);
 
         if (event.venueId) {
-            auto venueIt = venuesById.find(*event.venueId);
-            if (venueIt != venuesById.end()) {
-                event.venueName = Column(venueIt->second, DbSchema::kVenuesName);
-                if (auto neighborhoodId =
-                        OptionalIdColumn(venueIt->second, DbSchema::kVenuesNeighborhoodId)) {
-                    auto slugIt = neighborhoodSlugs.find(*neighborhoodId);
-                    if (slugIt != neighborhoodSlugs.end()) event.neighborhoodSlug = slugIt->second;
-                }
+            auto placeIt = places.find(*event.venueId);
+            if (placeIt != places.end()) {
+                event.venueName = placeIt->second.venueName;
+                event.neighborhoodSlug = placeIt->second.neighborhoodSlug;
             }
         }
         if (event.seriesId) {
@@ -490,16 +611,6 @@ std::vector<PublicEvent> EventHelper::GetUpcomingPublic(
         }
         event.categorySlugs = effective(ownCategories, seriesCategories, event.id, event.seriesId);
         event.sceneTagSlugs = effective(ownSceneTags, seriesSceneTags, event.id, event.seriesId);
-
-        if (!query.neighborhoodSlug.empty() && event.neighborhoodSlug != query.neighborhoodSlug) {
-            continue;
-        }
-        if (!query.categorySlug.empty() && !Contains(event.categorySlugs, query.categorySlug)) {
-            continue;
-        }
-        if (!query.sceneTagSlug.empty() && !Contains(event.sceneTagSlugs, query.sceneTagSlug)) {
-            continue;
-        }
         events.push_back(std::move(event));
     }
     return events;
