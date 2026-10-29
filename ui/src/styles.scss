@@ -30,6 +30,29 @@ body {
   margin-bottom: 8px;
 }
 
+// Neighborhood / category / scene chips on the events pages: small links to
+// that filtered list. Global because the event row, the detail page and the
+// series page all show them.
+.event-chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  text-decoration: none;
+  color: var(--mat-sys-on-secondary-container);
+  background: var(--mat-sys-secondary-container);
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.event-chip--tag {
+  color: var(--mat-sys-on-surface-variant);
+  background: var(--mat-sys-surface-container-high);
+}
+
 // Toast/snackbar accents (mirrors knottyyoga's convention; @honuware/ui's
 // ToastService applies these panel classes).
 .toast-success { --mat-snackbar-container-color: #4caf50; --mat-snackbar-supporting-text-color: white; }

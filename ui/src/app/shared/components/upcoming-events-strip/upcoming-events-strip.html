@@ -1,0 +1,17 @@
+@if (events().length) {
+  <section class="upcoming-strip" aria-labelledby="upcoming-strip-title">
+    <h2 id="upcoming-strip-title" class="upcoming-strip__title">Coming up</h2>
+    <ul class="upcoming-strip__list">
+      @for (event of events(); track event.id) {
+        <li class="upcoming-strip__item">
+          <span class="upcoming-strip__when">{{ when(event) }}</span>
+          <a class="upcoming-strip__name" [routerLink]="eventPath(event)">{{ event.title }}</a>
+          @if (place(event)) {
+            <span class="upcoming-strip__place">{{ place(event) }}</span>
+          }
+        </li>
+      }
+    </ul>
+    <a class="upcoming-strip__all" routerLink="/events">See all events →</a>
+  </section>
+}

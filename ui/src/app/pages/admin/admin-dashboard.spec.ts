@@ -19,4 +19,13 @@ describe('AdminDashboard', () => {
     const hrefs = Array.from(el.querySelectorAll('a')).map((a) => a.getAttribute('href'));
     expect(hrefs).toContain('/admin/roles');
   });
+
+  it('renders the Events tile linking to the event editor', () => {
+    const fixture = TestBed.createComponent(AdminDashboard);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent ?? '').toContain('Review, add, and edit events');
+    const hrefs = Array.from(el.querySelectorAll('a')).map((a) => a.getAttribute('href'));
+    expect(hrefs).toContain('/admin/events');
+  });
 });

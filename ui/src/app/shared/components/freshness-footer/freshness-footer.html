@@ -1,0 +1,11 @@
+<footer class="freshness-footer">
+  @if (marker()) {
+    <span
+      class="freshness-footer__marker"
+      [class.freshness-footer__marker--closed]="status() === 'closed'"
+    >
+      {{ marker() }}
+    </span>
+  }
+  <span>{{ verifiedText() }}</span>
+</footer>

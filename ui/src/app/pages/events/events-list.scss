@@ -1,0 +1,40 @@
+.events-list__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.events-list__title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.events-list__presets,
+.events-list__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.events-list__filters mat-form-field {
+  flex: 1 1 180px;
+}
+
+.events-list__subscribe {
+  display: block;
+  margin: 16px 0;
+}
+
+.events-list__day-title {
+  margin: 24px 0 4px;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.events-list__empty {
+  opacity: 0.8;
+}

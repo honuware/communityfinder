@@ -126,7 +126,7 @@ export const MOCK_NEIGHBORHOODS: Neighborhood[] = NEIGHBORHOOD_SEEDS.map(
 
 // ---- venues and series (made up) ----
 
-interface MockVenue {
+export interface MockVenue {
   id: number;
   name: string;
   address: string;
@@ -232,6 +232,7 @@ export interface EventsMockData {
   categories: Category[];
   sceneTags: SceneTag[];
   neighborhoods: Neighborhood[];
+  venues: MockVenue[];
   series: EventSeries[];
   events: MockEventRecord[];
 }
@@ -487,6 +488,7 @@ export function buildEventsMockData(now: number): EventsMockData {
     categories: MOCK_CATEGORIES,
     sceneTags: MOCK_SCENE_TAGS,
     neighborhoods: MOCK_NEIGHBORHOODS,
+    venues: [LANTERN_ROOM, DRIFTWOOD_HALL, COLUMBIA_CITY_SOCIAL, EASTSIDE_COMMONS],
     series: [bearHappyHour, soberHike, dragBrunchClub],
     events,
   };

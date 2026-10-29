@@ -1,0 +1,29 @@
+.series-index__title {
+  margin: 8px 0 16px;
+  font-weight: 600;
+}
+
+.series-index__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.series-index__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.series-index__name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: inherit;
+}
+
+.series-index__when,
+.series-index__empty {
+  opacity: 0.8;
+}

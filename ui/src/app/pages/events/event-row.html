@@ -1,0 +1,36 @@
+<article class="event-row">
+  <a class="event-row__thumb" [routerLink]="pagePath()" tabindex="-1" aria-hidden="true">
+    @if (!photoFailed()) {
+      <img [src]="photoUrl()" alt="" loading="lazy" (error)="photoFailed.set(true)" />
+    }
+  </a>
+  <div class="event-row__body">
+    <div class="event-row__when">{{ when() }}</div>
+    <a class="event-row__title" [routerLink]="pagePath()">{{ event().title }}</a>
+    @if (place() || neighborhood()) {
+      <div class="event-row__place">
+        @if (place()) {
+          <span>{{ place() }}</span>
+        }
+        @if (neighborhood(); as hood) {
+          <a class="event-chip" routerLink="/events" [queryParams]="{ neighborhood: hood.slug }">
+            {{ hood.label }}
+          </a>
+        }
+      </div>
+    }
+    @if (chips().length) {
+      <div class="event-row__chips">
+        @for (chip of chips(); track $index) {
+          <a
+            class="event-chip event-chip--tag"
+            routerLink="/events"
+            [queryParams]="chip.queryParams"
+          >
+            {{ chip.label }}
+          </a>
+        }
+      </div>
+    }
+  </div>
+</article>

@@ -1,0 +1,23 @@
+.freshness-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.freshness-footer__marker {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.freshness-footer__marker--closed {
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}

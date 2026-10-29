@@ -1,0 +1,122 @@
+.calendar__header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 8px 0 12px;
+}
+
+.calendar__title {
+  margin: 0 8px;
+  min-width: 10ch;
+  font-size: 1.5rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.calendar__message {
+  opacity: 0.8;
+}
+
+.calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  border-left: 1px solid var(--mat-sys-outline-variant);
+}
+
+.calendar__weekday,
+.calendar__day {
+  border-right: 1px solid var(--mat-sys-outline-variant);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  padding: 4px;
+}
+
+.calendar__weekday {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.calendar__day {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 88px;
+  min-width: 0;
+}
+
+.calendar__day--outside {
+  background: var(--mat-sys-surface-container-low);
+
+  .calendar__day-digit {
+    opacity: 0.5;
+  }
+}
+
+.calendar__day--today .calendar__day-digit {
+  display: inline-block;
+  min-width: 1.6em;
+  border-radius: 50%;
+  text-align: center;
+  color: var(--mat-sys-on-primary);
+  background: var(--mat-sys-primary);
+}
+
+.calendar__day-number {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.calendar__day-label {
+  display: none;
+}
+
+.calendar__event {
+  display: block;
+  overflow: hidden;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-decoration: none;
+  color: var(--mat-sys-on-primary-container);
+  background: var(--mat-sys-primary-container);
+}
+
+.calendar__event-time {
+  font-weight: 600;
+}
+
+// Phones: the grid stacks into a list of this month's days that have events.
+@media (max-width: 640px) {
+  .calendar__grid {
+    display: block;
+    border: none;
+  }
+
+  .calendar__weekday,
+  .calendar__day--empty,
+  .calendar__day--outside {
+    display: none;
+  }
+
+  .calendar__day {
+    min-height: 0;
+    padding: 8px 0;
+    border-right: none;
+  }
+
+  .calendar__day-label {
+    display: inline;
+  }
+
+  .calendar__day .calendar__day-digit {
+    display: none;
+  }
+
+  .calendar__event {
+    font-size: 0.9rem;
+    white-space: normal;
+  }
+}

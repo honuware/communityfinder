@@ -1,0 +1,75 @@
+.event-detail {
+  max-width: 720px;
+}
+
+.event-detail__title {
+  margin: 8px 0 16px;
+  font-weight: 600;
+}
+
+.event-detail__preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--mat-sys-on-tertiary-container);
+  background: var(--mat-sys-tertiary-container);
+}
+
+.event-detail__photo {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.event-detail__facts {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  row-gap: 12px;
+  margin: 0 0 16px;
+
+  dt {
+    color: var(--mat-sys-primary);
+  }
+
+  dd {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+}
+
+.event-detail__date,
+.event-detail__venue {
+  font-weight: 600;
+}
+
+.event-detail__calendar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.event-detail__description {
+  white-space: pre-line;
+  line-height: 1.5;
+}
+
+.event-detail__external {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+}
+
+.event-detail__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

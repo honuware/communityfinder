@@ -1,10 +1,16 @@
 import {
   formatEventDateLine,
+  formatEventShortDate,
   formatEventTime,
+  formatEventTimeRange,
+  formatMonthYear,
+  formatPacificIso,
   monthRangeUs,
   pacificDateTime,
   pacificDayKey,
   pacificDayOfWeek,
+  pacificInputsToUs,
+  pacificTimeOfDay,
   pacificWallClockToUs,
   tonightRangeUs,
   usToDate,
@@ -74,6 +80,63 @@ describe('events-date.utils', () => {
       expect(pacificDayKey(FRIDAY_10PM)).toBe('2026-08-14');
       expect(usToDate(FRIDAY_10PM).getUTCDate()).toBe(15);
       expect(pacificDayKey(pacificWallClockToUs(2026, 1, 5, 0, 0))).toBe('2026-01-05');
+    });
+
+    it('shows the short date and the month', () => {
+      expect(formatEventShortDate(FRIDAY_10PM)).toBe('Fri, Aug 14');
+      expect(formatMonthYear(FRIDAY_10PM)).toBe('August 2026');
+      // 8 PM on New Year's Eve is already January in UTC, but still December here.
+      expect(formatMonthYear(pacificWallClockToUs(2026, 12, 31, 20))).toBe('December 2026');
+    });
+
+    it('shows a time range, naming the end day only when it is not the same night', () => {
+      expect(formatEventTimeRange(FRIDAY_10PM, null)).toBe('10:00 PM');
+      expect(formatEventTimeRange(FRIDAY_10PM, FRIDAY_10PM + HOUR_US)).toBe('10:00 PM – 11:00 PM');
+      // A bar night spilling past midnight.
+      expect(formatEventTimeRange(FRIDAY_10PM, FRIDAY_10PM + 4 * HOUR_US)).toBe(
+        '10:00 PM – 2:00 AM',
+      );
+      // A festival into Sunday.
+      const fridayTenAm = pacificWallClockToUs(2026, 8, 14, 10);
+      const sundaySixPm = pacificWallClockToUs(2026, 8, 16, 18);
+      expect(formatEventTimeRange(fridayTenAm, sundaySixPm)).toBe(
+        '10:00 AM – Sun, Aug 16, 6:00 PM',
+      );
+      // An end at or before the start is ignored.
+      expect(formatEventTimeRange(FRIDAY_10PM, FRIDAY_10PM)).toBe('10:00 PM');
+    });
+
+    it('writes ISO 8601 with the Pacific offset of that date', () => {
+      expect(formatPacificIso(FRIDAY_10PM)).toBe('2026-08-14T22:00:00-07:00');
+      expect(formatPacificIso(pacificWallClockToUs(2026, 12, 24, 19, 30))).toBe(
+        '2026-12-24T19:30:00-08:00',
+      );
+    });
+  });
+
+  describe('form inputs', () => {
+    it('reads and writes the date and time inputs in Pacific time', () => {
+      expect(pacificDayKey(FRIDAY_10PM)).toBe('2026-08-14');
+      expect(pacificTimeOfDay(FRIDAY_10PM)).toBe('22:00');
+      expect(pacificTimeOfDay(pacificWallClockToUs(2026, 8, 15, 9, 5))).toBe('09:05');
+      expect(pacificInputsToUs('2026-08-14', '22:00')).toBe(FRIDAY_10PM);
+    });
+
+    it('composes the right instant on both sides of the 2026 DST changes', () => {
+      // Sat Mar 7, 8 PM is PST (UTC−8); Sun Mar 8, 8 PM is PDT (UTC−7).
+      expect(pacificInputsToUs('2026-03-07', '20:00')).toBe(utc(2026, 3, 8, 4));
+      expect(pacificInputsToUs('2026-03-08', '20:00')).toBe(utc(2026, 3, 9, 3));
+      // Sat Oct 31, 8 PM is PDT; Sun Nov 1, 8 PM is PST.
+      expect(pacificInputsToUs('2026-10-31', '20:00')).toBe(utc(2026, 11, 1, 3));
+      expect(pacificInputsToUs('2026-11-01', '20:00')).toBe(utc(2026, 11, 2, 4));
+    });
+
+    it('rejects blank or malformed inputs', () => {
+      expect(pacificInputsToUs('', '22:00')).toBeNull();
+      expect(pacificInputsToUs('2026-08-14', '')).toBeNull();
+      expect(pacificInputsToUs('8/14/2026', '22:00')).toBeNull();
+      expect(pacificInputsToUs('2026-13-01', '22:00')).toBeNull();
+      expect(pacificInputsToUs('2026-08-14', '24:00')).toBeNull();
     });
   });
 

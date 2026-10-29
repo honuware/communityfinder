@@ -1,0 +1,26 @@
+<section class="series-index">
+  <a mat-button routerLink="/events" class="series-index__back">
+    <mat-icon>arrow_back</mat-icon>
+    Upcoming list
+  </a>
+  <h1 class="series-index__title">Recurring events</h1>
+
+  @if (loading()) {
+    <mat-progress-spinner mode="indeterminate" diameter="36" />
+  } @else if (failed()) {
+    <p class="series-index__empty">The series couldn't be loaded. Please try again in a moment.</p>
+  } @else if (series().length === 0) {
+    <p class="series-index__empty">No recurring events are listed yet.</p>
+  } @else {
+    <ul class="series-index__list">
+      @for (item of series(); track item.id) {
+        <li class="series-index__item">
+          <a class="series-index__name" [routerLink]="seriesPath(item)">{{ item.title }}</a>
+          @if (whenAndWhere(item)) {
+            <span class="series-index__when">{{ whenAndWhere(item) }}</span>
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

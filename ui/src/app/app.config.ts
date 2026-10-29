@@ -26,6 +26,7 @@ import { routes } from './app.routes';
 import { environment } from '../environments/environment';
 import { provideCommunityAccess } from './core/community-access/community-access.providers';
 import { provideAdminUsersAccess } from './core/admin-users-access/admin-users-access.providers';
+import { provideEventsAdminAccess } from './core/events-admin-access/events-admin-access.providers';
 import { SiteConfigService } from './core/services/site-config.service';
 import { HONUWARE_MOCK_OPTIONS } from './core/mock/honuware-mock';
 
@@ -58,6 +59,9 @@ export const appConfig: ApplicationConfig = {
     // Admin user-management access (create user + reset password) — the two
     // bespoke, admin_portal-gated endpoints the generic CRUD doesn't cover.
     provideAdminUsersAccess(environment.useMock),
+    // The event editor's approve / reject (POST /api/admin/review_event), the
+    // one manage_events action the generic CRUD doesn't cover.
+    provideEventsAdminAccess(environment.useMock),
     // Bootstrap-time silent login (me() → on 401 remember() → me()). Registered
     // after the interceptors so its calls are CSRF-stamped + error-handled.
     provideAppInitializer(() => {

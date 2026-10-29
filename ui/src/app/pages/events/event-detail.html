@@ -1,0 +1,116 @@
+<article class="event-detail">
+  <a mat-button routerLink="/events" class="event-detail__back">
+    <mat-icon>arrow_back</mat-icon>
+    All events
+  </a>
+
+  @if (loading()) {
+    <mat-progress-spinner mode="indeterminate" diameter="36" />
+  } @else if (notFound()) {
+    <h1 class="event-detail__title">Event not found</h1>
+    <p>This event isn't listed, or is no longer listed.</p>
+    <a mat-stroked-button routerLink="/events">See upcoming events</a>
+  } @else if (failed()) {
+    <p>This event couldn't be loaded. Please try again in a moment.</p>
+  } @else if (event(); as event) {
+    @if (!isPublic()) {
+      <p class="event-detail__preview">
+        <mat-icon>visibility</mat-icon>
+        Curator preview: this event is <strong>{{ event.status }}</strong> and not public.
+      </p>
+    }
+
+    @if (photoUrl()) {
+      <img class="event-detail__photo" [src]="photoUrl()" alt="" />
+    }
+
+    <h1 class="event-detail__title">{{ event.title }}</h1>
+
+    <dl class="event-detail__facts">
+      <dt><mat-icon aria-label="When">schedule</mat-icon></dt>
+      <dd>
+        <div class="event-detail__date">{{ dateLine() }}</div>
+        <div>{{ timeRange() }}</div>
+      </dd>
+
+      @if (event.venue_name || event.location_text) {
+        <dt><mat-icon aria-label="Where">place</mat-icon></dt>
+        <dd>
+          <!-- EV2 §3.8 / GD3 §3.4: whichever lands second links the venue name to its guide page. -->
+          @if (event.venue_name) {
+            <div class="event-detail__venue">{{ event.venue_name }}</div>
+            @if (event.venue_address) {
+              <div>{{ event.venue_address }}</div>
+            }
+          } @else {
+            <div>{{ event.location_text }}</div>
+          }
+          @if (neighborhood(); as hood) {
+            <a class="event-chip" routerLink="/events" [queryParams]="{ neighborhood: hood.slug }">
+              {{ hood.label }}
+            </a>
+          }
+        </dd>
+      }
+
+      @if (event.cost_text) {
+        <dt><mat-icon aria-label="Cost">sell</mat-icon></dt>
+        <dd>{{ event.cost_text }}</dd>
+      }
+    </dl>
+
+    @if (isPublic()) {
+      <div class="event-detail__calendar">
+        <a mat-flat-button [href]="icsUrl()" download>
+          <mat-icon>event</mat-icon>
+          Add to calendar
+        </a>
+        <a mat-stroked-button [href]="googleUrl()" target="_blank" rel="noopener">
+          Google Calendar
+        </a>
+      </div>
+    }
+
+    @if (event.description) {
+      <p class="event-detail__description">{{ event.description }}</p>
+    }
+
+    @if (event.url) {
+      <p>
+        <a [href]="event.url" target="_blank" rel="noopener nofollow">
+          Event website
+          <mat-icon class="event-detail__external" aria-hidden="true">open_in_new</mat-icon>
+        </a>
+      </p>
+    }
+
+    @if (seriesPath()) {
+      <p>
+        Part of <a [routerLink]="seriesPath()">{{ event.series_title }}</a>
+      </p>
+    }
+
+    @if (chips().length) {
+      <div class="event-detail__chips">
+        @for (chip of chips(); track $index) {
+          <a
+            class="event-chip event-chip--tag"
+            routerLink="/events"
+            [queryParams]="chip.queryParams"
+          >
+            {{ chip.label }}
+          </a>
+        }
+      </div>
+    }
+
+    @if (canManage()) {
+      <p class="event-detail__manage">
+        <a mat-button routerLink="/admin/events" [queryParams]="{ edit: event.id }">
+          <mat-icon>edit</mat-icon>
+          Edit this event
+        </a>
+      </p>
+    }
+  }
+</article>

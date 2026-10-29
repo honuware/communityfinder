@@ -1,0 +1,191 @@
+<div class="manage-events">
+  <a mat-button routerLink="/admin" class="admin-back">
+    <mat-icon>arrow_back</mat-icon>
+    Admin Dashboard
+  </a>
+  <h1 class="manage-events__title">Events</h1>
+
+  <section class="manage-events__queue">
+    <h2 class="manage-events__subtitle">Waiting for review ({{ pending().length }})</h2>
+    @if (loadingQueue()) {
+      <mat-progress-spinner mode="indeterminate" diameter="28" />
+    } @else if (pending().length === 0) {
+      <p class="manage-events__hint">Nothing is waiting for review.</p>
+    } @else {
+      <ul class="manage-events__list">
+        @for (item of pending(); track item.id) {
+          <li class="manage-events__item">
+            <div class="manage-events__item-text">
+              <a [routerLink]="previewPath(item.id)">{{ item.title }}</a>
+              <span class="manage-events__hint">{{ item.summary }}</span>
+            </div>
+            <div class="manage-events__item-actions">
+              <button
+                mat-flat-button
+                type="button"
+                [disabled]="reviewingId() === item.id"
+                (click)="approve(item)"
+              >
+                Approve
+              </button>
+              <button
+                mat-stroked-button
+                type="button"
+                [disabled]="reviewingId() === item.id"
+                (click)="reject(item)"
+              >
+                Reject
+              </button>
+              <button mat-button type="button" (click)="openEvent(item.id.toString())">Edit</button>
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  <mat-card appearance="outlined" class="manage-events__card">
+    <div class="manage-events__find">
+      <mat-form-field appearance="outline" class="manage-events__search">
+        <mat-label>Find an event to edit</mat-label>
+        <input
+          matInput
+          [formControl]="searchControl"
+          [matAutocomplete]="eventAuto"
+          placeholder="Search by title"
+        />
+        <mat-autocomplete
+          #eventAuto="matAutocomplete"
+          [displayWith]="displayOption"
+          (optionSelected)="onSearchSelected($event)"
+        >
+          @for (option of searchOptions(); track option.value) {
+            <mat-option [value]="option">{{ option.display }}</mat-option>
+          }
+        </mat-autocomplete>
+      </mat-form-field>
+      <button mat-stroked-button type="button" (click)="newEvent()">
+        <mat-icon>add</mat-icon>
+        New event
+      </button>
+    </div>
+
+    <h2 class="manage-events__subtitle">
+      @if (editingId(); as id) {
+        Editing event {{ id }}
+        <a mat-button [routerLink]="previewPath(id)">View page</a>
+      } @else {
+        New event
+      }
+    </h2>
+
+    <form [formGroup]="form" (ngSubmit)="save()">
+      <mat-form-field appearance="outline" class="manage-events__wide">
+        <mat-label>Title</mat-label>
+        <input matInput formControlName="title" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="manage-events__wide">
+        <mat-label>Description</mat-label>
+        <textarea matInput formControlName="description" rows="4"></textarea>
+      </mat-form-field>
+
+      <p class="manage-events__hint">Times are Seattle time (Pacific).</p>
+      <div class="manage-events__row">
+        <mat-form-field appearance="outline">
+          <mat-label>Start date</mat-label>
+          <input matInput type="date" formControlName="startDate" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Start time</mat-label>
+          <input matInput type="time" formControlName="startTime" />
+        </mat-form-field>
+      </div>
+      <div class="manage-events__row">
+        <mat-form-field appearance="outline">
+          <mat-label>End date (optional)</mat-label>
+          <input matInput type="date" formControlName="endDate" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>End time (optional)</mat-label>
+          <input matInput type="time" formControlName="endTime" />
+          <mat-hint>Earlier than the start, with no end date, means the next morning.</mat-hint>
+        </mat-form-field>
+      </div>
+
+      <div class="manage-events__row">
+        <mat-form-field appearance="outline">
+          <mat-label>Venue</mat-label>
+          <mat-select formControlName="venueId">
+            <mat-option value="">No venue</mat-option>
+            @for (venue of venues(); track venue.value) {
+              <mat-option [value]="venue.value">{{ venue.display }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Location (without a venue)</mat-label>
+          <input matInput formControlName="locationText" />
+        </mat-form-field>
+      </div>
+
+      <div class="manage-events__row">
+        <mat-form-field appearance="outline">
+          <mat-label>Series</mat-label>
+          <mat-select formControlName="seriesId">
+            <mat-option value="">Not part of a series</mat-option>
+            @for (item of series(); track item.value) {
+              <mat-option [value]="item.value">{{ item.display }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Cost</mat-label>
+          <input matInput formControlName="costText" />
+          <mat-hint>Write exactly "Free" for a free event.</mat-hint>
+        </mat-form-field>
+      </div>
+
+      <mat-form-field appearance="outline" class="manage-events__wide">
+        <mat-label>Event website</mat-label>
+        <input matInput type="url" formControlName="url" />
+      </mat-form-field>
+
+      <fieldset class="manage-events__tags">
+        <legend>Categories</legend>
+        @for (tag of categories(); track tag.id) {
+          <mat-checkbox
+            [checked]="isCategorySelected(tag.id)"
+            (change)="toggleCategory(tag.id, $event.checked)"
+          >
+            {{ tag.label }}
+          </mat-checkbox>
+        }
+      </fieldset>
+      <fieldset class="manage-events__tags">
+        <legend>Scenes</legend>
+        @for (tag of sceneTags(); track tag.id) {
+          <mat-checkbox
+            [checked]="isSceneTagSelected(tag.id)"
+            (change)="toggleSceneTag(tag.id, $event.checked)"
+          >
+            {{ tag.label }}
+          </mat-checkbox>
+        }
+      </fieldset>
+      @if (form.controls.seriesId.value) {
+        <p class="manage-events__hint">
+          Leave the categories (or the scenes) all unchecked to use the series' own.
+        </p>
+      }
+
+      @if (formError()) {
+        <p class="manage-events__error">{{ formError() }}</p>
+      }
+      <div class="manage-events__actions">
+        <button mat-flat-button type="submit" [disabled]="saving()">
+          {{ editingId() ? 'Save changes' : 'Add event' }}
+        </button>
+      </div>
+    </form>
+  </mat-card>
+</div>

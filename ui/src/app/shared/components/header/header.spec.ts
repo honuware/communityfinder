@@ -37,6 +37,15 @@ describe('Header', () => {
     expect(text).toContain('Register');
   });
 
+  it('links to the events pages whether or not anyone is signed in', () => {
+    configure({ authData$: of({ isAuth: false }) } as unknown as AuthService);
+    const fixture = TestBed.createComponent(Header);
+    fixture.detectChanges();
+    const nav = (fixture.nativeElement as HTMLElement).querySelector('.app-header__nav');
+    expect(nav?.textContent?.trim()).toBe('Events');
+    expect(nav?.getAttribute('href')).toBe('/events');
+  });
+
   it('shows only the first name when logged in', () => {
     const user = {
       isAuth: true,

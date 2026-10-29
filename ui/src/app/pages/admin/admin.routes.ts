@@ -6,6 +6,7 @@ import {
 } from '@honuware/ui/crud';
 import { AdminDashboard } from './admin-dashboard';
 import { AdminPage } from './admin';
+import { ManageEventsPage } from './manage-events';
 import { ManageRolesPage } from './manage-roles';
 import { ManageUsersPage } from './manage-users';
 
@@ -23,6 +24,10 @@ const routes: Routes = [
   { path: 'roles', component: ManageRolesPage },
   // Bespoke Users page — search / edit / delete accounts (the Users dashboard tile).
   { path: 'users', component: ManageUsersPage },
+  // Bespoke event editor + review queue (the Events dashboard tile; EV2 §3.7).
+  // Admin-only for now, like the rest of /admin; the server checks
+  // manage_events on every write.
+  { path: 'events', component: ManageEventsPage },
   {
     path: 'tables',
     component: AdminPage,

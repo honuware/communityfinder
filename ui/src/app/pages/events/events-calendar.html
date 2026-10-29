@@ -1,0 +1,62 @@
+<section class="calendar">
+  <a mat-button routerLink="/events" class="calendar__back">
+    <mat-icon>arrow_back</mat-icon>
+    Upcoming list
+  </a>
+
+  <header class="calendar__header">
+    <button
+      mat-icon-button
+      type="button"
+      (click)="previousMonth()"
+      [disabled]="!canGoBack()"
+      aria-label="Previous month"
+    >
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+    <h1 class="calendar__title">{{ title() }}</h1>
+    <button mat-icon-button type="button" (click)="nextMonth()" aria-label="Next month">
+      <mat-icon>chevron_right</mat-icon>
+    </button>
+    @if (canGoBack()) {
+      <button mat-button type="button" (click)="thisMonth()">This month</button>
+    }
+    @if (loading()) {
+      <mat-progress-spinner mode="indeterminate" diameter="24" />
+    }
+  </header>
+
+  @if (failed()) {
+    <p class="calendar__message">Events couldn't be loaded. Please try again in a moment.</p>
+  } @else if (!loading() && events().length === 0) {
+    <p class="calendar__message">Nothing's on the calendar this month yet.</p>
+  }
+
+  <div class="calendar__grid">
+    @for (weekday of weekdays; track weekday) {
+      <div class="calendar__weekday" aria-hidden="true">{{ weekday }}</div>
+    }
+    @for (week of weeks(); track week[0].key) {
+      @for (day of week; track day.key) {
+        <div
+          class="calendar__day"
+          [class.calendar__day--outside]="!day.inMonth"
+          [class.calendar__day--today]="day.isToday"
+          [class.calendar__day--empty]="dayEvents(day.key).length === 0"
+          [attr.data-day]="day.key"
+        >
+          <div class="calendar__day-number">
+            <span class="calendar__day-label">{{ day.dateLabel }}</span>
+            <span class="calendar__day-digit">{{ day.day }}</span>
+          </div>
+          @for (event of dayEvents(day.key); track event.id) {
+            <a class="calendar__event" [routerLink]="eventPath(event)">
+              <span class="calendar__event-time">{{ eventTime(event) }}</span>
+              {{ event.title }}
+            </a>
+          }
+        </div>
+      }
+    }
+  </div>
+</section>

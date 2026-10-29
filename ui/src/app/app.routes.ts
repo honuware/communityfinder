@@ -25,9 +25,13 @@ export const routes: Routes = [
   { path: 'account', component: AccountPage, canActivate: [AuthGuard] },
   { path: 'account/password', component: ChangePasswordPage, canActivate: [AuthGuard] },
 
+  // The public events pages (EV2 §3): list, calendar, series, and each event.
+  // Lazy-loaded; anonymous.
+  { path: 'events', loadChildren: () => import('./pages/events/events.routes') },
+
   // The admin CRUD editor (@honuware/ui/crud), lazy-loaded so the editor pages stay
   // out of the initial bundle. AuthGuard sends anonymous visitors to /login; the
-  // nested AdminGuard sends signed-in non-admins home. Events routes arrive Phase 11.
+  // nested AdminGuard sends signed-in non-admins home.
   {
     path: 'admin',
     canActivate: [AuthGuard, AdminGuard],

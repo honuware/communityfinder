@@ -1,0 +1,9 @@
+<div class="subscribe-link">
+  <mat-icon class="subscribe-link__icon" aria-hidden="true">event</mat-icon>
+  <span class="subscribe-link__text">Get {{ label() }} in your calendar</span>
+  <a mat-stroked-button class="subscribe-link__subscribe" [href]="subscribeUrl()">Subscribe</a>
+  <button mat-button type="button" (click)="copy()">Copy link</button>
+</div>
+<p class="subscribe-link__hint">
+  Google Calendar: Other calendars → From URL, then paste the link.
+</p>

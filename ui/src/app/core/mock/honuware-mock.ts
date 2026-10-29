@@ -1,5 +1,12 @@
 import { DatabaseSchema } from '@honuware/ui/access';
 import { MockRow, ProvideHonuwareAccessMockOptions } from '@honuware/ui/testing';
+import { nowUs } from '../utils/events-date.utils';
+import {
+  buildEventsCrudSeedRows,
+  EVENTS_CRUD_MOCK_DISPLAY_TEMPLATES,
+  EVENTS_CRUD_MOCK_TABLES,
+} from './events-crud-mock';
+import { buildEventsMockData } from './events-mock-data';
 
 // Offline dataset for the `local` (mock) build config: it makes @honuware/ui's
 // in-memory access layer fully navigable with no server behind it. Real builds
@@ -18,9 +25,22 @@ export const ADMIN_MOCK_SCHEMA: DatabaseSchema = {
   // role_assignments is a nested/junction table (mirrors the framework): it stays out
   // of the Manage Data picker (AdminPage filters nested out) and is edited via the
   // bespoke Roles & Permissions page, which reads it from `tables`/`seedRows` below.
-  root_tables: ['people', 'roles', 'role_assignments'],
-  nested_tables: ['role_assignments'],
+  //
+  // The events tables (EVENTS_CRUD_MOCK_TABLES) back the bespoke event editor
+  // offline; their two assignment tables are nested, as on the server.
+  root_tables: [
+    'people',
+    'roles',
+    'role_assignments',
+    'events',
+    'venues',
+    'series',
+    'event_category_assignments',
+    'event_scene_tag_assignments',
+  ],
+  nested_tables: ['role_assignments', 'event_category_assignments', 'event_scene_tag_assignments'],
   tables: [
+    ...EVENTS_CRUD_MOCK_TABLES,
     {
       table_name: 'people',
       table_friendly_name: 'People',
@@ -67,6 +87,7 @@ export const ADMIN_MOCK_SCHEMA: DatabaseSchema = {
   display_templates: {
     people: '{first_name} {last_name}',
     roles: '{name}',
+    ...EVENTS_CRUD_MOCK_DISPLAY_TEMPLATES,
   },
   fk_picker_preload_threshold: 50,
 };
@@ -102,12 +123,23 @@ export const HONUWARE_MOCK_OPTIONS: ProvideHonuwareAccessMockOptions = {
           email: 'admin@communityfinder.local',
           created_at: '0',
           roles: ['admin'],
-          permissions: ['admin_portal'],
+          // manage_events: the live seed grants it to the admin role (EV1 §2.6).
+          permissions: ['admin_portal', 'manage_events'],
           must_change_password: false,
         },
         password: 'changeme',
       },
     ],
   },
-  crud: { schema: ADMIN_MOCK_SCHEMA, seedRows: ADMIN_MOCK_SEED_ROWS },
+  crud: {
+    schema: ADMIN_MOCK_SCHEMA,
+    // A getter, so the events rows are built only in mock mode, when the
+    // store is created, relative to that moment.
+    get seedRows(): Record<string, MockRow[]> {
+      return {
+        ...ADMIN_MOCK_SEED_ROWS,
+        ...buildEventsCrudSeedRows(buildEventsMockData(nowUs())),
+      };
+    },
+  },
 };

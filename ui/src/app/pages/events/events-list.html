@@ -1,0 +1,95 @@
+<section class="events-list">
+  <header class="events-list__header">
+    <h1 class="events-list__title">Events</h1>
+    <nav class="events-list__views">
+      <a mat-button routerLink="/events/calendar">
+        <mat-icon>calendar_month</mat-icon>
+        Calendar
+      </a>
+      <a mat-button routerLink="/events/series">
+        <mat-icon>repeat</mat-icon>
+        Recurring
+      </a>
+    </nav>
+  </header>
+
+  <div class="events-list__presets" role="group" aria-label="When">
+    @for (preset of presets; track preset.when) {
+      <button
+        type="button"
+        [matButton]="filters().when === preset.when ? 'filled' : 'outlined'"
+        [attr.aria-pressed]="filters().when === preset.when"
+        (click)="togglePreset(preset.when)"
+      >
+        {{ preset.label }}
+      </button>
+    }
+  </div>
+
+  <div class="events-list__filters">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Category</mat-label>
+      <mat-select
+        [value]="filters().category"
+        (selectionChange)="setFilter('category', $event.value)"
+      >
+        <mat-option value="">Any category</mat-option>
+        @for (category of vocabularies().categories; track category.slug) {
+          <mat-option [value]="category.slug">{{ category.display_name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Scene</mat-label>
+      <mat-select [value]="filters().scene" (selectionChange)="setFilter('scene', $event.value)">
+        <mat-option value="">Any scene</mat-option>
+        @for (tag of vocabularies().sceneTags; track tag.slug) {
+          <mat-option [value]="tag.slug">{{ tag.display_name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Neighborhood</mat-label>
+      <mat-select
+        [value]="filters().neighborhood"
+        (selectionChange)="setFilter('neighborhood', $event.value)"
+      >
+        <mat-option value="">Anywhere</mat-option>
+        @for (neighborhood of vocabularies().neighborhoods; track neighborhood.slug) {
+          <mat-option [value]="neighborhood.slug">{{ neighborhood.display_name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    @if (filtered()) {
+      <button mat-button type="button" (click)="clearFilters()">Clear filters</button>
+    }
+  </div>
+
+  <app-subscribe-link
+    class="events-list__subscribe"
+    [filters]="feedFilters()"
+    [label]="feedLabel()"
+  />
+
+  @if (loading()) {
+    <mat-progress-spinner mode="indeterminate" diameter="36" />
+  } @else if (failed()) {
+    <p class="events-list__empty">Events couldn't be loaded. Please try again in a moment.</p>
+  } @else if (rawItemCount() === 0) {
+    <p class="events-list__empty">Nothing's on the calendar yet. Check back soon.</p>
+  } @else if (groups().length === 0) {
+    <p class="events-list__empty">
+      No events match these filters.
+      <button mat-button type="button" (click)="clearFilters()">Clear filters</button>
+    </p>
+  } @else {
+    @for (group of groups(); track group.key) {
+      <section class="events-list__day">
+        <h2 class="events-list__day-title">{{ group.dateLabel }}</h2>
+        @for (event of group.events; track event.id) {
+          <app-event-row [event]="event" [vocabularies]="vocabularies()" />
+        }
+      </section>
+    }
+  }
+</section>

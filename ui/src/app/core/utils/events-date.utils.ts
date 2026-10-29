@@ -51,6 +51,23 @@ const DATE_LINE_FORMAT = new Intl.DateTimeFormat('en-US', {
   day: 'numeric',
 });
 
+const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  timeZone: EVENTS_TIME_ZONE,
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
+});
+
+const MONTH_YEAR_FORMAT = new Intl.DateTimeFormat('en-US', {
+  timeZone: EVENTS_TIME_ZONE,
+  month: 'long',
+  year: 'numeric',
+});
+
+// An end time on the next morning up to this hour reads as the same night
+// ("10:00 PM – 2:00 AM"); anything later names its day.
+const SAME_NIGHT_ENDS_BY_HOUR = 6;
+
 export function usToDate(us: number): Date {
   return new Date(Math.floor(us / 1000));
 }
@@ -125,11 +142,85 @@ export function formatEventDateLine(us: number): string {
   return plainSpaces(DATE_LINE_FORMAT.format(usToDate(us)));
 }
 
+// "Fri, Aug 14" — a row's date where there's no day header above it.
+export function formatEventShortDate(us: number): string {
+  return plainSpaces(SHORT_DATE_FORMAT.format(usToDate(us)));
+}
+
+// "August 2026" — the calendar's heading and the "Verified" footer.
+export function formatMonthYear(us: number): string {
+  return plainSpaces(MONTH_YEAR_FORMAT.format(usToDate(us)));
+}
+
+// "10:00 PM", "10:00 PM – 2:00 AM", or "10:00 AM – Sun, Aug 16, 6:00 PM": the
+// end names its day only when it isn't the same day or night as the start.
+export function formatEventTimeRange(startsAtUs: number, endsAtUs: number | null): string {
+  const start = formatEventTime(startsAtUs);
+  if (endsAtUs === null || endsAtUs <= startsAtUs) {
+    return start;
+  }
+  const end = formatEventTime(endsAtUs);
+  const startDay = pacificDateTime(startsAtUs);
+  const endDay = pacificDayKey(endsAtUs);
+  const nextMorning = pacificWallClockToUs(
+    startDay.year,
+    startDay.month,
+    startDay.day + 1,
+    SAME_NIGHT_ENDS_BY_HOUR,
+  );
+  if (endDay === pacificDayKey(startsAtUs) || endsAtUs <= nextMorning) {
+    return `${start} – ${end}`;
+  }
+  return `${start} – ${formatEventShortDate(endsAtUs)}, ${end}`;
+}
+
+function twoDigits(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
 // "2026-08-14": the Pacific day an instant falls on. A 10 PM Friday event is
-// Friday here, though it's already Saturday in UTC.
+// Friday here, though it's already Saturday in UTC. Also the value of an
+// <input type="date">.
 export function pacificDayKey(us: number): string {
   const { year, month, day } = pacificDateTime(us);
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  return `${year}-${twoDigits(month)}-${twoDigits(day)}`;
+}
+
+// "22:00": the Pacific time of day, as an <input type="time"> holds it.
+export function pacificTimeOfDay(us: number): string {
+  const { hour, minute } = pacificDateTime(us);
+  return `${twoDigits(hour)}:${twoDigits(minute)}`;
+}
+
+// The two form inputs ("2026-08-14", "22:00") → their `_us` instant, or null
+// when either is blank or malformed.
+export function pacificInputsToUs(dateText: string, timeText: string): number | null {
+  const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateText.trim());
+  const time = /^(\d{1,2}):(\d{2})$/.exec(timeText.trim());
+  if (!date || !time) {
+    return null;
+  }
+  const [year, month, day, hour, minute] = [date[1], date[2], date[3], time[1], time[2]].map(
+    Number,
+  );
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) {
+    return null;
+  }
+  return pacificWallClockToUs(year, month, day, hour, minute);
+}
+
+// "2026-08-14T22:00:00-07:00": ISO 8601 with the Pacific offset, for
+// schema.org's startDate / endDate.
+export function formatPacificIso(us: number): string {
+  const wall = pacificDateTime(us);
+  const offsetMinutes = Math.round(pacificOffsetMs(Math.floor(us / 1000)) / 60_000);
+  const sign = offsetMinutes < 0 ? '-' : '+';
+  const absolute = Math.abs(offsetMinutes);
+  return (
+    `${wall.year}-${twoDigits(wall.month)}-${twoDigits(wall.day)}` +
+    `T${twoDigits(wall.hour)}:${twoDigits(wall.minute)}:${twoDigits(wall.second)}` +
+    `${sign}${twoDigits(Math.floor(absolute / 60))}:${twoDigits(absolute % 60)}`
+  );
 }
 
 // 0 = Sunday … 6 = Saturday, for the Pacific day an instant falls on.

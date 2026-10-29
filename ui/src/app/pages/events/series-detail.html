@@ -1,0 +1,73 @@
+<article class="series-detail">
+  <a mat-button routerLink="/events/series" class="series-detail__back">
+    <mat-icon>arrow_back</mat-icon>
+    Recurring events
+  </a>
+
+  @if (loading()) {
+    <mat-progress-spinner mode="indeterminate" diameter="36" />
+  } @else if (notFound()) {
+    <h1 class="series-detail__title">Series not found</h1>
+    <p>This series isn't listed.</p>
+    <a mat-stroked-button routerLink="/events/series">See recurring events</a>
+  } @else if (failed()) {
+    <p>This series couldn't be loaded. Please try again in a moment.</p>
+  } @else if (detail(); as detail) {
+    <h1 class="series-detail__title">{{ detail.series.title }}</h1>
+    @if (whenAndWhere()) {
+      <p class="series-detail__when">{{ whenAndWhere() }}</p>
+    }
+    @if (ended()) {
+      <p class="series-detail__ended">
+        This series has {{ detail.series.status === 'moved' ? 'moved' : 'ended' }}. Its page stays
+        up for the record.
+      </p>
+    }
+    @if (detail.series.description) {
+      <p class="series-detail__description">{{ detail.series.description }}</p>
+    }
+    @if (detail.series.url) {
+      <p>
+        <a [href]="detail.series.url" target="_blank" rel="noopener nofollow">
+          Series website
+          <mat-icon class="series-detail__external" aria-hidden="true">open_in_new</mat-icon>
+        </a>
+      </p>
+    }
+    @if (chips().length) {
+      <div class="series-detail__chips">
+        @for (chip of chips(); track $index) {
+          <a
+            class="event-chip event-chip--tag"
+            routerLink="/events"
+            [queryParams]="chip.queryParams"
+          >
+            {{ chip.label }}
+          </a>
+        }
+      </div>
+    }
+
+    <h2 class="series-detail__subtitle">Upcoming dates</h2>
+    @if (detail.upcoming.length) {
+      @for (event of detail.upcoming; track event.id) {
+        <app-event-row [event]="event" [vocabularies]="vocabularies()" [showDate]="true" />
+      }
+    } @else {
+      <p class="series-detail__none">No upcoming dates are listed.</p>
+    }
+    @if (!ended()) {
+      <app-subscribe-link
+        class="series-detail__subscribe"
+        [filters]="feedFilters()"
+        [label]="detail.series.title"
+      />
+    }
+
+    <app-freshness-footer
+      [status]="detail.series.status"
+      [lastVerifiedAtUs]="detail.series.last_verified_at_us"
+      closedLabel="Ended"
+    />
+  }
+</article>

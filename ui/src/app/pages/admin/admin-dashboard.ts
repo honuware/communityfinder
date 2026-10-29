@@ -35,6 +35,13 @@ export class AdminDashboard {
       link: '/admin/users',
     },
     {
+      title: 'Events',
+      description: 'Review, add, and edit events',
+      icon: 'event',
+      // The bespoke event editor + pending queue (EV2 §3.7).
+      link: '/admin/events',
+    },
+    {
       title: 'Manage Data',
       description: 'Browse and edit every admin table',
       icon: 'storage',

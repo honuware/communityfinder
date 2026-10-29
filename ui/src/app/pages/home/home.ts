@@ -2,12 +2,14 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 import { COMMUNITY_ACCESS } from '../../core/community-access/community-access';
 import { SiteConfigService } from '../../core/services/site-config.service';
+import { UpcomingEventsStrip } from '../../shared/components/upcoming-events-strip/upcoming-events-strip';
 
 // The home page — the "simple dummy call that gets shown": the live /api/health
-// payload + the community display name from SiteConfigService.
+// payload + the community display name from SiteConfigService, then the
+// upcoming-events strip.
 @Component({
   selector: 'app-home',
-  imports: [MatCardModule],
+  imports: [MatCardModule, UpcomingEventsStrip],
   templateUrl: './home.html',
   styleUrl: './home.scss',
 })
