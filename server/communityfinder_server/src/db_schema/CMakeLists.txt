@@ -13,12 +13,26 @@ target_sources(communityfinder_core PRIVATE
     events.h
     events.cpp
     freshness.h
+    guide_links.h
+    guide_links.cpp
+    guide_page_scene_tag_assignments.h
+    guide_page_scene_tag_assignments.cpp
+    guide_pages.h
+    guide_pages.cpp
     make_app_tables.h
     make_app_tables.cpp
     make_database_info.h
     make_database_info.cpp
     neighborhoods.h
     neighborhoods.cpp
+    organization_scene_tag_assignments.h
+    organization_scene_tag_assignments.cpp
+    organizations.h
+    organizations.cpp
+    place_scene_tag_assignments.h
+    place_scene_tag_assignments.cpp
+    places.h
+    places.cpp
     scene_tags.h
     scene_tags.cpp
     series.h
@@ -27,6 +41,12 @@ target_sources(communityfinder_core PRIVATE
     series_category_assignments.cpp
     series_scene_tag_assignments.h
     series_scene_tag_assignments.cpp
+    service_listings.h
+    service_listings.cpp
+    venue_profile_scene_tag_assignments.h
+    venue_profile_scene_tag_assignments.cpp
+    venue_profiles.h
+    venue_profiles.cpp
     venues.h
     venues.cpp
 )

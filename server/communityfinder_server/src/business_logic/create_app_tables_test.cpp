@@ -20,15 +20,25 @@
 #include "db_schema/event_scene_tag_assignments.h"
 #include "db_schema/event_sources.h"
 #include "db_schema/events.h"
+#include "db_schema/guide_links.h"
+#include "db_schema/guide_page_scene_tag_assignments.h"
+#include "db_schema/guide_pages.h"
 #include "db_schema/make_database_info.h"
 #include "db_schema/make_framework_tables.h"
 #include "db_schema/neighborhoods.h"
+#include "db_schema/organization_scene_tag_assignments.h"
+#include "db_schema/organizations.h"
 #include "db_schema/photos.h"
+#include "db_schema/place_scene_tag_assignments.h"
+#include "db_schema/places.h"
 #include "db_schema/roles.h"
 #include "db_schema/scene_tags.h"
 #include "db_schema/series.h"
 #include "db_schema/series_category_assignments.h"
 #include "db_schema/series_scene_tag_assignments.h"
+#include "db_schema/service_listings.h"
+#include "db_schema/venue_profile_scene_tag_assignments.h"
+#include "db_schema/venue_profiles.h"
 #include "db_schema/venues.h"
 #include "sql_util/database_access/transaction.h"
 #include "test/src/util/database_test_helper.h"
@@ -75,6 +85,32 @@ const std::string_view kAssignmentTables[] = {
     DbSchema::kSeriesCategoryAssignmentsTable,
     DbSchema::kSeriesSceneTagAssignmentsTable,
 };
+
+// GD2's ten tables.
+const std::set<std::string> kGuideTables = {
+    std::string(DbSchema::kVenueProfilesTable),
+    std::string(DbSchema::kOrganizationsTable),
+    std::string(DbSchema::kPlacesTable),
+    std::string(DbSchema::kServiceListingsTable),
+    std::string(DbSchema::kGuidePagesTable),
+    std::string(DbSchema::kVenueProfileSceneTagAssignmentsTable),
+    std::string(DbSchema::kOrganizationSceneTagAssignmentsTable),
+    std::string(DbSchema::kPlaceSceneTagAssignmentsTable),
+    std::string(DbSchema::kGuidePageSceneTagAssignmentsTable),
+    std::string(DbSchema::kGuideLinksTable),
+};
+
+// One admin_column_data_info value for a column.
+std::string ColumnDataInfo(
+    Transaction& transaction, std::string_view field, std::string_view table,
+    std::string_view column) {
+    return transaction.RunSqlStatementReturningOneValue(
+        "SELECT COALESCE(" + std::string(field) + "::TEXT, '') FROM " +
+            std::string(DbSchema::kAdminColumnDataInfoTable) + " WHERE " +
+            std::string(DbSchema::kAdminColumnDataInfoTableName) + " = $1 AND " +
+            std::string(DbSchema::kAdminColumnDataInfoColumnName) + " = $2",
+        std::string(table), std::string(column));
+}
 
 std::set<std::string> NamesIn(
     Transaction& transaction, std::string_view table, std::string_view column) {
@@ -384,6 +420,220 @@ TEST(CreateAppTablesTest, KeepsTheEventPipelineOffThePublicList) {
         }
         for (std::string_view table : kAssignmentTables) {
             EXPECT_EQ(allowed.count(std::string(table)), 0u) << table;
+        }
+    });
+}
+
+// Every column of every app table gets a list-view header, and every column but
+// the id gets an edit form entry. A column left out still shows, but unlabeled
+// and with no hint, and nothing else in the gate would notice.
+TEST(CreateAppTablesTest, DescribesEveryColumnOfEveryAppTable) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("EveryColumn", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        std::set<std::string> described;
+        for (const auto& row : Query(transaction,
+                 "SELECT table_name || '.' || column_name FROM admin_column_data_info")) {
+            described.insert(row.at(0));
+        }
+        std::set<std::string> named;
+        for (const auto& row : Query(transaction,
+                 "SELECT table_name || '.' || column_name FROM "
+                 "admin_column_friendly_names")) {
+            named.insert(row.at(0));
+        }
+
+        for (std::string_view table : AppTableCreationOrder()) {
+            for (const auto& column :
+                 testDb.GetDatabaseInfo().GetTableInfo(table).GetColumns()) {
+                const std::string name =
+                    std::string(table) + "." + column.GetColumnName();
+                EXPECT_EQ(named.count(name), 1u) << name;
+                if (column.GetColumnName() != "id") {
+                    EXPECT_EQ(described.count(name), 1u) << name;
+                }
+            }
+        }
+    });
+}
+
+// A new row's checkbox shows its data-info default_value, so every checkbox
+// whose column defaults TRUE must say "true", and no other may. Without it the
+// box shows unchecked while an untouched box still saves TRUE (GD2 OQ9 (e)).
+TEST(CreateAppTablesTest, CheckboxesStartAsTheirColumnDefaults) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("CheckboxDefaults", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        std::size_t checkedByDefault = 0;
+        for (std::string_view table : AppTableCreationOrder()) {
+            for (const auto& column :
+                 testDb.GetDatabaseInfo().GetTableInfo(table).GetColumns()) {
+                if (column.GetDatabaseType() != DB_TYPE_BOOL) continue;
+                std::string defaultValue;
+                const bool defaultsTrue = column.IsDefault(defaultValue) &&
+                    defaultValue == DbSchema::kDatabaseInfoDefaultTrue;
+                checkedByDefault += defaultsTrue ? 1 : 0;
+                EXPECT_EQ(ColumnDataInfo(transaction, "default_value", table,
+                                         column.GetColumnName()),
+                          defaultsTrue ? "true" : "")
+                    << table << "." << column.GetColumnName();
+            }
+        }
+        // EV1's four Enabled boxes, a guide page's Draft, a listing's Health Care.
+        EXPECT_EQ(checkedByDefault, 6u);
+    });
+}
+
+// --- GD2: the guide ----------------------------------------------------------
+
+// GD2 §1.9 and OQ3: manage_guide exists, the Administrator role holds it, and
+// it opens exactly the ten guide tables plus venues in the generic CRUD editor.
+TEST(CreateAppTablesTest, GrantsManageGuideToTheAdministratorRole) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("ManageGuide", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        EXPECT_EQ(transaction.RunSqlStatementReturningOneValue(
+                      "SELECT is_pricing_eligible FROM permissions WHERE name = $1",
+                      std::string(DbSchema::kPermissionManageGuide)),
+                  "f");
+        EXPECT_EQ(transaction.RunSqlStatementReturningOneValue(
+                      "SELECT count(*) FROM role_permissions rp "
+                      "JOIN roles r ON r.id = rp.role_id "
+                      "JOIN permissions p ON p.id = rp.permission_id "
+                      "WHERE r.name = $1 AND p.name = $2",
+                      std::string(DbSchema::kRoleNameAdmin),
+                      std::string(DbSchema::kPermissionManageGuide)),
+                  "1");
+
+        std::set<std::string> gated;
+        for (const auto& row : Query(transaction,
+                 "SELECT atp.table_name FROM admin_table_permissions atp "
+                 "JOIN permissions p ON p.id = atp.permission_id "
+                 "WHERE p.name = 'manage_guide'")) {
+            gated.insert(row.at(0));
+        }
+        std::set<std::string> expected = kGuideTables;
+        expected.insert(std::string(DbSchema::kVenuesTable));
+        EXPECT_EQ(gated, expected);
+
+        // Both curator permissions reach venues.
+        EXPECT_EQ(transaction.RunSqlStatementReturningOneValue(
+                      "SELECT count(*) FROM admin_table_permissions "
+                      "WHERE table_name = $1",
+                      std::string(DbSchema::kVenuesTable)),
+                  "2");
+    });
+}
+
+// GD2 OQ4 (draft safety): the generic table reads serve allowed_tables to
+// anyone, so no guide table may be on it. The public reads the guide through its
+// own endpoints, which serve only published pages.
+TEST(CreateAppTablesTest, KeepsTheGuideOffThePublicList) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GuideNotPublic", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        const std::set<std::string> allowed = NamesIn(
+            transaction, DbSchema::kAllowedTablesTable, DbSchema::kAllowedTablesName);
+        for (const std::string& table : kGuideTables) {
+            EXPECT_EQ(allowed.count(table), 0u) << table;
+        }
+    });
+}
+
+// Organization, place, and guide page images ride the framework photo pipeline.
+// A venue profile shows its venue's photos, and service listings have none.
+TEST(CreateAppTablesTest, EnablesPhotosForOrganizationsPlacesAndGuidePages) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GuidePhotos", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        const std::set<std::string> photoTables = NamesIn(transaction,
+            DbSchema::kPhotoSupportTables, DbSchema::kPhotoSupportTablesTableName);
+        for (std::string_view table :
+             {DbSchema::kOrganizationsTable, DbSchema::kPlacesTable,
+              DbSchema::kGuidePagesTable}) {
+            EXPECT_EQ(photoTables.count(std::string(table)), 1u) << table;
+        }
+        EXPECT_EQ(photoTables.count(std::string(DbSchema::kVenueProfilesTable)), 0u);
+        EXPECT_EQ(photoTables.count(std::string(DbSchema::kServiceListingsTable)), 0u);
+    });
+}
+
+// The scene-tag assignments and the links open under their parents' rows, and a
+// venue profile opens under its venue. The entities themselves stay top-level
+// only.
+TEST(CreateAppTablesTest, NestsTheGuideAssignmentsLinksAndProfiles) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GuideNested", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        const std::set<std::string> nested = NamesIn(transaction,
+            DbSchema::kAdminNestedTablesTable, DbSchema::kAdminNestedTablesName);
+        for (std::string_view table :
+             {DbSchema::kVenueProfilesTable,
+              DbSchema::kVenueProfileSceneTagAssignmentsTable,
+              DbSchema::kOrganizationSceneTagAssignmentsTable,
+              DbSchema::kPlaceSceneTagAssignmentsTable,
+              DbSchema::kGuidePageSceneTagAssignmentsTable,
+              DbSchema::kGuideLinksTable}) {
+            EXPECT_EQ(nested.count(std::string(table)), 1u) << table;
+        }
+        for (std::string_view table :
+             {DbSchema::kOrganizationsTable, DbSchema::kPlacesTable,
+              DbSchema::kServiceListingsTable, DbSchema::kGuidePagesTable}) {
+            EXPECT_EQ(nested.count(std::string(table)), 0u) << table;
+        }
+    });
+}
+
+// How the guide's columns edit in the admin editor.
+TEST(CreateAppTablesTest, DescribesTheGuideColumnsForTheAdminEditor) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GuideColumns", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        auto displayTemplate = [&](std::string_view table) {
+            return transaction.RunSqlStatementReturningOneValue(
+                "SELECT " + std::string(DbSchema::kAdminTableDisplayTemplateTemplate) +
+                    " FROM " + std::string(DbSchema::kAdminTableDisplayTemplateTable) +
+                    " WHERE " + std::string(DbSchema::kAdminTableDisplayTemplateName) +
+                    " = $1",
+                std::string(table));
+        };
+        // A profile has no name of its own, so its picker shows the slug.
+        EXPECT_EQ(displayTemplate(DbSchema::kVenueProfilesTable), "{slug}");
+        EXPECT_EQ(displayTemplate(DbSchema::kOrganizationsTable), "{name}");
+        EXPECT_EQ(displayTemplate(DbSchema::kPlacesTable), "{name}");
+        EXPECT_EQ(displayTemplate(DbSchema::kServiceListingsTable), "{name}");
+        EXPECT_EQ(displayTemplate(DbSchema::kGuidePagesTable), "{title}");
+        EXPECT_EQ(displayTemplate(DbSchema::kGuideLinksTable), "{label}");
+
+        // The page body edits in a tall Markdown box.
+        EXPECT_EQ(ColumnDataInfo(transaction, "html_input_type",
+                                 DbSchema::kGuidePagesTable,
+                                 DbSchema::kGuidePagesBodyMarkdown),
+                  "long-text");
+        EXPECT_EQ(ColumnDataInfo(transaction, "rows", DbSchema::kGuidePagesTable,
+                                 DbSchema::kGuidePagesBodyMarkdown),
+                  "20");
+
+        // The publish time and every verification stamp edit as dates.
+        EXPECT_EQ(ColumnDataInfo(transaction, "html_input_type",
+                                 DbSchema::kGuidePagesTable,
+                                 DbSchema::kGuidePagesPublishAtUs),
+                  "date");
+        for (std::string_view table :
+             {DbSchema::kVenueProfilesTable, DbSchema::kOrganizationsTable,
+              DbSchema::kPlacesTable, DbSchema::kServiceListingsTable,
+              DbSchema::kGuidePagesTable}) {
+            EXPECT_EQ(ColumnDataInfo(transaction, "html_input_type", table,
+                                     "last_verified_at_us"),
+                      "date")
+                << table;
         }
     });
 }

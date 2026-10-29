@@ -5,11 +5,21 @@
 #include "event_scene_tag_assignments.h"
 #include "event_sources.h"
 #include "events.h"
+#include "guide_links.h"
+#include "guide_page_scene_tag_assignments.h"
+#include "guide_pages.h"
 #include "neighborhoods.h"
+#include "organization_scene_tag_assignments.h"
+#include "organizations.h"
+#include "place_scene_tag_assignments.h"
+#include "places.h"
 #include "scene_tags.h"
 #include "series.h"
 #include "series_category_assignments.h"
 #include "series_scene_tag_assignments.h"
+#include "service_listings.h"
+#include "venue_profile_scene_tag_assignments.h"
+#include "venue_profiles.h"
 #include "venues.h"
 
 namespace DbSchema {
@@ -33,6 +43,22 @@ namespace DbSchema {
 		MakeEventSceneTagAssignmentsTable(databaseInfo);
 		MakeSeriesCategoryAssignmentsTable(databaseInfo);
 		MakeSeriesSceneTagAssignmentsTable(databaseInfo);
+
+		// --- Stream B (the guide) -------------------------------------------
+		// GD2 — the directory entities, the CMS-lite pages, their scene-tag
+		// assignments, then the links (each hangs off a venue profile, an
+		// organization, a place, or a scene tag). Into Stream A's tables these
+		// are FK references only: venues and the vocabularies.
+		MakeVenueProfilesTable(databaseInfo);
+		MakeOrganizationsTable(databaseInfo);
+		MakePlacesTable(databaseInfo);
+		MakeServiceListingsTable(databaseInfo);
+		MakeGuidePagesTable(databaseInfo);
+		MakeVenueProfileSceneTagAssignmentsTable(databaseInfo);
+		MakeOrganizationSceneTagAssignmentsTable(databaseInfo);
+		MakePlaceSceneTagAssignmentsTable(databaseInfo);
+		MakeGuidePageSceneTagAssignmentsTable(databaseInfo);
+		MakeGuideLinksTable(databaseInfo);
 	}
 
 }  // namespace DbSchema
