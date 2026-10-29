@@ -26,4 +26,10 @@ namespace DbSchema {
 	inline constexpr std::string_view kVolatilityTierSqlValues =
 		"'weekly', 'monthly', 'quarterly', 'semiannual', 'annual'";
 
+	inline constexpr std::string_view kVolatilityTierWeekly = "weekly";
+	inline constexpr std::string_view kVolatilityTierMonthly = "monthly";
+	inline constexpr std::string_view kVolatilityTierQuarterly = "quarterly";
+	inline constexpr std::string_view kVolatilityTierSemiannual = "semiannual";
+	inline constexpr std::string_view kVolatilityTierAnnual = "annual";
+
 }  // namespace DbSchema

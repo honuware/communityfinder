@@ -14,8 +14,22 @@ target_sources(communityfinder_core PRIVATE
     event_sources.cpp
     events.h
     events.cpp
+    guide_links.h
+    guide_links.cpp
+    guide_page_scene_tag_assignments.h
+    guide_page_scene_tag_assignments.cpp
+    guide_pages.h
+    guide_pages.cpp
     neighborhoods.h
     neighborhoods.cpp
+    organization_scene_tag_assignments.h
+    organization_scene_tag_assignments.cpp
+    organizations.h
+    organizations.cpp
+    place_scene_tag_assignments.h
+    place_scene_tag_assignments.cpp
+    places.h
+    places.cpp
     scene_tags.h
     scene_tags.cpp
     series.h
@@ -24,6 +38,12 @@ target_sources(communityfinder_core PRIVATE
     series_category_assignments.cpp
     series_scene_tag_assignments.h
     series_scene_tag_assignments.cpp
+    service_listings.h
+    service_listings.cpp
+    venue_profile_scene_tag_assignments.h
+    venue_profile_scene_tag_assignments.cpp
+    venue_profiles.h
+    venue_profiles.cpp
     venues.h
     venues.cpp
 )
@@ -35,10 +55,20 @@ target_sources(communityfinder_test_cases PUBLIC
     event_scene_tag_assignments_test.cpp
     event_sources_test.cpp
     events_test.cpp
+    guide_links_test.cpp
+    guide_page_scene_tag_assignments_test.cpp
+    guide_pages_test.cpp
     neighborhoods_test.cpp
+    organization_scene_tag_assignments_test.cpp
+    organizations_test.cpp
+    place_scene_tag_assignments_test.cpp
+    places_test.cpp
     scene_tags_test.cpp
     series_category_assignments_test.cpp
     series_scene_tag_assignments_test.cpp
     series_test.cpp
+    service_listings_test.cpp
+    venue_profile_scene_tag_assignments_test.cpp
+    venue_profiles_test.cpp
     venues_test.cpp
 )
