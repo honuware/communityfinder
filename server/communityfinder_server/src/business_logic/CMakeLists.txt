@@ -20,4 +20,5 @@ target_sources(communityfinder_test_cases PUBLIC
 )
 
 add_subdirectory(events)
+add_subdirectory(guide)
 add_subdirectory(migration)
