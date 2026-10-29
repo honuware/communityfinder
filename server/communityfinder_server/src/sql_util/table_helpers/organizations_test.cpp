@@ -66,6 +66,8 @@ TEST(OrganizationsTest, AddAndGetByIdAndSlug) {
                   DbSchema::kVolatilityTierAnnual);
         EXPECT_TRUE(byId.at(std::string(DbSchema::kOrganizationsLastVerifiedAtUs)).empty());
         EXPECT_TRUE(byId.at(std::string(DbSchema::kOrganizationsNeighborhoodId)).empty());
+        // Not 18+ unless a person says so.
+        EXPECT_EQ(byId.at(std::string(DbSchema::kOrganizationsAdult)), "f");
 
         KeyValueTable bySlug = organizations.GetOrganizationBySlug(
             transaction, "seattle-frontrunners");

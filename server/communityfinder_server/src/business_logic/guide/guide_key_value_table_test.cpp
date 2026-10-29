@@ -81,6 +81,7 @@ TEST(GuideKeyValueTableTest, OrganizationConvertsEveryField) {
     organization.url = "https://example.org/softball";
     organization.meetingCadenceText = "Sundays, April to September";
     organization.neighborhoodSlug = "";
+    organization.adult = true;
     organization.closureNote = "Folded in 2024.";
     organization.sceneTagSlugs = { "sports" };
     organization.freshness.status = "closed";
@@ -95,11 +96,12 @@ TEST(GuideKeyValueTableTest, OrganizationConvertsEveryField) {
     EXPECT_EQ(table["url"], "https://example.org/softball");
     EXPECT_EQ(table["meeting_cadence_text"], "Sundays, April to September");
     EXPECT_EQ(table["neighborhood_slug"], "");
+    EXPECT_EQ(table["adult"], "true");
     EXPECT_EQ(table["closure_note"], "Folded in 2024.");
     EXPECT_EQ(table["scene_tag_slugs"], "sports");
     EXPECT_EQ(table["status"], "closed");
     EXPECT_EQ(table["last_verified_at_us"], StringFromInt(kVenueVerifiedUs));
-    EXPECT_EQ(table.size(), 12u);
+    EXPECT_EQ(table.size(), 13u);
 }
 
 TEST(GuideKeyValueTableTest, PlaceConvertsEveryField) {

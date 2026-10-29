@@ -22,6 +22,16 @@
 #include "get_events_ics_feed.h"
 #include "get_upcoming_events.h"
 
+// Stream B — the guide (GD2 §4).
+#include "get_guide_graveyard.h"
+#include "get_guide_neighborhoods.h"
+#include "get_guide_organizations.h"
+#include "get_guide_pages.h"
+#include "get_guide_places.h"
+#include "get_guide_scenes.h"
+#include "get_guide_services.h"
+#include "get_guide_venues.h"
+
 namespace Endpoints {
 
 // Anchor every endpoint's translation unit into the final link.
@@ -61,6 +71,16 @@ void RegisterAllEndpoints() {
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEventSeriesList);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEventsICalFeed);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetUpcomingEvents);
+
+    // Stream B — the guide. One anchor per TU; a TU's other route rides along.
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetGuideGraveyard);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetGuideNeighborhoods);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetGuideOrganizations);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetGuidePage);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetGuidePlaces);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetGuideScenes);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetGuideServices);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetGuideVenues);
 }
 
 }  // namespace Endpoints

@@ -575,6 +575,7 @@ std::vector<GuideOrganization> GuideHelper::AssembleOrganizations(
         item.meetingCadenceText = Column(row, DbSchema::kOrganizationsMeetingCadenceText);
         item.neighborhoodSlug = NeighborhoodSlug(
             row, DbSchema::kOrganizationsNeighborhoodId, vocabulary.neighborhoodSlugs);
+        item.adult = BoolColumn(row, DbSchema::kOrganizationsAdult);
         item.closureNote = Column(row, DbSchema::kOrganizationsClosureNote);
         item.sceneTagSlugs = SlugsFor(sceneTags, item.id);
         item.freshness.status = Column(row, DbSchema::kOrganizationsStatus);

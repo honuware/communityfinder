@@ -370,6 +370,7 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsUrl, "Website", "The organization's own site", "text", "false");
         AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsMeetingCadenceText, "Meets", "When and where it meets, in words, e.g. Mondays 6:30 PM, Cal Anderson. Display only.", "text", "false");
         AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsNeighborhoodId, "Neighborhood", kNeighborhoodHint, "number", "false");
+        AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsAdult, "18+", "Puts this organization's guide page behind the 18+ gate", "bool", "true");
         AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsStatus, "Status", kStatusHint, "text", "true");
         AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsClosureNote, "Closure Note", "For a closed organization, the story the graveyard tells, e.g. Disbanded 2022; most members joined another league", "long-text", "false");
         AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsLastVerifiedAtUs, "Verified", kVerifiedHint, "date", "false");
@@ -589,6 +590,7 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsUrl, "Website");
         AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsMeetingCadenceText, "Meets");
         AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsNeighborhoodId, "Neighborhood");
+        AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsAdult, "18+");
         AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsStatus, "Status");
         AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsClosureNote, "Closure Note");
         AddRow(DbSchema::kOrganizationsTable, DbSchema::kOrganizationsLastVerifiedAtUs, "Verified");

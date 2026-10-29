@@ -80,6 +80,7 @@ KeyValueTable GuideOrganizationToKeyValueTable(const GuideOrganization& organiza
     table["url"] = organization.url;
     table["meeting_cadence_text"] = organization.meetingCadenceText;
     table["neighborhood_slug"] = organization.neighborhoodSlug;
+    table["adult"] = BoolString(organization.adult);
     table["closure_note"] = organization.closureNote;
     table["scene_tag_slugs"] = JoinSlugs(organization.sceneTagSlugs);
     AddFreshness(table, organization.freshness);

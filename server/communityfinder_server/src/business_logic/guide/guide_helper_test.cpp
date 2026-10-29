@@ -564,6 +564,7 @@ TEST(GuideHelperTest, OrganizationAndPlacePagesShowAnyStatusWithTheirLinks) {
             { std::string(DbSchema::kOrganizationsUrl), "https://example.org/club" },
             { std::string(DbSchema::kOrganizationsMeetingCadenceText), "Thursdays, 7 PM" },
             { std::string(DbSchema::kOrganizationsClosureNote), "Closed in 2020." },
+            { std::string(DbSchema::kOrganizationsAdult), "true" },
         });
         int64_t beachId = rows.Place("Beach", "beach", capitolHill, kOpen, { bears });
         TableHelpers::Places(databaseHelper).UpdatePlace(transaction, beachId, {
@@ -585,6 +586,7 @@ TEST(GuideHelperTest, OrganizationAndPlacePagesShowAnyStatusWithTheirLinks) {
         EXPECT_EQ(club->organization.url, "https://example.org/club");
         EXPECT_EQ(club->organization.meetingCadenceText, "Thursdays, 7 PM");
         EXPECT_EQ(club->organization.neighborhoodSlug, "capitol-hill");
+        EXPECT_TRUE(club->organization.adult);
         EXPECT_EQ(club->organization.closureNote, "Closed in 2020.");
         EXPECT_EQ(club->organization.sceneTagSlugs, (Strings{ "bears" }));
         EXPECT_EQ(club->organization.freshness.status, kClosed);

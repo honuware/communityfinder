@@ -8,12 +8,18 @@
 #include "business_logic/auth/server_config.h"
 #include "business_logic/images/image_helper.h"
 #include "db_schema/events.h"
+#include "db_schema/guide_pages.h"
+#include "db_schema/organizations.h"
 #include "db_schema/people.h"
+#include "db_schema/places.h"
 #include "db_schema/venues.h"
 #include "endpoints/endpoint_test_helper.h"
 #include "endpoints/web_app.h"
 #include "sql_util/table_helpers/events.h"
+#include "sql_util/table_helpers/guide_pages.h"
+#include "sql_util/table_helpers/organizations.h"
 #include "sql_util/table_helpers/photo_support_tables.h"
+#include "sql_util/table_helpers/places.h"
 #include "sql_util/table_helpers/venues.h"
 #include "test/src/util/database_test_helper.h"
 #include "util/thread_pool.h"
@@ -27,7 +33,8 @@
 #include <boost/iostreams/stream.hpp>
 
 // EV1 §5.6 — the photo seam main.cpp wires through RegisterAppServices: event and
-// venue images serve to signed-out visitors, and nothing else does.
+// venue images, and the guide's organization, place and page images (GD2 §4.10),
+// serve to signed-out visitors, and nothing else does.
 namespace Endpoints {
 namespace {
 
@@ -104,7 +111,49 @@ TEST(RegisterAppServicesTest, VenueAndEventPhotosServeToSignedOutVisitors) {
     Auth::ServerConfig::Shutdown();
 }
 
-// The set is exactly events and venues: any other table's photos still need a
+// GD2 §4.10 — the guide's organization, place and page images serve the same way.
+TEST(RegisterAppServicesTest, GuidePhotosServeToSignedOutVisitors) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GuidePhotosServeToSignedOutVisitors", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        RegisterAppServices(helper.GetWebApp());
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+
+        int64_t organizationId = TableHelpers::Organizations(databaseHelper).AddOrganization(transaction, {
+            { std::string(DbSchema::kOrganizationsName), "Example League" },
+            { std::string(DbSchema::kOrganizationsSlug), "example-league" },
+            { std::string(DbSchema::kOrganizationsOrgKind),
+              std::string(DbSchema::kOrganizationsOrgKindSportsLeague) },
+        });
+        int64_t placeId = TableHelpers::Places(databaseHelper).AddPlace(transaction, {
+            { std::string(DbSchema::kPlacesName), "Example Beach" },
+            { std::string(DbSchema::kPlacesSlug), "example-beach" },
+            { std::string(DbSchema::kPlacesPlaceKind), std::string(DbSchema::kPlacesPlaceKindParkBeach) },
+        });
+        int64_t pageId = TableHelpers::GuidePages(databaseHelper).AddPage(transaction, {
+            { std::string(DbSchema::kGuidePagesTitle), "Example Page" },
+            { std::string(DbSchema::kGuidePagesSlug), "example-page" },
+            { std::string(DbSchema::kGuidePagesSection), std::string(DbSchema::kGuidePagesSectionHealth) },
+        });
+        AttachPhoto(transaction, testDb, DbSchema::kOrganizationsTable, organizationId);
+        AttachPhoto(transaction, testDb, DbSchema::kPlacesTable, placeId);
+        AttachPhoto(transaction, testDb, DbSchema::kGuidePagesTable, pageId);
+
+        for (const auto& [table, id] : { std::pair<std::string_view, int64_t>{ DbSchema::kOrganizationsTable, organizationId },
+                                         std::pair<std::string_view, int64_t>{ DbSchema::kPlacesTable, placeId },
+                                         std::pair<std::string_view, int64_t>{ DbSchema::kGuidePagesTable, pageId } }) {
+            crow::response resp = GetScaledPhoto(helper, table, id);
+            EXPECT_EQ(resp.code, 200) << table << ": " << resp.body;
+            EXPECT_EQ(resp.get_header_value("Content-Type"), "image/jpeg") << table;
+            EXPECT_FALSE(resp.body.empty()) << table;
+        }
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// The set is exactly those five tables: any other table's photos still need a
 // login, refused before any lookup.
 TEST(RegisterAppServicesTest, OtherPhotosStillNeedALogin) {
     Auth::ServerConfig::Shutdown();

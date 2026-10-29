@@ -91,6 +91,7 @@ struct GuideOrganization {
     std::string url;
     std::string meetingCadenceText;
     std::string neighborhoodSlug;  // empty = countywide, or it moves around
+    bool adult = false;
     std::string closureNote;       // empty = none
     std::vector<std::string> sceneTagSlugs;
     Freshness freshness;

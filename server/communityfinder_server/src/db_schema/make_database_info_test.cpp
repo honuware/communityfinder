@@ -456,7 +456,7 @@ TEST(MakeDatabaseInfoTest, GuideEntitiesCarryTheFreshnessColumnsAndAUniqueSlug) 
     EXPECT_EQ(ColumnNames(databaseInfo, kOrganizationsTable),
               (std::vector<std::string>{
                   "id", "name", "slug", "org_kind", "description", "url",
-                  "meeting_cadence_text", "neighborhood_id", "status",
+                  "meeting_cadence_text", "neighborhood_id", "adult", "status",
                   "closure_note", "last_verified_at_us", "volatility_tier",
                   "created_us", "updated_us"}));
     EXPECT_EQ(ColumnNames(databaseInfo, kPlacesTable),
@@ -539,6 +539,7 @@ TEST(MakeDatabaseInfoTest, GuideKindsAreConstrainedToTheGd1Values) {
 TEST(MakeDatabaseInfoTest, GuideFlagsDefaultToTheSafeSide) {
     DatabaseInfo databaseInfo = MakeDatabaseInfo("test_db");
 
+    EXPECT_EQ(DefaultValue(databaseInfo, kOrganizationsTable, kOrganizationsAdult), "FALSE");
     EXPECT_EQ(DefaultValue(databaseInfo, kPlacesTable, kPlacesAdult), "FALSE");
     EXPECT_EQ(DefaultValue(databaseInfo, kGuidePagesTable, kGuidePagesAdult), "FALSE");
     // A listing is treated as health care unless a person says otherwise.

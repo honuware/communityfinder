@@ -23,6 +23,8 @@ namespace DbSchema {
 	inline constexpr std::string_view kOrganizationsMeetingCadenceText = "meeting_cadence_text";
 	// One neighborhood or none: NULL = countywide, or it moves around (GD2 OQ7).
 	inline constexpr std::string_view kOrganizationsNeighborhoodId = "neighborhood_id";
+	// Drives the 18+ gate (GD1 §8.4's sex-positive orgs; GD2 OQ11 (b)).
+	inline constexpr std::string_view kOrganizationsAdult = "adult";
 	inline constexpr std::string_view kOrganizationsStatus = "status";
 	// The graveyard entry's story. NULL until there is one to tell.
 	inline constexpr std::string_view kOrganizationsClosureNote = "closure_note";

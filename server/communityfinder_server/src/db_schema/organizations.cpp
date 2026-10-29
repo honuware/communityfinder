@@ -63,6 +63,11 @@ namespace DbSchema {
 			kOrganizationsNeighborhoodId);
 		databaseInfo.AddColumnNotNullableWithDefault(
 			kOrganizationsTable,
+			kOrganizationsAdult,
+			DB_TYPE_BOOL,
+			kDatabaseInfoDefaultFalse);
+		databaseInfo.AddColumnNotNullableWithDefault(
+			kOrganizationsTable,
 			kOrganizationsStatus,
 			DB_TYPE_STRING,
 			"'open'");
