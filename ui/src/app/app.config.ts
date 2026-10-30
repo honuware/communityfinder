@@ -25,6 +25,7 @@ import { provideHonuwareAccessMock } from '@honuware/ui/testing';
 import { routes } from './app.routes';
 import { environment } from '../environments/environment';
 import { provideCommunityAccess } from './core/community-access/community-access.providers';
+import { provideGuideAccess } from './core/guide-access/guide-access.providers';
 import { provideAdminUsersAccess } from './core/admin-users-access/admin-users-access.providers';
 import { provideEventsAdminAccess } from './core/events-admin-access/events-admin-access.providers';
 import { SiteConfigService } from './core/services/site-config.service';
@@ -56,6 +57,8 @@ export const appConfig: ApplicationConfig = {
       : provideHonuwareAccess()),
     // CommunityFinder's app-specific access (health + site_info).
     provideCommunityAccess(environment.useMock),
+    // The guide's public reads (/api/guide/*), Stream B's seam.
+    provideGuideAccess(environment.useMock),
     // Admin user-management access (create user + reset password) — the two
     // bespoke, admin_portal-gated endpoints the generic CRUD doesn't cover.
     provideAdminUsersAccess(environment.useMock),
