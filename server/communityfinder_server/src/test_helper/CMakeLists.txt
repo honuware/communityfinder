@@ -14,6 +14,8 @@ add_executable(communityfinder_test_helper
     console_colors.h
     commands/events_commands.h
     commands/events_commands.cpp
+    commands/guide_commands.h
+    commands/guide_commands.cpp
     commands/utility_commands.h
     commands/utility_commands.cpp
     repl/repl.h
@@ -27,8 +29,9 @@ add_executable(communityfinder_test_helper
 # test_helper-relative path.
 target_include_directories(communityfinder_test_helper PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 
-# The registry (its command-line parser) and the events commands also build into
-# the app test bag, so their tests run each command against the test database.
+# The registry (its command-line parser) and the events and guide commands also
+# build into the app test bag, so their tests run each command against the test
+# database.
 # Nothing else executes the helper's code. The REPL, dashboard, runner and main
 # stay exe-only: the tests build a TestHelperContext themselves.
 target_sources(communityfinder_test_cases PUBLIC
@@ -38,6 +41,9 @@ target_sources(communityfinder_test_cases PUBLIC
     commands/events_commands.h
     commands/events_commands.cpp
     commands/events_commands_test.cpp
+    commands/guide_commands.h
+    commands/guide_commands.cpp
+    commands/guide_commands_test.cpp
 )
 target_include_directories(communityfinder_test_cases PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 

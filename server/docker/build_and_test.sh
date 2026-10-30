@@ -24,7 +24,7 @@
 #
 # Overridable:
 #   SRC_DIR / BUILD_DIR / HONUWARE_SRC_DIR   see build_common.sh
-#   MIN_EXPECTED_TESTS                       floor for the count assertion (2083)
+#   MIN_EXPECTED_TESTS                       floor for the count assertion (2215)
 #
 # THE FLOOR TRACKS THE COUNT AND MUST BE RAISED AS THE SUITE GROWS (honuware
 # Phase 12.1). It exists to catch a suite that silently stops running -- the
@@ -37,6 +37,8 @@
 # floor raised to 2058.
 # Actual count 2026-10-29: 2093 at the EV2 bucket exit (Windows and Linux agree);
 # floor raised to 2083.
+# Actual count 2026-10-29: 2225 at the GD2 bucket exit (Windows and Linux agree);
+# floor raised to 2215.
 
 set -euo pipefail
 
@@ -56,7 +58,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # accumulate; never lower it to make a broken endpoint anchor pass -- a silent drop
 # in the count (routes/tests vanishing at -O2 while the exit code stays 0) is
 # exactly what it guards.
-MIN_EXPECTED_TESTS=${MIN_EXPECTED_TESTS:-2083}
+MIN_EXPECTED_TESTS=${MIN_EXPECTED_TESTS:-2215}
 
 cf_build communityfinder_tests
 
