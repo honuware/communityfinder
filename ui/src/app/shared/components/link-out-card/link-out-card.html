@@ -1,0 +1,8 @@
+<a class="link-out-card" [href]="link().url" target="_blank" rel="noopener noreferrer">
+  <mat-icon class="link-out-card__icon" aria-hidden="true">{{ icon() }}</mat-icon>
+  <span class="link-out-card__text">
+    <span class="link-out-card__label">{{ link().label }}</span>
+    <span class="link-out-card__platform">{{ platformLabel() }}</span>
+  </span>
+  <mat-icon class="link-out-card__external" aria-hidden="true">open_in_new</mat-icon>
+</a>

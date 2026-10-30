@@ -1,0 +1,83 @@
+.entity-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.entity-card--retired {
+  opacity: 0.75;
+}
+
+.entity-card__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.entity-card__name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+
+  &:is(a):hover {
+    text-decoration: underline;
+  }
+}
+
+.entity-card__external {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  vertical-align: -2px;
+  opacity: 0.6;
+}
+
+// Matches the freshness footer's marker.
+.entity-card__badge {
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.entity-card__badge--closed {
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+
+.entity-card__badge--adult {
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.entity-card__meta {
+  font-size: 0.9rem;
+  color: var(--mat-sys-primary);
+}
+
+.entity-card__closure-note,
+.entity-card__description {
+  margin: 0;
+}
+
+.entity-card__closure-note {
+  font-style: italic;
+}
+
+// One line; the listing's own page has the rest.
+.entity-card__description {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.entity-card__verified {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}

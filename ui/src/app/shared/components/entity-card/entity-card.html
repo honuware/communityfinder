@@ -1,0 +1,37 @@
+<article class="entity-card" [class.entity-card--retired]="retired()">
+  <div class="entity-card__heading">
+    @if (item().path; as path) {
+      <a class="entity-card__name" [routerLink]="path">{{ item().name }}</a>
+    } @else if (item().url) {
+      <a class="entity-card__name" [href]="item().url" target="_blank" rel="noopener noreferrer">
+        {{ item().name }}
+        <mat-icon class="entity-card__external" aria-hidden="true">open_in_new</mat-icon>
+      </a>
+    } @else {
+      <span class="entity-card__name">{{ item().name }}</span>
+    }
+    @if (marker()) {
+      <span
+        class="entity-card__badge"
+        [class.entity-card__badge--closed]="item().status === 'closed'"
+      >
+        {{ marker() }}
+      </span>
+    }
+    @if (item().adult) {
+      <span class="entity-card__badge entity-card__badge--adult">18+</span>
+    }
+  </div>
+
+  @if (meta()) {
+    <div class="entity-card__meta">{{ meta() }}</div>
+  }
+  @if (retired() && item().closureNote) {
+    <p class="entity-card__closure-note">{{ item().closureNote }}</p>
+  }
+  @if (item().description) {
+    <p class="entity-card__description">{{ item().description }}</p>
+  }
+  <app-scene-chips [slugs]="item().sceneTagSlugs" [scenes]="vocabularies().scenes" />
+  <div class="entity-card__verified">{{ verifiedText() }}</div>
+</article>

@@ -1,0 +1,19 @@
+@if (open()) {
+  <ng-container [ngTemplateOutlet]="body()" />
+} @else {
+  <section class="adult-gate" aria-labelledby="adult-gate-title">
+    <h1 id="adult-gate-title" class="adult-gate__title">18+ section</h1>
+    <p>This part of the guide covers adult venues and topics. It's for people 18 and older.</p>
+    <p class="adult-gate__note">
+      Your answer is kept only until you close this tab, and it isn't sent anywhere.
+    </p>
+    <div class="adult-gate__actions">
+      <button mat-flat-button type="button" class="adult-gate__accept" (click)="accept()">
+        I'm 18 or older
+      </button>
+      <button mat-stroked-button type="button" class="adult-gate__decline" (click)="decline()">
+        Take me back
+      </button>
+    </div>
+  </section>
+}

@@ -1,0 +1,47 @@
+.link-out-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+
+  &:hover {
+    background: var(--mat-sys-surface-container);
+
+    .link-out-card__label {
+      text-decoration: underline;
+    }
+  }
+}
+
+.link-out-card__icon {
+  flex: none;
+  color: var(--mat-sys-primary);
+}
+
+.link-out-card__text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.link-out-card__label {
+  font-weight: 600;
+}
+
+.link-out-card__platform {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.link-out-card__external {
+  flex: none;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  opacity: 0.6;
+}

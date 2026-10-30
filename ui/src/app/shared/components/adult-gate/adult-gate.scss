@@ -1,0 +1,31 @@
+// Fills the page area under the header (the header stays, so the rest of the
+// site is one click away), with the question centered in it.
+.adult-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 70vh;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.adult-gate__title {
+  margin: 0 0 8px;
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.adult-gate__note {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.adult-gate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+}

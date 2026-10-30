@@ -1,0 +1,9 @@
+@if (chips().length) {
+  <ul class="scene-chips" aria-label="Scenes">
+    @for (chip of chips(); track chip.path) {
+      <li>
+        <a class="scene-chips__chip" [routerLink]="chip.path">{{ chip.label }}</a>
+      </li>
+    }
+  </ul>
+}
