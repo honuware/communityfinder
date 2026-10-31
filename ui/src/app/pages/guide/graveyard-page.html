@@ -1,0 +1,30 @@
+<a mat-button routerLink="/guide" class="guide-page__back">
+  <mat-icon>arrow_back</mat-icon>
+  Guide
+</a>
+<h1 class="guide-page__title">Closed venues and organizations</h1>
+<p class="guide-page__lead">
+  Places and groups that have closed stay listed here, for the record and for anyone looking for
+  them.
+</p>
+
+@if (load().loading) {
+  <mat-progress-spinner mode="indeterminate" diameter="36" />
+} @else if (load().failed) {
+  <p class="guide-page__empty">This list couldn't be loaded. Please try again in a moment.</p>
+} @else if (!venueCards().length && !organizationCards().length) {
+  <p class="guide-page__empty">Nothing listed here has closed.</p>
+} @else {
+  @if (venueCards().length) {
+    <h2 class="guide-page__section-title">Venues</h2>
+    @for (card of venueCards(); track card.path) {
+      <app-entity-card [item]="card" [vocabularies]="vocabularies()" />
+    }
+  }
+  @if (organizationCards().length) {
+    <h2 class="guide-page__section-title">Organizations</h2>
+    @for (card of organizationCards(); track card.path) {
+      <app-entity-card [item]="card" [vocabularies]="vocabularies()" />
+    }
+  }
+}

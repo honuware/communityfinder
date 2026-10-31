@@ -30,6 +30,8 @@ export interface EntityCardItem {
   path: string | null;
   // Where a listing with no page of its own links out to; '' = nowhere.
   url: string;
+  // A service's phone number, as entered; '' for everything else.
+  phone: string;
   // "Sports league", "Park & beach", "STI testing"; '' for a venue.
   kindLabel: string;
   description: string;
@@ -47,6 +49,7 @@ export function venueCardItem(venue: GuideVenue): EntityCardItem {
     name: venue.name,
     path: `/guide/venues/${venue.slug}`,
     url: '',
+    phone: '',
     kindLabel: '',
     description: venue.description,
     neighborhoodSlug: venue.neighborhood_slug,
@@ -63,6 +66,7 @@ export function organizationCardItem(organization: GuideOrganization): EntityCar
     name: organization.name,
     path: `/guide/orgs/${organization.slug}`,
     url: '',
+    phone: '',
     kindLabel: ORGANIZATION_KIND_LABELS[organization.org_kind] ?? '',
     description: organization.description,
     neighborhoodSlug: organization.neighborhood_slug,
@@ -79,6 +83,7 @@ export function placeCardItem(place: GuidePlace): EntityCardItem {
     name: place.name,
     path: `/guide/places/${place.slug}`,
     url: '',
+    phone: '',
     kindLabel: PLACE_KIND_LABELS[place.place_kind] ?? '',
     description: place.description,
     neighborhoodSlug: place.neighborhood_slug,
@@ -91,12 +96,13 @@ export function placeCardItem(place: GuidePlace): EntityCardItem {
 }
 
 // Services have no page of their own: the card's name links out to the
-// service's site.
+// service's site, and it carries the phone number.
 export function serviceCardItem(service: GuideService): EntityCardItem {
   return {
     name: service.name,
     path: null,
     url: service.url,
+    phone: service.phone,
     kindLabel: SERVICE_KIND_LABELS[service.service_kind] ?? '',
     description: service.description,
     neighborhoodSlug: service.neighborhood_slug,
@@ -149,4 +155,14 @@ export class EntityCard {
   });
 
   readonly verifiedText = computed(() => guideVerifiedText(this.item().lastVerifiedAtUs));
+
+  // "206-555-0601" for a ten-digit US number; anything else as entered.
+  readonly phoneText = computed(() => {
+    const phone = this.item().phone;
+    const digits = phone.replace(/\D/g, '');
+    return digits.length === 10
+      ? `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
+      : phone;
+  });
+  readonly phoneHref = computed(() => `tel:${this.item().phone.replace(/[^\d+]/g, '')}`);
 }

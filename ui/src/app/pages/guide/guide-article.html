@@ -1,0 +1,48 @@
+<a mat-button routerLink="/guide" class="guide-page__back">
+  <mat-icon>arrow_back</mat-icon>
+  Guide
+</a>
+
+@if (load().loading) {
+  <mat-progress-spinner mode="indeterminate" diameter="36" />
+} @else if (load().notFound) {
+  <h1 class="guide-page__title">Page not found</h1>
+  <p>This page isn't in the guide, or isn't published yet.</p>
+  <a mat-stroked-button routerLink="/guide">See the guide</a>
+} @else if (load().failed) {
+  <p>This page couldn't be loaded. Please try again in a moment.</p>
+} @else if (load().data; as page) {
+  <app-adult-gate [adult]="page.adult">
+    <ng-template>
+      @if (!page.published) {
+        <p class="guide-page__preview guide-article__preview">
+          <mat-icon>visibility</mat-icon>
+          Curator preview: this page isn't published.
+        </p>
+      }
+      @if (sectionLabel()) {
+        <a class="guide-article__section" [routerLink]="['/guide/sections', page.section]">
+          {{ sectionLabel() }}
+        </a>
+      }
+      <h1 class="guide-page__title">{{ page.title }}</h1>
+      <app-guide-markdown class="guide-article__body" [body]="page.body_markdown" />
+
+      @if (related().length) {
+        <h2 class="guide-page__section-title">Related listings</h2>
+        <ul class="guide-page__list guide-article__related">
+          @for (listing of related(); track listing.path) {
+            <li>
+              <a [routerLink]="listing.path">{{ listing.name }}</a>
+              <span class="guide-page__list-note">
+                {{ listing.kind }}{{ listing.adult ? ' · 18+' : '' }}
+              </span>
+            </li>
+          }
+        </ul>
+      }
+
+      <app-freshness-footer [status]="page.status" [lastVerifiedAtUs]="page.last_verified_at_us" />
+    </ng-template>
+  </app-adult-gate>
+}

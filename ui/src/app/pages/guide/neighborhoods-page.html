@@ -1,0 +1,31 @@
+<a mat-button routerLink="/guide" class="guide-page__back">
+  <mat-icon>arrow_back</mat-icon>
+  Guide
+</a>
+<h1 class="guide-page__title">Neighborhoods</h1>
+
+@if (load().loading) {
+  <mat-progress-spinner mode="indeterminate" diameter="36" />
+} @else if (load().failed) {
+  <p class="guide-page__empty">
+    The neighborhoods couldn't be loaded. Please try again in a moment.
+  </p>
+} @else {
+  @for (group of regions(); track group.region) {
+    <section class="neighborhoods-page__region">
+      <h2 class="guide-page__section-title">{{ group.label }}</h2>
+      <ul class="guide-page__list">
+        @for (neighborhood of group.neighborhoods; track neighborhood.slug) {
+          <li>
+            <a [routerLink]="['/guide/neighborhoods', neighborhood.slug]">
+              {{ neighborhood.display_name }}
+            </a>
+            @if (counts(neighborhood)) {
+              <span class="guide-page__list-note">{{ counts(neighborhood) }}</span>
+            }
+          </li>
+        }
+      </ul>
+    </section>
+  }
+}

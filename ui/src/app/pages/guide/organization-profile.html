@@ -1,0 +1,76 @@
+<a mat-button routerLink="/guide/orgs" class="guide-page__back">
+  <mat-icon>arrow_back</mat-icon>
+  Organizations
+</a>
+
+@if (load().loading) {
+  <mat-progress-spinner mode="indeterminate" diameter="36" />
+} @else if (load().notFound) {
+  <h1 class="guide-page__title">Organization not found</h1>
+  <p>This organization isn't in the guide.</p>
+  <a mat-stroked-button routerLink="/guide/orgs">See all organizations</a>
+} @else if (load().failed) {
+  <p>This organization couldn't be loaded. Please try again in a moment.</p>
+} @else if (load().data; as detail) {
+  <app-adult-gate [adult]="detail.organization.adult">
+    <ng-template>
+      <h1 class="guide-page__title">{{ detail.organization.name }}</h1>
+      @if (kind()) {
+        <p class="guide-page__lead">{{ kind() }}</p>
+      }
+      @if (retired()) {
+        <p class="guide-page__banner organization-profile__closed">
+          <strong>{{ detail.organization.status === 'moved' ? 'Moved' : 'Closed' }}</strong>
+          @if (detail.organization.closure_note) {
+            — {{ detail.organization.closure_note }}
+          }
+        </p>
+      } @else if (detail.organization.status === 'seasonal') {
+        <p class="guide-page__banner guide-page__banner--quiet">
+          <strong>Seasonal</strong> — active part of the year.
+        </p>
+      }
+      <app-scene-chips
+        class="guide-page__chips"
+        [slugs]="detail.organization.scene_tag_slugs"
+        [scenes]="vocabularies().scenes"
+      />
+
+      @if (detail.organization.description) {
+        <p class="guide-page__text">{{ detail.organization.description }}</p>
+      }
+
+      <dl class="guide-page__facts">
+        @if (detail.organization.meeting_cadence_text) {
+          <dt>When</dt>
+          <dd>{{ detail.organization.meeting_cadence_text }}</dd>
+        }
+        <dt>Where</dt>
+        <dd>{{ neighborhood() || 'Countywide, or it moves around' }}</dd>
+        @if (detail.organization.url) {
+          <dt>How to join</dt>
+          <dd>
+            <a [href]="detail.organization.url" target="_blank" rel="noopener nofollow">
+              {{ detail.organization.name }}
+              <mat-icon class="guide-page__external" aria-hidden="true">open_in_new</mat-icon>
+            </a>
+          </dd>
+        }
+      </dl>
+
+      @if (detail.links.length) {
+        <h2 class="guide-page__section-title">Where this group talks</h2>
+        <div class="guide-page__links">
+          @for (link of detail.links; track link.id) {
+            <app-link-out-card [link]="link" />
+          }
+        </div>
+      }
+
+      <app-freshness-footer
+        [status]="detail.organization.status"
+        [lastVerifiedAtUs]="detail.organization.last_verified_at_us"
+      />
+    </ng-template>
+  </app-adult-gate>
+}

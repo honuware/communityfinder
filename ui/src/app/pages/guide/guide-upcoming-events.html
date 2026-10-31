@@ -1,0 +1,27 @@
+<section class="guide-upcoming">
+  <h2 class="guide-upcoming__title">Coming up</h2>
+  @if (events(); as events) {
+    @if (events.length) {
+      <ul class="guide-upcoming__list">
+        @for (event of events; track event.id) {
+          <li class="guide-upcoming__item">
+            <span class="guide-upcoming__when">{{ when(event) }}</span>
+            <a class="guide-upcoming__name" [routerLink]="['/events', event.id]">{{
+              event.title
+            }}</a>
+            @if (place(event)) {
+              <span class="guide-upcoming__place">{{ place(event) }}</span>
+            }
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="guide-upcoming__none">Nothing on the calendar here in the next six weeks.</p>
+    }
+  }
+  @if (sceneSlug(); as scene) {
+    <a class="guide-upcoming__all" routerLink="/events" [queryParams]="{ scene }">
+      All upcoming events in this scene →
+    </a>
+  }
+</section>

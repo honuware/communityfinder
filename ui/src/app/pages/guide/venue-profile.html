@@ -1,0 +1,93 @@
+<a mat-button routerLink="/guide/venues" class="guide-page__back">
+  <mat-icon>arrow_back</mat-icon>
+  Venues
+</a>
+
+@if (load().loading) {
+  <mat-progress-spinner mode="indeterminate" diameter="36" />
+} @else if (load().notFound) {
+  <h1 class="guide-page__title">Venue not found</h1>
+  <p>This venue isn't in the guide.</p>
+  <a mat-stroked-button routerLink="/guide/venues">See all venues</a>
+} @else if (load().failed) {
+  <p>This venue couldn't be loaded. Please try again in a moment.</p>
+} @else if (load().data; as detail) {
+  <app-adult-gate [adult]="detail.venue.adult">
+    <ng-template>
+      <h1 class="guide-page__title">{{ detail.venue.name }}</h1>
+      @if (neighborhood()) {
+        <p class="guide-page__lead">{{ neighborhood() }}</p>
+      }
+      @if (retired()) {
+        <p class="guide-page__banner venue-profile__closed">
+          <strong>{{ detail.venue.status === 'moved' ? 'Moved' : 'Closed' }}</strong>
+          @if (detail.venue.closure_note) {
+            — {{ detail.venue.closure_note }}
+          }
+        </p>
+      } @else if (detail.venue.status === 'seasonal') {
+        <p class="guide-page__banner guide-page__banner--quiet">
+          <strong>Seasonal</strong> — open part of the year.
+        </p>
+      }
+
+      @if (showPhoto()) {
+        <img class="guide-page__photo" [src]="photoUrl()" alt="" (error)="photoFailed()" />
+      }
+
+      @if (detail.venue.description) {
+        <p class="guide-page__text">{{ detail.venue.description }}</p>
+      }
+      @if (detail.venue.crowd_vibe) {
+        <h2 class="guide-page__section-title">The crowd</h2>
+        <p class="guide-page__text venue-profile__crowd">{{ detail.venue.crowd_vibe }}</p>
+      }
+
+      @if (detail.venue.address || detail.venue.url || detail.venue.price_band) {
+        <dl class="guide-page__facts">
+          @if (detail.venue.address) {
+            <dt>Address</dt>
+            <dd>{{ detail.venue.address }}</dd>
+          }
+          @if (detail.venue.url) {
+            <dt>Website</dt>
+            <dd>
+              <a [href]="detail.venue.url" target="_blank" rel="noopener nofollow">
+                {{ detail.venue.name }}
+                <mat-icon class="guide-page__external" aria-hidden="true">open_in_new</mat-icon>
+              </a>
+            </dd>
+          }
+          @if (detail.venue.price_band) {
+            <dt>Price</dt>
+            <dd>{{ detail.venue.price_band }}</dd>
+          }
+        </dl>
+      }
+
+      <app-scene-chips
+        class="guide-page__chips"
+        [slugs]="detail.venue.scene_tag_slugs"
+        [scenes]="vocabularies().scenes"
+      />
+
+      @if (detail.links.length) {
+        <h2 class="guide-page__section-title">Where this scene talks</h2>
+        <div class="guide-page__links">
+          @for (link of detail.links; track link.id) {
+            <app-link-out-card [link]="link" />
+          }
+        </div>
+      }
+
+      @if (!retired()) {
+        <app-guide-upcoming-events [venueId]="detail.venue.venue_id" />
+      }
+
+      <app-freshness-footer
+        [status]="detail.venue.status"
+        [lastVerifiedAtUs]="detail.venue.last_verified_at_us"
+      />
+    </ng-template>
+  </app-adult-gate>
+}

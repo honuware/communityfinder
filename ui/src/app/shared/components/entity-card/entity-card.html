@@ -32,6 +32,9 @@
   @if (item().description) {
     <p class="entity-card__description">{{ item().description }}</p>
   }
+  @if (item().phone) {
+    <a class="entity-card__phone" [href]="phoneHref()">{{ phoneText() }}</a>
+  }
   <app-scene-chips [slugs]="item().sceneTagSlugs" [scenes]="vocabularies().scenes" />
   <div class="entity-card__verified">{{ verifiedText() }}</div>
 </article>

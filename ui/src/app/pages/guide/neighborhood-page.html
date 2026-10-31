@@ -1,0 +1,65 @@
+<a mat-button routerLink="/guide/neighborhoods" class="guide-page__back">
+  <mat-icon>arrow_back</mat-icon>
+  Neighborhoods
+</a>
+
+@if (load().loading) {
+  <mat-progress-spinner mode="indeterminate" diameter="36" />
+} @else if (load().notFound) {
+  <h1 class="guide-page__title">Neighborhood not found</h1>
+  <p>This neighborhood isn't in the guide.</p>
+  <a mat-stroked-button routerLink="/guide/neighborhoods">See all neighborhoods</a>
+} @else if (load().failed) {
+  <p>This neighborhood couldn't be loaded. Please try again in a moment.</p>
+} @else if (load().data; as detail) {
+  <h1 class="guide-page__title">{{ detail.neighborhood.display_name }}</h1>
+  @if (region()) {
+    <p class="guide-page__lead">{{ region() }}</p>
+  }
+
+  @if (detail.rundown_page; as rundown) {
+    @if (rundown.adult) {
+      <p>
+        This neighborhood's rundown is in the 18+ section:
+        <a [routerLink]="['/guide/pages', rundown.slug]">{{ rundown.title }}</a>
+      </p>
+    } @else {
+      <app-guide-markdown class="neighborhood-page__rundown" [body]="rundown.body_markdown" />
+    }
+  } @else {
+    <p class="guide-page__empty neighborhood-page__no-rundown">
+      The rundown for this neighborhood is being written.
+    </p>
+  }
+
+  @if (venueCards().length) {
+    <h2 class="guide-page__section-title">Venues</h2>
+    @for (card of venueCards(); track card.path) {
+      <app-entity-card [item]="card" [vocabularies]="vocabularies()" />
+    }
+  }
+  @if (organizationCards().length) {
+    <h2 class="guide-page__section-title">Organizations</h2>
+    @for (card of organizationCards(); track card.path) {
+      <app-entity-card [item]="card" [vocabularies]="vocabularies()" />
+    }
+  }
+  @if (placeCards().length) {
+    <h2 class="guide-page__section-title">Places</h2>
+    @for (card of placeCards(); track card.path) {
+      <app-entity-card [item]="card" [vocabularies]="vocabularies()" />
+    }
+  }
+  @if (!listed()) {
+    <p class="guide-page__empty">Nothing is listed here yet.</p>
+  }
+
+  @if (detail.rundown_page; as rundown) {
+    @if (!rundown.adult) {
+      <app-freshness-footer
+        [status]="rundown.status"
+        [lastVerifiedAtUs]="rundown.last_verified_at_us"
+      />
+    }
+  }
+}

@@ -128,6 +128,7 @@ describe('EntityCard', () => {
       name: 'Northside Barbers',
       service_kind: 'everyday-service',
       url: 'https://example.org/barbers',
+      phone: '2065550606',
       neighborhood_slug: 'capitol-hill',
       status: 'open',
     });
@@ -137,9 +138,17 @@ describe('EntityCard', () => {
     expect(card.name().getAttribute('rel')).toBe('noopener noreferrer');
     expect(card.text('.entity-card__meta')).toBe('Everyday services · Capitol Hill');
     expect(card.element.querySelector('.scene-chips')).toBeNull();
+    const phone = card.element.querySelector('.entity-card__phone');
+    expect(phone?.textContent?.trim()).toBe('206-555-0606');
+    expect(phone?.getAttribute('href')).toBe('tel:2065550606');
 
-    // No site either: the name is plain text.
-    const unlinked = render(serviceCardItem({ ...service, url: '' }));
+    // No site either: the name is plain text. A number that isn't ten digits
+    // shows as entered.
+    const unlinked = render(serviceCardItem({ ...service, url: '', phone: '+1 (206) 555-0606' }));
     expect(unlinked.name().tagName).toBe('SPAN');
+    expect(unlinked.text('.entity-card__phone')).toBe('+1 (206) 555-0606');
+    expect(unlinked.element.querySelector('.entity-card__phone')?.getAttribute('href')).toBe(
+      'tel:+12065550606',
+    );
   });
 });

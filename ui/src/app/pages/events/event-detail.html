@@ -36,9 +36,11 @@
       @if (event.venue_name || event.location_text) {
         <dt><mat-icon aria-label="Where">place</mat-icon></dt>
         <dd>
-          <!-- EV2 §3.8 / GD3 §3.4: whichever lands second links the venue name to its guide page. -->
+          <!-- EV2 §3.8 / GD3 §3.4: the venue name links to its guide page, by id. -->
           @if (event.venue_name) {
-            <div class="event-detail__venue">{{ event.venue_name }}</div>
+            <div class="event-detail__venue">
+              <a [routerLink]="['/guide/venues/by-id', event.venue_id]">{{ event.venue_name }}</a>
+            </div>
             @if (event.venue_address) {
               <div>{{ event.venue_address }}</div>
             }

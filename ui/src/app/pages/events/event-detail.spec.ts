@@ -83,6 +83,8 @@ describe('EventDetailPage', () => {
     expect(text).toContain('$10 cover');
     expect(text).toContain('Dress code encouraged, not enforced.');
 
+    // EV2 §3.8: the venue's guide page, found by its id.
+    expect(link(element, 'The Lantern Room')?.getAttribute('href')).toBe('/guide/venues/by-id/1');
     expect(link(element, 'Capitol Hill')?.getAttribute('href')).toBe(
       '/events?neighborhood=capitol-hill',
     );

@@ -1,6 +1,7 @@
 <mat-toolbar color="primary" class="app-header">
   <a routerLink="/" class="app-header__brand">{{ siteName }}</a>
   <a mat-button routerLink="/events" class="app-header__nav">Events</a>
+  <a mat-button routerLink="/guide" class="app-header__nav">Guide</a>
   <span class="app-header__spacer"></span>
 
   @if (user(); as u) {

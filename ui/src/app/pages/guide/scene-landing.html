@@ -1,0 +1,94 @@
+<a mat-button routerLink="/guide" class="guide-page__back">
+  <mat-icon>arrow_back</mat-icon>
+  Guide
+</a>
+
+@if (load().loading) {
+  <mat-progress-spinner mode="indeterminate" diameter="36" />
+} @else if (load().notFound) {
+  <h1 class="guide-page__title">Scene not found</h1>
+  <p>This scene isn't in the guide.</p>
+  <a mat-stroked-button routerLink="/guide">See the guide</a>
+} @else if (load().failed) {
+  <p>This scene couldn't be loaded. Please try again in a moment.</p>
+} @else if (load().data; as detail) {
+  <h1 class="guide-page__title">{{ detail.scene.display_name }}</h1>
+
+  @if (detail.intro_page; as intro) {
+    @if (intro.adult) {
+      <p class="scene-landing__adult-intro">
+        This scene's introduction is in the 18+ section:
+        <a [routerLink]="['/guide/pages', intro.slug]">{{ intro.title }}</a>
+      </p>
+    } @else {
+      <app-guide-markdown class="scene-landing__intro" [body]="intro.body_markdown" />
+    }
+  } @else if (detail.scene.description) {
+    <p class="guide-page__text">{{ detail.scene.description }}</p>
+  }
+
+  @if (linkOut()) {
+    <p class="guide-page__banner guide-page__banner--quiet scene-landing__coverage">
+      We don't cover this scene ourselves. Its own community does it best, so here's where to find
+      them, with credit.
+    </p>
+    <h2 class="guide-page__section-title">Where this scene talks</h2>
+    @if (detail.links.length) {
+      <div class="guide-page__links">
+        @for (link of detail.links; track link.id) {
+          <app-link-out-card [link]="link" />
+        }
+      </div>
+    } @else {
+      <p class="guide-page__empty">No links listed yet.</p>
+    }
+    @if (allCards().length) {
+      <h2 class="guide-page__section-title">Shared spaces in this guide</h2>
+      @for (card of allCards(); track card.path) {
+        <app-entity-card [item]="card" [vocabularies]="vocabularies()" />
+      }
+    }
+  } @else {
+    @if (venueCards().length) {
+      <h2 class="guide-page__section-title">Venues</h2>
+      @for (card of venueCards(); track card.path) {
+        <app-entity-card [item]="card" [vocabularies]="vocabularies()" />
+      }
+    }
+    @if (organizationCards().length) {
+      <h2 class="guide-page__section-title">Organizations</h2>
+      @for (card of organizationCards(); track card.path) {
+        <app-entity-card [item]="card" [vocabularies]="vocabularies()" />
+      }
+    }
+    @if (placeCards().length) {
+      <h2 class="guide-page__section-title">Places</h2>
+      @for (card of placeCards(); track card.path) {
+        <app-entity-card [item]="card" [vocabularies]="vocabularies()" />
+      }
+    }
+    @if (!allCards().length) {
+      <p class="guide-page__empty">Nothing here yet — this guide section is being written.</p>
+    }
+
+    <app-guide-upcoming-events [sceneSlug]="detail.scene.slug" />
+
+    @if (detail.links.length) {
+      <h2 class="guide-page__section-title">Where this scene talks</h2>
+      <div class="guide-page__links">
+        @for (link of detail.links; track link.id) {
+          <app-link-out-card [link]="link" />
+        }
+      </div>
+    }
+  }
+
+  @if (detail.intro_page; as intro) {
+    @if (!intro.adult) {
+      <app-freshness-footer
+        [status]="intro.status"
+        [lastVerifiedAtUs]="intro.last_verified_at_us"
+      />
+    }
+  }
+}

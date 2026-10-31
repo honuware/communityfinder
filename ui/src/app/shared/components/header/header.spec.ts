@@ -37,13 +37,17 @@ describe('Header', () => {
     expect(text).toContain('Register');
   });
 
-  it('links to the events pages whether or not anyone is signed in', () => {
+  it('links to the events and guide pages whether or not anyone is signed in', () => {
     configure({ authData$: of({ isAuth: false }) } as unknown as AuthService);
     const fixture = TestBed.createComponent(Header);
     fixture.detectChanges();
-    const nav = (fixture.nativeElement as HTMLElement).querySelector('.app-header__nav');
-    expect(nav?.textContent?.trim()).toBe('Events');
-    expect(nav?.getAttribute('href')).toBe('/events');
+    const nav = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.app-header__nav'),
+    ).map((link) => [link.textContent?.trim(), link.getAttribute('href')]);
+    expect(nav).toEqual([
+      ['Events', '/events'],
+      ['Guide', '/guide'],
+    ]);
   });
 
   it('shows only the first name when logged in', () => {

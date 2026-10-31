@@ -1,0 +1,26 @@
+<a mat-button routerLink="/guide" class="guide-page__back">
+  <mat-icon>arrow_back</mat-icon>
+  Guide
+</a>
+<h1 class="guide-page__title">Services</h1>
+<p class="guide-page__lead">
+  Clinics, care, and everyday services. A listing isn't a recommendation, so call ahead to check.
+  Guides to getting care are under <a routerLink="/guide/sections/health">Health</a>.
+</p>
+
+@if (load().loading) {
+  <mat-progress-spinner mode="indeterminate" diameter="36" />
+} @else if (load().failed) {
+  <p class="guide-page__empty">The services couldn't be loaded. Please try again in a moment.</p>
+} @else if (!groups().length) {
+  <p class="guide-page__empty">Nothing here yet — this guide section is being written.</p>
+} @else {
+  @for (group of groups(); track group.kind) {
+    <section class="services-page__group">
+      <h2 class="guide-page__section-title">{{ group.label }}</h2>
+      @for (card of group.cards; track $index) {
+        <app-entity-card [item]="card" [vocabularies]="vocabularies()" />
+      }
+    </section>
+  }
+}

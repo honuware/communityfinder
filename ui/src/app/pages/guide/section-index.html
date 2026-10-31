@@ -1,0 +1,34 @@
+<a mat-button routerLink="/guide" class="guide-page__back">
+  <mat-icon>arrow_back</mat-icon>
+  Guide
+</a>
+
+@if (load().loading) {
+  <mat-progress-spinner mode="indeterminate" diameter="36" />
+} @else if (load().notFound) {
+  <h1 class="guide-page__title">Section not found</h1>
+  <p>The guide has no section by that name.</p>
+  <a mat-stroked-button routerLink="/guide">See the guide</a>
+} @else if (load().failed) {
+  <p>This section couldn't be loaded. Please try again in a moment.</p>
+} @else if (load().data; as pages) {
+  <app-adult-gate [adult]="section() === 'adult'">
+    <ng-template>
+      <h1 class="guide-page__title">{{ label() }}</h1>
+      @if (pages.length) {
+        <ul class="guide-page__list section-index__pages">
+          @for (page of pages; track page.id) {
+            <li>
+              <a [routerLink]="['/guide/pages', page.slug]">{{ page.title }}</a>
+              <span class="guide-page__list-note">
+                {{ verified(page) }}{{ page.adult ? ' · 18+' : '' }}
+              </span>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="guide-page__empty">Nothing here yet — this guide section is being written.</p>
+      }
+    </ng-template>
+  </app-adult-gate>
+}

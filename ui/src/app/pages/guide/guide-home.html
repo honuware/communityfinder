@@ -1,0 +1,65 @@
+<h1 class="guide-page__title">Guide</h1>
+<p class="guide-page__lead">
+  Where to go, who to meet, and what to know in Seattle and King County. Every listing says when we
+  last checked it.
+</p>
+
+<h2 class="guide-page__section-title">Scenes</h2>
+@if (load().loading) {
+  <mat-progress-spinner mode="indeterminate" diameter="36" />
+} @else if (load().failed) {
+  <p class="guide-page__empty">The scenes couldn't be loaded. Please try again in a moment.</p>
+} @else {
+  @if (fullScenes().length) {
+    <ul class="guide-page__tiles guide-home__scenes">
+      @for (scene of fullScenes(); track scene.slug) {
+        <li>
+          <a class="guide-page__tile" [routerLink]="['/guide/scenes', scene.slug]">
+            <span class="guide-page__tile-name">{{ scene.display_name }}</span>
+            <span class="guide-page__tile-note">{{ counts(scene) }}</span>
+          </a>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="guide-page__empty">Nothing here yet — this guide section is being written.</p>
+  }
+
+  @if (sisterScenes().length) {
+    <h2 class="guide-page__section-title">Sister scenes</h2>
+    <p>These scenes have their own curators. We point you to them, with credit.</p>
+    <ul class="guide-page__tiles guide-home__sister-scenes">
+      @for (scene of sisterScenes(); track scene.slug) {
+        <li>
+          <a class="guide-page__tile" [routerLink]="['/guide/scenes', scene.slug]">
+            <span class="guide-page__tile-name">{{ scene.display_name }}</span>
+            <span class="guide-page__tile-note">Where to find them</span>
+          </a>
+        </li>
+      }
+    </ul>
+  }
+}
+
+<h2 class="guide-page__section-title">Sections</h2>
+<ul class="guide-page__tiles guide-home__sections">
+  @for (section of sections; track section.path) {
+    <li>
+      <a class="guide-page__tile" [routerLink]="section.path">
+        <span class="guide-page__tile-name">{{ section.label }}</span>
+      </a>
+    </li>
+  }
+</ul>
+
+<h2 class="guide-page__section-title">Directories</h2>
+<ul class="guide-page__tiles guide-home__directories">
+  @for (directory of directories; track directory.path) {
+    <li>
+      <a class="guide-page__tile" [routerLink]="directory.path">
+        <span class="guide-page__tile-name">{{ directory.label }}</span>
+        <span class="guide-page__tile-note">{{ directory.note }}</span>
+      </a>
+    </li>
+  }
+</ul>

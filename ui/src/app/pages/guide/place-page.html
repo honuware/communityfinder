@@ -1,0 +1,58 @@
+<a mat-button routerLink="/guide" class="guide-page__back">
+  <mat-icon>arrow_back</mat-icon>
+  Guide
+</a>
+
+@if (load().loading) {
+  <mat-progress-spinner mode="indeterminate" diameter="36" />
+} @else if (load().notFound) {
+  <h1 class="guide-page__title">Place not found</h1>
+  <p>This place isn't in the guide.</p>
+  <a mat-stroked-button routerLink="/guide">See the guide</a>
+} @else if (load().failed) {
+  <p>This place couldn't be loaded. Please try again in a moment.</p>
+} @else if (load().data; as detail) {
+  <app-adult-gate [adult]="detail.place.adult">
+    <ng-template>
+      <h1 class="guide-page__title">{{ detail.place.name }}</h1>
+      @if (lead()) {
+        <p class="guide-page__lead">{{ lead() }}</p>
+      }
+      @if (detail.place.status === 'closed' || detail.place.status === 'moved') {
+        <p class="guide-page__banner">
+          <strong>{{ detail.place.status === 'moved' ? 'Moved' : 'Closed' }}</strong>
+        </p>
+      }
+      @if (detail.place.address_text) {
+        <p class="place-page__address">{{ detail.place.address_text }}</p>
+      }
+      @if (detail.place.description) {
+        <p class="guide-page__text">{{ detail.place.description }}</p>
+      }
+      @if (article(); as page) {
+        <p class="place-page__article">
+          Read more: <a [routerLink]="['/guide/pages', page.slug]">{{ page.title }}</a>
+        </p>
+      }
+      <app-scene-chips
+        class="guide-page__chips"
+        [slugs]="detail.place.scene_tag_slugs"
+        [scenes]="vocabularies().scenes"
+      />
+
+      @if (detail.links.length) {
+        <h2 class="guide-page__section-title">Links</h2>
+        <div class="guide-page__links">
+          @for (link of detail.links; track link.id) {
+            <app-link-out-card [link]="link" />
+          }
+        </div>
+      }
+
+      <app-freshness-footer
+        [status]="detail.place.status"
+        [lastVerifiedAtUs]="detail.place.last_verified_at_us"
+      />
+    </ng-template>
+  </app-adult-gate>
+}

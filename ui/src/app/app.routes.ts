@@ -29,6 +29,11 @@ export const routes: Routes = [
   // Lazy-loaded; anonymous.
   { path: 'events', loadChildren: () => import('./pages/events/events.routes') },
 
+  // The guide (GD3 §3): scenes, venues, organizations, places, services,
+  // neighborhoods, the graveyard and articles. Lazy-loaded with its own data
+  // access and markdown renderer; anonymous.
+  { path: 'guide', loadChildren: () => import('./pages/guide/guide.routes') },
+
   // The admin CRUD editor (@honuware/ui/crud), lazy-loaded so the editor pages stay
   // out of the initial bundle. AuthGuard sends anonymous visitors to /login; the
   // nested AdminGuard sends signed-in non-admins home.
