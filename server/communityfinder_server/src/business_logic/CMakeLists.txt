@@ -2,7 +2,8 @@
 # account config, iCal brand config. These are the per-app values honuware's
 # framework reads through its generic seams. Plus create_app_tables: the app
 # halves of create_database (DDL list + seed), kept in the library so tests can
-# run them.
+# run them; and populate_sample_data, database_helper --populate_sample_data's
+# made-up dev data, here for the same reason.
 target_sources(communityfinder_core PRIVATE
     app_database_config.h
     app_secret_keys.h
@@ -12,11 +13,14 @@ target_sources(communityfinder_core PRIVATE
     app_ical_config.h
     create_app_tables.h
     create_app_tables.cpp
+    populate_sample_data.h
+    populate_sample_data.cpp
 )
 
 target_sources(communityfinder_test_cases PUBLIC
     app_secret_values_test.cpp
     create_app_tables_test.cpp
+    populate_sample_data_test.cpp
 )
 
 add_subdirectory(events)

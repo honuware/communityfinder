@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal, OnDestroy } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { RouterLink, RouterLinkActive } from '@angular/router';
 import { Router } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
@@ -16,7 +16,14 @@ import { SiteConfigService } from '../../../core/services/site-config.service';
 // flips the moment silent login resolves or the user logs in/out.
 @Component({
   selector: 'app-header',
-  imports: [RouterLink, MatToolbarModule, MatButtonModule, MatMenuModule, MatIconModule],
+  imports: [
+    RouterLink,
+    RouterLinkActive,
+    MatToolbarModule,
+    MatButtonModule,
+    MatMenuModule,
+    MatIconModule,
+  ],
   templateUrl: './header.html',
   styleUrl: './header.scss',
 })

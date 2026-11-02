@@ -1,15 +1,66 @@
+@use '@angular/material' as mat;
+
+// A plum band with the brand stripe under it, kept at the top as the page
+// scrolls.
+:host {
+  display: block;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+
+  &::after {
+    content: '';
+    display: block;
+    height: 4px;
+    background: var(--brand-stripe);
+  }
+}
+
+.app-header {
+  @include mat.toolbar-overrides((
+    container-background-color: var(--theme-primary),
+    container-text-color: var(--theme-on-primary),
+  ));
+  @include mat.button-overrides((
+    text-label-text-color: var(--theme-on-primary),
+    text-state-layer-color: var(--theme-on-primary),
+  ));
+  gap: 4px;
+}
+
 .app-header__spacer {
   flex: 1 1 auto;
 }
 
 .app-header__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 16px;
+  font-family: var(--font-heading);
+  font-size: 1.35rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
   text-decoration: none;
   color: inherit;
 }
 
-.app-header__nav {
-  margin-left: 16px;
+// A small setting sun: the warmth on the far side of the Seattle winter.
+.app-header__mark {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #f4d35e 10%, var(--theme-accent) 75%);
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.18);
+}
+
+.app-header__nav--active {
+  background: rgb(255 255 255 / 0.16);
+}
+
+.app-header__register {
+  background: rgb(255 255 255 / 0.12);
 }
 
 .app-header__chip {
@@ -23,9 +74,24 @@
   height: 28px;
   border-radius: 50%;
   object-fit: cover;
-  background: rgba(0, 0, 0, 0.15);
+  background: rgb(255 255 255 / 0.25);
 }
 
 .app-header__name {
   margin: 0 2px;
+}
+
+// Phones: the sun stands in for the name so the links fit.
+@media (max-width: 520px) {
+  .app-header {
+    padding: 0 8px;
+  }
+
+  .app-header__brand {
+    margin-right: 4px;
+  }
+
+  .app-header__site-name {
+    display: none;
+  }
 }

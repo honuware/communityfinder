@@ -1,6 +1,22 @@
+// Header on top, footer at the bottom of the window even on a short page.
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
 .app-content {
   display: block;
-  padding: 1.5rem;
-  max-width: 960px;
+  flex: 1 0 auto;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1000px;
   margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+@media (max-width: 600px) {
+  .app-content {
+    padding: 1.25rem 1rem 2rem;
+  }
 }

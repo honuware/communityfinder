@@ -1,5 +1,60 @@
+// A deep plum band to close the page, matching the header.
 .app-footer {
-  padding: 1rem 1.5rem;
+  margin-top: 2rem;
+  color: rgb(255 255 255 / 0.85);
+  background: color-mix(in srgb, var(--theme-primary) 35%, var(--theme-ink));
+
+  a {
+    color: inherit;
+    text-decoration: none;
+
+    &:hover {
+      color: var(--theme-on-primary);
+      text-decoration: underline;
+    }
+  }
+}
+
+.app-footer__inner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px 32px;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 1.25rem;
+  box-sizing: border-box;
+}
+
+.app-footer__about {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 360px;
+}
+
+.app-footer__name {
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--theme-on-primary);
+}
+
+.app-footer__tagline {
+  font-size: 0.9rem;
+}
+
+.app-footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px 20px;
+  font-size: 0.95rem;
+}
+
+.app-footer__legal {
+  padding: 0.75rem 1.5rem 1.25rem;
+  font-size: 0.8rem;
   text-align: center;
-  opacity: 0.7;
+  color: rgb(255 255 255 / 0.6);
 }

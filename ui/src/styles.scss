@@ -4,25 +4,121 @@
 // requirement (plan 3.1). Uses the Material 3 `mat.theme` mixin.
 @use '@angular/material' as mat;
 
+// The brand, as CSS variables named after honuware's tenant-theming token
+// catalog (Token Catalog v1), so RT1 can change the values (or serve them per
+// community) without touching a component. Static app-side branding until CF
+// takes up that machinery (EV2 §5). Everything below derives from these.
+:root {
+  --theme-primary: #5e2a8c; // plum
+  --theme-on-primary: #ffffff;
+  --theme-accent: #e8613c; // sunset coral
+  --theme-on-accent: #ffffff;
+  --theme-neutral: #5f5670; // secondary text
+  --theme-ink: #241b2f;
+  --theme-surface: #ffffff; // cards, menus, dialogs
+  --theme-surface-tint: #f3ecf8; // lavender: chips, quiet fills
+  --theme-background: #fbf7f2; // warm cream page, so white cards stand out
+  --theme-border: #e6ddd3;
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-heading: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-pill: 9999px;
+
+  // The sunset-to-violet stripe under the header and the home page's hero.
+  --brand-stripe: linear-gradient(
+    90deg,
+    #e8613c,
+    #f2a541,
+    #f4d35e,
+    #5fb49c,
+    #4a7bd0,
+    #8e5bc5
+  );
+  --shadow-raised: 0 6px 18px rgb(36 27 47 / 0.08);
+}
+
 html {
   color-scheme: light;
   @include mat.theme((
     color: (
       theme-type: light,
-      primary: mat.$azure-palette,
-      tertiary: mat.$blue-palette,
+      primary: mat.$violet-palette,
+      tertiary: mat.$orange-palette,
     ),
-    typography: Roboto,
+    typography: (
+      plain-family: var(--font-body),
+      brand-family: var(--font-heading),
+      bold-weight: 600,
+    ),
     density: 0,
+  ));
+
+  // Point Material's system colors at the brand. Every component stylesheet
+  // reads --mat-sys-*, so this recolors the whole app. (theme-overrides drops
+  // any name it doesn't know, silently.)
+  @include mat.theme-overrides((
+    primary: var(--theme-primary),
+    on-primary: var(--theme-on-primary),
+    primary-container: var(--theme-surface-tint),
+    on-primary-container: var(--theme-primary),
+    secondary-container: var(--theme-surface-tint),
+    on-secondary-container: var(--theme-primary),
+    tertiary: var(--theme-accent),
+    on-tertiary: var(--theme-on-accent),
+    tertiary-container: color-mix(in srgb, var(--theme-accent) 14%, var(--theme-surface)),
+    on-tertiary-container: color-mix(in srgb, var(--theme-accent) 55%, var(--theme-ink)),
+    background: var(--theme-background),
+    on-background: var(--theme-ink),
+    surface: var(--theme-surface),
+    on-surface: var(--theme-ink),
+    on-surface-variant: var(--theme-neutral),
+    surface-container-lowest: var(--theme-surface),
+    surface-container-low: var(--theme-surface),
+    surface-container: color-mix(in srgb, var(--theme-surface-tint) 55%, var(--theme-surface)),
+    surface-container-high: var(--theme-surface-tint),
+    surface-container-highest: color-mix(in srgb, var(--theme-primary) 12%, var(--theme-surface)),
+    outline: color-mix(in srgb, var(--theme-neutral) 70%, var(--theme-surface)),
+    outline-variant: var(--theme-border),
   ));
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: Roboto, "Helvetica Neue", sans-serif;
-  background: var(--mat-sys-surface);
-  color: var(--mat-sys-on-surface);
+  font-family: var(--font-body);
+  background: var(--theme-background);
+  color: var(--theme-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.01em;
+}
+
+// Page titles a size up from Material's headline-small.
+body.mat-typography h1 {
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+a {
+  color: var(--mat-sys-primary);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--theme-accent) 30%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
 }
 
 // "Back to the admin dashboard" link at the top of each admin sub-page.
@@ -32,12 +128,13 @@ body {
 
 // Neighborhood / category / scene chips on the events pages: small links to
 // that filtered list. Global because the event row, the detail page and the
-// series page all show them.
+// series page all show them. Neighborhoods are lavender; tags are coral.
 .event-chip {
   display: inline-block;
   padding: 2px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-pill);
   font-size: 0.8rem;
+  font-weight: 500;
   line-height: 1.5;
   text-decoration: none;
   color: var(--mat-sys-on-secondary-container);
@@ -49,8 +146,8 @@ body {
 }
 
 .event-chip--tag {
-  color: var(--mat-sys-on-surface-variant);
-  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-tertiary-container);
+  background: var(--mat-sys-tertiary-container);
 }
 
 // Toast/snackbar accents (mirrors knottyyoga's convention; @honuware/ui's

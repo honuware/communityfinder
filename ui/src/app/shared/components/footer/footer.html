@@ -1,3 +1,19 @@
 <footer class="app-footer">
-  <span>&copy; {{ year }} {{ siteName }}</span>
+  <div class="app-footer__inner">
+    <div class="app-footer__about">
+      <span class="app-footer__name">{{ siteName }}</span>
+      <span class="app-footer__tagline">
+        What's on, where to go and who to meet in Seattle and King County.
+      </span>
+    </div>
+    <nav class="app-footer__links" aria-label="Site">
+      <a routerLink="/events">Events</a>
+      <a routerLink="/events/calendar">Calendar</a>
+      <a routerLink="/events/series">Recurring</a>
+      <a routerLink="/guide">Guide</a>
+      <a routerLink="/guide/venues">Venues</a>
+      <a routerLink="/guide/orgs">Organizations</a>
+    </nav>
+  </div>
+  <div class="app-footer__legal">&copy; {{ year }} {{ siteName }}</div>
 </footer>

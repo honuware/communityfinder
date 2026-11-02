@@ -12,12 +12,13 @@
 .scene-chips__chip {
   display: inline-block;
   padding: 2px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-pill);
   font-size: 0.8rem;
+  font-weight: 500;
   line-height: 1.5;
   text-decoration: none;
-  color: var(--mat-sys-on-surface-variant);
-  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-tertiary-container);
+  background: var(--mat-sys-tertiary-container);
 
   &:hover {
     text-decoration: underline;

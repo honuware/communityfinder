@@ -4,6 +4,8 @@
 }
 
 .series-index__list {
+  display: grid;
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -13,17 +15,26 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  padding: 14px 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--radius-card);
+  background: var(--mat-sys-surface);
 }
 
 .series-index__name {
-  font-size: 1.05rem;
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
   font-weight: 600;
   color: inherit;
+  text-decoration: none;
+
+  &:hover {
+    color: var(--mat-sys-primary);
+    text-decoration: underline;
+  }
 }
 
 .series-index__when,
 .series-index__empty {
-  opacity: 0.8;
+  color: var(--mat-sys-on-surface-variant);
 }
