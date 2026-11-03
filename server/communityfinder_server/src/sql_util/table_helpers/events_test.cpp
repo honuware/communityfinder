@@ -1,14 +1,19 @@
 #include "events.h"
 
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include <gtest/gtest.h>
 
 #include "db_schema/event_sources.h"
+#include "db_schema/event_submissions.h"
 #include "db_schema/events.h"
 #include "db_schema/series.h"
 #include "event_sources.h"
+#include "event_submissions.h"
 #include "series.h"
+#include "sql_util/database_access/database_crud_helpers.h"
 #include "test/src/util/database_test_helper.h"
 #include "util/types.h"
 
@@ -48,6 +53,25 @@ int64_t AddSource(Transaction& transaction, DatabaseHelper databaseHelper,
 
 std::string IdOf(const KeyValueTable& row) {
     return row.at(std::string(DbSchema::kEventsId));
+}
+
+int64_t AddSubmission(Transaction& transaction, DatabaseHelper databaseHelper,
+                      int64_t personId) {
+    EventSubmissions submissions(databaseHelper);
+    return submissions.AddSubmission(transaction, {
+        { std::string(DbSchema::kEventSubmissionsSubmittedByPersonId),
+          StringFromInt(personId) },
+    });
+}
+
+// A date as EV3's Submit writes it: pending, user_submitted, on its envelope.
+KeyValueTable MakeSubmittedEvent(std::string_view title, int64_t startsAtUs,
+                                 int64_t submissionId) {
+    KeyValueTable values = MakeEvent(title, startsAtUs);
+    values[std::string(DbSchema::kEventsSubmissionId)] = StringFromInt(submissionId);
+    values[std::string(DbSchema::kEventsOrigin)] =
+        std::string(DbSchema::kEventsOriginUserSubmitted);
+    return values;
 }
 
 TEST(EventsTest, AddAndGetWithTheDefaults) {
@@ -217,6 +241,151 @@ TEST(EventsTest, UpdateBumpsUpdatedUsAndCanClearAColumn) {
         EXPECT_EQ(row.at(std::string(DbSchema::kEventsReviewNotes)), "Checked the venue page");
         EXPECT_TRUE(row.at(std::string(DbSchema::kEventsEndsAtUs)).empty());
         EXPECT_GT(std::stoll(row.at(std::string(DbSchema::kEventsUpdatedUs))), 0);
+    });
+}
+
+// --- EV3: submitted events ---------------------------------------------------
+
+TEST(EventsTest, GetEventsBySubmissionReturnsEveryStatusInStartOrder) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction(
+        "GetEventsBySubmissionReturnsEveryStatusInStartOrder", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        Events events(databaseHelper);
+        int64_t submission = AddSubmission(transaction, databaseHelper, 42);
+        int64_t other = AddSubmission(transaction, databaseHelper, 42);
+        int64_t third = events.AddEvent(transaction, MakeSubmittedEvent("Third", 3000, submission));
+        int64_t first = events.AddEvent(
+            transaction,
+            WithStatus(MakeSubmittedEvent("First", 1000, submission),
+                       DbSchema::kEventsStatusApproved));
+        int64_t second = events.AddEvent(
+            transaction,
+            WithStatus(MakeSubmittedEvent("Second", 2000, submission),
+                       DbSchema::kEventsStatusRejected));
+        events.AddEvent(transaction, MakeSubmittedEvent("Another submission", 1500, other));
+        events.AddEvent(transaction, MakeEvent("Not submitted", 1500));
+
+        KeyValueTableArray rows = events.GetEventsBySubmission(transaction, submission);
+        ASSERT_EQ(rows.size(), 3u);
+        EXPECT_EQ(IdOf(rows[0]), StringFromInt(first));
+        EXPECT_EQ(IdOf(rows[1]), StringFromInt(second));
+        EXPECT_EQ(IdOf(rows[2]), StringFromInt(third));
+    });
+}
+
+TEST(EventsTest, GetEventsBySubmissionsGroupsBySubmissionThenStart) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction(
+        "GetEventsBySubmissionsGroupsBySubmissionThenStart", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        Events events(databaseHelper);
+        int64_t a = AddSubmission(transaction, databaseHelper, 42);
+        int64_t b = AddSubmission(transaction, databaseHelper, 42);
+        int64_t skipped = AddSubmission(transaction, databaseHelper, 42);
+        int64_t bLate = events.AddEvent(transaction, MakeSubmittedEvent("B late", 5000, b));
+        int64_t aLate = events.AddEvent(transaction, MakeSubmittedEvent("A late", 4000, a));
+        int64_t bEarly = events.AddEvent(transaction, MakeSubmittedEvent("B early", 1000, b));
+        int64_t aEarly = events.AddEvent(transaction, MakeSubmittedEvent("A early", 2000, a));
+        events.AddEvent(transaction, MakeSubmittedEvent("Not asked for", 1000, skipped));
+
+        KeyValueTableArray rows = events.GetEventsBySubmissions(transaction, {b, a, 999999});
+        ASSERT_EQ(rows.size(), 4u);
+        // Ordered by submission id, so a's dates come first whatever the input order.
+        EXPECT_EQ(IdOf(rows[0]), StringFromInt(aEarly));
+        EXPECT_EQ(IdOf(rows[1]), StringFromInt(aLate));
+        EXPECT_EQ(IdOf(rows[2]), StringFromInt(bEarly));
+        EXPECT_EQ(IdOf(rows[3]), StringFromInt(bLate));
+
+        EXPECT_TRUE(events.GetEventsBySubmissions(transaction, {}).empty());
+    });
+}
+
+// The pending-dates rate limit counts only the person's own submitted dates
+// that are still waiting: not decided ones, not someone else's, and not events
+// they entered some other way.
+TEST(EventsTest, CountPendingSubmittedByCountsOnlyTheirWaitingSubmittedDates) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction(
+        "CountPendingSubmittedByCountsOnlyTheirWaitingSubmittedDates",
+        [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        Events events(databaseHelper);
+        int64_t first = AddSubmission(transaction, databaseHelper, 42);
+        int64_t second = AddSubmission(transaction, databaseHelper, 42);
+        int64_t someoneElse = AddSubmission(transaction, databaseHelper, 43);
+        events.AddEvent(transaction, MakeSubmittedEvent("Waiting 1", 1000, first));
+        events.AddEvent(transaction, MakeSubmittedEvent("Waiting 2", 2000, first));
+        events.AddEvent(transaction, MakeSubmittedEvent("Waiting 3", 3000, second));
+        events.AddEvent(transaction,
+                        WithStatus(MakeSubmittedEvent("Listed", 4000, second),
+                                   DbSchema::kEventsStatusApproved));
+        events.AddEvent(transaction,
+                        WithStatus(MakeSubmittedEvent("Not listed", 5000, second),
+                                   DbSchema::kEventsStatusRejected));
+        events.AddEvent(transaction, MakeSubmittedEvent("Theirs", 1000, someoneElse));
+        // Entered by person 42 in the admin editor: pending, but not a submission.
+        KeyValueTable handEntered = MakeEvent("Hand-entered", 1000);
+        handEntered[std::string(DbSchema::kEventsCreatedByPersonId)] = "42";
+        events.AddEvent(transaction, handEntered);
+
+        EXPECT_EQ(events.CountPendingSubmittedBy(transaction, 42), 3);
+        EXPECT_EQ(events.CountPendingSubmittedBy(transaction, 43), 1);
+        EXPECT_EQ(events.CountPendingSubmittedBy(transaction, 44), 0);
+    });
+}
+
+TEST(EventsTest, GetEventsStartingBetweenIsHalfOpenAcrossTheGivenStatuses) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction(
+        "GetEventsStartingBetweenIsHalfOpenAcrossTheGivenStatuses",
+        [&](Transaction& transaction) {
+        Events events(testDb.GetDatabaseHelper());
+        int64_t pending = events.AddEvent(transaction, MakeEvent("Pending", 1500));
+        int64_t approved = events.AddEvent(
+            transaction, WithStatus(MakeEvent("Approved", 1000), DbSchema::kEventsStatusApproved));
+        events.AddEvent(
+            transaction, WithStatus(MakeEvent("Rejected", 1200), DbSchema::kEventsStatusRejected));
+        events.AddEvent(
+            transaction, WithStatus(MakeEvent("Archived", 1300), DbSchema::kEventsStatusArchived));
+        events.AddEvent(transaction, MakeEvent("Before", 999));
+        events.AddEvent(transaction, MakeEvent("At to", 2000));
+
+        const std::vector<std::string_view> statuses = {
+            DbSchema::kEventsStatusPending, DbSchema::kEventsStatusApproved };
+        KeyValueTableArray rows = events.GetEventsStartingBetween(transaction, 1000, 2000, statuses);
+        ASSERT_EQ(rows.size(), 2u);
+        EXPECT_EQ(IdOf(rows[0]), StringFromInt(approved));
+        EXPECT_EQ(IdOf(rows[1]), StringFromInt(pending));
+
+        EXPECT_TRUE(events.GetEventsStartingBetween(transaction, 1000, 2000, {}).empty());
+        // A status that matches nothing still makes a valid array.
+        EXPECT_TRUE(events.GetEventsStartingBetween(
+            transaction, 1000, 2000, {"no \"such\" status"}).empty());
+    });
+}
+
+// EV3 §1.2: events.submission_id is a real FK, so deleting a spam submission
+// deletes its dates. Events from elsewhere are untouched.
+TEST(EventsTest, DeletingASubmissionDeletesItsDates) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("DeletingASubmissionDeletesItsDates", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        Events events(databaseHelper);
+        int64_t spam = AddSubmission(transaction, databaseHelper, 42);
+        int64_t kept = AddSubmission(transaction, databaseHelper, 43);
+        int64_t spamA = events.AddEvent(transaction, MakeSubmittedEvent("Spam A", 1000, spam));
+        int64_t spamB = events.AddEvent(transaction, MakeSubmittedEvent("Spam B", 2000, spam));
+        int64_t keptDate = events.AddEvent(transaction, MakeSubmittedEvent("Real", 1000, kept));
+        int64_t notSubmitted = events.AddEvent(transaction, MakeEvent("Hand-entered", 1000));
+
+        DbCrud::DeleteRow(transaction, databaseHelper, DbSchema::kEventSubmissionsTable,
+                          DbSchema::kEventSubmissionsId, StringFromInt(spam));
+
+        EXPECT_TRUE(events.GetEvent(transaction, spamA).empty());
+        EXPECT_TRUE(events.GetEvent(transaction, spamB).empty());
+        EXPECT_FALSE(events.GetEvent(transaction, keptDate).empty());
+        EXPECT_FALSE(events.GetEvent(transaction, notSubmitted).empty());
     });
 }
 

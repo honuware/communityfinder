@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string_view>
+#include <vector>
 
 #include "sql_util/database_access/database_helper.h"
 #include "sql_util/database_common.h"
@@ -42,6 +43,30 @@ public:
 
     // READ — the review queue: pending events, soonest first (then id).
     KeyValueTableArray GetPendingEvents(Transaction& transaction) const;
+
+    // READ — EV3: one submission's dates in every status, ordered by start then
+    // id.
+    KeyValueTableArray GetEventsBySubmission(
+        Transaction& transaction, int64_t submissionId) const;
+
+    // READ — EV3: many submissions' dates in one query ("My submissions", the
+    // grouped queue), ordered by submission, then start, then id. Empty input,
+    // empty result.
+    KeyValueTableArray GetEventsBySubmissions(
+        Transaction& transaction, const std::vector<int64_t>& submissionIds) const;
+
+    // READ — EV3's pending-dates rate limit: how many dates are still waiting
+    // for review across every submission the person sent. Counted through the
+    // submission, not created_by_person_id, so an admin's own ingested or
+    // hand-entered pending events never count against their submissions.
+    int64_t CountPendingSubmittedBy(Transaction& transaction, int64_t personId) const;
+
+    // READ — EV3's duplicate-hint scan: events in any of `statuses` starting in
+    // [fromUs, toUs), ordered by start then id. Shaped for the
+    // (status, starts_at_us) index. No statuses, no rows.
+    KeyValueTableArray GetEventsStartingBetween(
+        Transaction& transaction, int64_t fromUs, int64_t toUs,
+        const std::vector<std::string_view>& statuses) const;
 
     // UPDATE — bumps updated_us. A value of "NULL" clears a nullable column.
     void UpdateEvent(Transaction& transaction, int64_t id, const KeyValueTable& updates);

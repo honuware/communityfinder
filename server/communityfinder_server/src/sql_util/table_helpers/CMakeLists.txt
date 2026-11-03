@@ -12,6 +12,8 @@ target_sources(communityfinder_core PRIVATE
     event_scene_tag_assignments.cpp
     event_sources.h
     event_sources.cpp
+    event_submissions.h
+    event_submissions.cpp
     events.h
     events.cpp
     guide_links.h
@@ -54,6 +56,7 @@ target_sources(communityfinder_test_cases PUBLIC
     event_category_assignments_test.cpp
     event_scene_tag_assignments_test.cpp
     event_sources_test.cpp
+    event_submissions_test.cpp
     events_test.cpp
     guide_links_test.cpp
     guide_page_scene_tag_assignments_test.cpp
