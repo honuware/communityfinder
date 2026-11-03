@@ -10,6 +10,8 @@ target_sources(communityfinder_core PRIVATE
     event_scene_tag_assignments.cpp
     event_sources.h
     event_sources.cpp
+    event_submissions.h
+    event_submissions.cpp
     events.h
     events.cpp
     freshness.h

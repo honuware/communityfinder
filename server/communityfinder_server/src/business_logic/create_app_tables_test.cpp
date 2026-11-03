@@ -19,6 +19,7 @@
 #include "db_schema/event_category_assignments.h"
 #include "db_schema/event_scene_tag_assignments.h"
 #include "db_schema/event_sources.h"
+#include "db_schema/event_submissions.h"
 #include "db_schema/events.h"
 #include "db_schema/guide_links.h"
 #include "db_schema/guide_page_scene_tag_assignments.h"
@@ -63,7 +64,8 @@ void SeedAsRecreateDatabaseDoes(Transaction& transaction, TestDatabaseUtil& test
     PopulateAppTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
 }
 
-// EV1's eleven tables — the ones manage_events reaches in the admin editor.
+// EV1's eleven tables plus EV3's submissions — the twelve manage_events reaches
+// in the admin editor.
 const std::set<std::string> kEventsDomainTables = {
     std::string(DbSchema::kCategoriesTable),
     std::string(DbSchema::kSceneTagsTable),
@@ -71,6 +73,7 @@ const std::set<std::string> kEventsDomainTables = {
     std::string(DbSchema::kVenuesTable),
     std::string(DbSchema::kEventSourcesTable),
     std::string(DbSchema::kSeriesTable),
+    std::string(DbSchema::kEventSubmissionsTable),
     std::string(DbSchema::kEventsTable),
     std::string(DbSchema::kEventCategoryAssignmentsTable),
     std::string(DbSchema::kEventSceneTagAssignmentsTable),
@@ -307,6 +310,8 @@ TEST(CreateAppTablesTest, RegistersEveryAppTableWithTheAdminEditor) {
         EXPECT_EQ(displayTemplate(DbSchema::kEventSourcesTable), "{name}");
         EXPECT_EQ(displayTemplate(DbSchema::kSeriesTable), "{title}");
         EXPECT_EQ(displayTemplate(DbSchema::kEventsTable), "{title}");
+        // A submission has no title of its own; its dates do.
+        EXPECT_EQ(displayTemplate(DbSchema::kEventSubmissionsTable), "Submission #{id}");
 
         // The verification stamp edits as a date, and the bookkeeping
         // timestamps cannot be edited at all.
@@ -349,15 +354,17 @@ TEST(CreateAppTablesTest, NestsTheAssignmentTablesUnderTheirParents) {
         for (std::string_view table : kAssignmentTables) {
             EXPECT_EQ(nested.count(std::string(table)), 1u) << table;
         }
-        // The parents themselves are not nested.
+        // The parents themselves are not nested. Nor is a submission: the FK
+        // runs from its events to it, so nothing could nest it.
         EXPECT_EQ(nested.count(std::string(DbSchema::kEventsTable)), 0u);
         EXPECT_EQ(nested.count(std::string(DbSchema::kSeriesTable)), 0u);
+        EXPECT_EQ(nested.count(std::string(DbSchema::kEventSubmissionsTable)), 0u);
     });
 }
 
 // EV1 §2.6: manage_events exists, the Administrator role holds it, and it opens
-// exactly the eleven events-domain tables in the generic CRUD editor — so a
-// future curator role can work without being a full admin.
+// exactly the twelve events-domain tables (EV3 added submissions) in the generic
+// CRUD editor — so a future curator role can work without being a full admin.
 TEST(CreateAppTablesTest, GrantsManageEventsToTheAdministratorRole) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction("ManageEvents", [&](Transaction& transaction) {
@@ -404,8 +411,9 @@ TEST(CreateAppTablesTest, EnablesPhotosForVenuesAndEvents) {
 }
 
 // The generic table reads serve allowed_tables to anyone. Pending and rejected
-// events, review notes, and source scan notes must never be among them; the
-// public sees approved events only, through the events endpoints.
+// events, review notes, source scan notes, and who submitted what (GD1 §6.9)
+// must never be among them; the public sees approved events only, through the
+// events endpoints.
 TEST(CreateAppTablesTest, KeepsTheEventPipelineOffThePublicList) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction("PipelineNotPublic", [&](Transaction& transaction) {
@@ -415,7 +423,7 @@ TEST(CreateAppTablesTest, KeepsTheEventPipelineOffThePublicList) {
             transaction, DbSchema::kAllowedTablesTable, DbSchema::kAllowedTablesName);
         for (std::string_view table :
              {DbSchema::kEventSourcesTable, DbSchema::kSeriesTable,
-              DbSchema::kEventsTable}) {
+              DbSchema::kEventSubmissionsTable, DbSchema::kEventsTable}) {
             EXPECT_EQ(allowed.count(std::string(table)), 0u) << table;
         }
         for (std::string_view table : kAssignmentTables) {
@@ -455,6 +463,41 @@ TEST(CreateAppTablesTest, DescribesEveryColumnOfEveryAppTable) {
                 }
             }
         }
+    });
+}
+
+// EV3 §1.3: a curator can correct a submission's note, reason, or message in the
+// editor, but not who sent it, which submission a date came in on, or when the
+// decision email went out — the pipeline writes those.
+TEST(CreateAppTablesTest, KeepsTheSubmissionPipelineColumnsReadOnly) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("SubmissionColumns", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        for (std::string_view column :
+             {DbSchema::kEventSubmissionsSubmittedByPersonId,
+              DbSchema::kEventSubmissionsDecisionNotifiedUs}) {
+            EXPECT_EQ(ColumnDataInfo(transaction, "readonly",
+                                     DbSchema::kEventSubmissionsTable, column),
+                      "true")
+                << column;
+        }
+        EXPECT_EQ(ColumnDataInfo(transaction, "readonly", DbSchema::kEventsTable,
+                                 DbSchema::kEventsSubmissionId),
+                  "true");
+        for (std::string_view column :
+             {DbSchema::kEventSubmissionsSubmitterNote,
+              DbSchema::kEventSubmissionsRejectReason,
+              DbSchema::kEventSubmissionsMessageToSubmitter}) {
+            EXPECT_NE(ColumnDataInfo(transaction, "readonly",
+                                     DbSchema::kEventSubmissionsTable, column),
+                      "true")
+                << column;
+        }
+        EXPECT_EQ(ColumnDataInfo(transaction, "html_input_type",
+                                 DbSchema::kEventSubmissionsTable,
+                                 DbSchema::kEventSubmissionsDecisionNotifiedUs),
+                  "date");
     });
 }
 

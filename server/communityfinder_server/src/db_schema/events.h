@@ -35,6 +35,9 @@ namespace DbSchema {
 	// two hand-entered events credited to the same source never collide on the
 	// (source_id, external_key) constraint below.
 	inline constexpr std::string_view kEventsExternalKey = "external_key";
+	// The EV3 submission this date came in on; NULL for everything else. A real
+	// FK, so deleting a spam submission deletes its dates with it.
+	inline constexpr std::string_view kEventsSubmissionId = "submission_id";
 	inline constexpr std::string_view kEventsOrigin = "origin";
 	inline constexpr std::string_view kEventsStatus = "status";
 	// The two person columns hold a people.id but are not FKs, so deleting an
@@ -50,7 +53,7 @@ namespace DbSchema {
 
 	inline constexpr std::string_view kEventsOriginScanned = "scanned";
 	inline constexpr std::string_view kEventsOriginManual = "manual";
-	// Reserved for EV3's public submission form.
+	// EV3's public submission form.
 	inline constexpr std::string_view kEventsOriginUserSubmitted = "user_submitted";
 
 	inline constexpr std::string_view kEventsStatusPending = "pending";

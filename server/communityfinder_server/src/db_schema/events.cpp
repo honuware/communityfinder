@@ -3,6 +3,7 @@
 #include <string>
 
 #include "event_sources.h"
+#include "event_submissions.h"
 #include "series.h"
 #include "venues.h"
 
@@ -73,6 +74,11 @@ namespace DbSchema {
 			kEventsSourceIdExternalKeyUnique,
 			kEventsSourceId,
 			kEventsExternalKey);
+		databaseInfo.AddColumnForeignKeyRefNullable(
+			kEventSubmissionsTable,
+			kEventSubmissionsId,
+			kEventsTable,
+			kEventsSubmissionId);
 		// Manual by default: a row added in the admin editor is hand-entered.
 		// The ingest and EV3's submission form set their origin explicitly.
 		databaseInfo.AddColumnNotNullableWithDefault(
@@ -147,6 +153,11 @@ namespace DbSchema {
 		transaction.RunSqlStatement(
 			"CREATE INDEX IF NOT EXISTS events_venue_idx "
 			"ON events (venue_id)");
+		// A submission's dates (EV3's "My submissions" and the grouped queue) —
+		// and the cascade when a submission is deleted.
+		transaction.RunSqlStatement(
+			"CREATE INDEX IF NOT EXISTS events_submission_idx "
+			"ON events (submission_id)");
 	}
 
 }  // namespace DbSchema

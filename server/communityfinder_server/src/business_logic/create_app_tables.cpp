@@ -18,6 +18,7 @@
 #include "db_schema/event_category_assignments.h"
 #include "db_schema/event_scene_tag_assignments.h"
 #include "db_schema/event_sources.h"
+#include "db_schema/event_submissions.h"
 #include "db_schema/events.h"
 #include "db_schema/guide_links.h"
 #include "db_schema/guide_page_scene_tag_assignments.h"
@@ -298,6 +299,17 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesCreatedUs, "Created", "When this series was created", "date", "false", "true");
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesUpdatedUs, "Updated", "When this series was last updated", "date", "false", "true");
 
+        // EV3. Who submitted, and when it was emailed, are facts, not choices.
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsSubmittedByPersonId, "Submitted By", "The person who sent it in (people.id). Never shown on the public site.", "number", "false", "true");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsSubmitterNote, "Note to Curators", "What the submitter told us about it", "long-text", "false");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsRelationship, "Relationship", "How the submitter knows about it: organizer | venue | performer | attendee | other", "text", "true");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsRegularThing, "Regular Thing", "The submitter says it happens regularly; consider making a series", "bool", "true");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsRejectReason, "Reject Reason", "Why its dates were not listed: duplicate | not-a-fit | missing-details | past | spam | other, or withdrawn (by the submitter) or expired (the dates passed before review). Empty while nothing is rejected.", "text", "false");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsMessageToSubmitter, "Message to Submitter", "Included in the decision email and shown on their My submissions page", "long-text", "false");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsDecisionNotifiedUs, "Decision Emailed", "When the decision email was sent; empty until every date is decided", "date", "false", "true");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsCreatedUs, "Created", "When this submission was sent in", "date", "false", "true");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsUpdatedUs, "Updated", "When this submission was last updated", "date", "false", "true");
+
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsTitle, "Title", "Name of the event", "text", "true");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsDescription, "Description", "What the event is", "text", "false");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsStartsAtUs, "Starts", "When it starts", "date", "true");
@@ -309,6 +321,7 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsSourceId, "Source", "The source it was ingested from (event_sources.id); empty for hand-entered events", "number", "false");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsSeriesId, "Series", "The series this is an instance of (series.id); empty for a one-off", "number", "false");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsExternalKey, "External Key", "The source's own id for this item, set by the ingest. Leave empty for hand-entered events.", "text", "false");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsSubmissionId, "Submission", "The public submission this date came in on (event_submissions.id); empty for everything else", "number", "false", "true");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsOrigin, "Origin", "scanned | manual | user_submitted", "text", "true");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsStatus, "Status", "pending | approved | rejected | archived. Only approved events are public.", "text", "true");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsCreatedByPersonId, "Created By", "The person who entered it (people.id)", "number", "false", "true");
@@ -528,6 +541,17 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesCreatedUs, "Created");
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesUpdatedUs, "Updated");
 
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsId, "ID");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsSubmittedByPersonId, "Submitted By");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsSubmitterNote, "Note to Curators");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsRelationship, "Relationship");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsRegularThing, "Regular Thing");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsRejectReason, "Reject Reason");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsMessageToSubmitter, "Message to Submitter");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsDecisionNotifiedUs, "Decision Emailed");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsCreatedUs, "Created");
+        AddRow(DbSchema::kEventSubmissionsTable, DbSchema::kEventSubmissionsUpdatedUs, "Updated");
+
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsId, "ID");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsTitle, "Title");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsDescription, "Description");
@@ -540,6 +564,7 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsSourceId, "Source");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsSeriesId, "Series");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsExternalKey, "External Key");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsSubmissionId, "Submission");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsOrigin, "Origin");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsStatus, "Status");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsCreatedByPersonId, "Created By");
@@ -691,6 +716,7 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kVenuesTable, "Venues", "Places events happen. The guide's venue profiles attach to these.");
         AddRow(DbSchema::kEventSourcesTable, "Event Sources", "Where events come from (feeds, venue sites, ticketing orgs) and how often each is re-scanned.");
         AddRow(DbSchema::kSeriesTable, "Event Series", "Recurring events' durable pages, e.g. T4T, 2nd Saturdays. Instances inherit a series' categories and scene tags.");
+        AddRow(DbSchema::kEventSubmissionsTable, "Event Submissions", "Events sent in through the public form: who sent them, their note, and how they were decided. Each date is its own pending event. Curators only; never shown publicly.");
         AddRow(DbSchema::kEventsTable, "Events", "One row per dated occurrence. Only approved events are public.");
         AddRow(DbSchema::kEventCategoryAssignmentsTable, "Event Categories", "An event's own categories. When an event has any, they replace its series' categories.");
         AddRow(DbSchema::kEventSceneTagAssignmentsTable, "Event Scene Tags", "An event's own scene tags. When an event has any, they replace its series' scene tags.");
@@ -724,6 +750,8 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kVenuesTable, "{name}");
         AddRow(DbSchema::kEventSourcesTable, "{name}");
         AddRow(DbSchema::kSeriesTable, "{title}");
+        // A submission has no title of its own (its dates do).
+        AddRow(DbSchema::kEventSubmissionsTable, "Submission #{id}");
         AddRow(DbSchema::kEventsTable, "{title}");
         AddRow(DbSchema::kEventCategoryAssignmentsTable, "{event_id} — {category_id}");
         AddRow(DbSchema::kEventSceneTagAssignmentsTable, "{event_id} — {scene_tag_id}");
@@ -772,9 +800,9 @@ void PopulateAdminMetadata(
     }
 }
 
-// The events domain: EV1's eleven tables. manage_events reaches every one of
-// them in the generic CRUD editor. Listed explicitly rather than taken from
-// AppTableCreationOrder, which will also hold the guide's tables (GD2).
+// The events domain: EV1's eleven tables plus EV3's submissions. manage_events
+// reaches every one of them in the generic CRUD editor. Listed explicitly rather
+// than taken from AppTableCreationOrder, which also holds the guide's tables.
 constexpr std::string_view kEventsDomainTables[] = {
     DbSchema::kCategoriesTable,
     DbSchema::kSceneTagsTable,
@@ -782,6 +810,7 @@ constexpr std::string_view kEventsDomainTables[] = {
     DbSchema::kVenuesTable,
     DbSchema::kEventSourcesTable,
     DbSchema::kSeriesTable,
+    DbSchema::kEventSubmissionsTable,
     DbSchema::kEventsTable,
     DbSchema::kEventCategoryAssignmentsTable,
     DbSchema::kEventSceneTagAssignmentsTable,
@@ -883,6 +912,7 @@ void PopulatePhotoSupportTables(
 // Everything listed holds public display data only — which is why `events` (its
 // pending and rejected rows, and its review notes), `series`, and
 // `event_sources` are not: the public reads those through the events endpoints.
+// Nor is `event_submissions`: who submitted what is never public (GD1 §6.9).
 // No guide table is listed either (GD2 OQ4): a draft guide page must never leak
 // through a generic read, so the public reads the guide through its own
 // endpoints.
@@ -909,6 +939,8 @@ const std::vector<std::string_view>& AppTableCreationOrder() {
         // EV1 Slice 2 — the events core, then the four assignment tables.
         DbSchema::kEventSourcesTable,
         DbSchema::kSeriesTable,
+        // EV3 — the submission envelope, ahead of events (its FK parent).
+        DbSchema::kEventSubmissionsTable,
         DbSchema::kEventsTable,
         DbSchema::kEventCategoryAssignmentsTable,
         DbSchema::kEventSceneTagAssignmentsTable,
@@ -939,6 +971,7 @@ void CreateAppTables(
     // Indexes exist only on a live database — the test harness builds tables
     // from MakeDatabaseInfo and never calls this.
     DbSchema::CreateVenuesIndexes(transaction);
+    DbSchema::CreateEventSubmissionsIndexes(transaction);
     DbSchema::CreateEventsIndexes(transaction);
 }
 

@@ -4,6 +4,7 @@
 #include "event_category_assignments.h"
 #include "event_scene_tag_assignments.h"
 #include "event_sources.h"
+#include "event_submissions.h"
 #include "events.h"
 #include "guide_links.h"
 #include "guide_page_scene_tag_assignments.h"
@@ -38,6 +39,9 @@ namespace DbSchema {
 		// EV1 Slice 2 — the events core, then the four assignment tables.
 		MakeEventSourcesTable(databaseInfo);
 		MakeSeriesTable(databaseInfo);
+		// EV3 — the submission envelope, ahead of events: events.submission_id
+		// is an FK onto it.
+		MakeEventSubmissionsTable(databaseInfo);
 		MakeEventsTable(databaseInfo);
 		MakeEventCategoryAssignmentsTable(databaseInfo);
 		MakeEventSceneTagAssignmentsTable(databaseInfo);

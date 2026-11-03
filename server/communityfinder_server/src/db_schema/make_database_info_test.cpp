@@ -12,6 +12,7 @@
 #include "event_category_assignments.h"
 #include "event_scene_tag_assignments.h"
 #include "event_sources.h"
+#include "event_submissions.h"
 #include "events.h"
 #include "guide_links.h"
 #include "guide_page_scene_tag_assignments.h"
@@ -200,7 +201,7 @@ TEST(MakeDatabaseInfoTest, AppTablesFollowTheFrameworkTables) {
     // MakeAppTables forgot to register.
     for (std::string_view appTable :
          {kCategoriesTable, kSceneTagsTable, kNeighborhoodsTable, kVenuesTable,
-          kEventSourcesTable, kSeriesTable, kEventsTable,
+          kEventSourcesTable, kSeriesTable, kEventSubmissionsTable, kEventsTable,
           kEventCategoryAssignmentsTable, kEventSceneTagAssignmentsTable,
           kSeriesCategoryAssignmentsTable, kSeriesSceneTagAssignmentsTable,
           kVenueProfilesTable, kOrganizationsTable, kPlacesTable,
@@ -351,7 +352,7 @@ TEST(MakeDatabaseInfoTest, EventsCarryTheReviewWorkflowNotTheFreshnessColumns) {
               (std::vector<std::string>{
                   "id", "title", "description", "starts_at_us", "ends_at_us",
                   "venue_id", "location_text", "url", "cost_text", "source_id",
-                  "series_id", "external_key", "origin", "status",
+                  "series_id", "external_key", "submission_id", "origin", "status",
                   "created_by_person_id", "reviewed_by_person_id", "reviewed_us",
                   "review_notes", "created_us", "updated_us"}));
 
@@ -366,8 +367,8 @@ TEST(MakeDatabaseInfoTest, EventsCarryTheReviewWorkflowNotTheFreshnessColumns) {
     EXPECT_FALSE(Column(databaseInfo, kEventsTable, kEventsStartsAtUs).IsNullable());
     for (std::string_view column :
          {kEventsEndsAtUs, kEventsVenueId, kEventsSourceId, kEventsSeriesId,
-          kEventsExternalKey, kEventsCreatedByPersonId, kEventsReviewedByPersonId,
-          kEventsReviewedUs}) {
+          kEventsExternalKey, kEventsSubmissionId, kEventsCreatedByPersonId,
+          kEventsReviewedByPersonId, kEventsReviewedUs}) {
         EXPECT_TRUE(Column(databaseInfo, kEventsTable, column).IsNullable()) << column;
     }
 
@@ -375,6 +376,9 @@ TEST(MakeDatabaseInfoTest, EventsCarryTheReviewWorkflowNotTheFreshnessColumns) {
     EXPECT_EQ(ReferencedColumn(databaseInfo, kEventsTable, kEventsSourceId),
               "event_sources.id");
     EXPECT_EQ(ReferencedColumn(databaseInfo, kEventsTable, kEventsSeriesId), "series.id");
+    // A real FK: deleting a spam submission deletes its dates (EV3 §1.2).
+    EXPECT_EQ(ReferencedColumn(databaseInfo, kEventsTable, kEventsSubmissionId),
+              "event_submissions.id");
     // Deliberately not FKs: honuware FKs cascade, so deleting a person would
     // delete every event they entered or reviewed (OQ8 (e)).
     EXPECT_EQ(ReferencedColumn(databaseInfo, kEventsTable, kEventsCreatedByPersonId), "");
@@ -388,6 +392,57 @@ TEST(MakeDatabaseInfoTest, IngestedEventsAreUniquePerSourceAndExternalKey) {
 
     EXPECT_EQ(UniqueColumns(databaseInfo, kEventsTable, kEventsSourceIdExternalKeyUnique),
               (StringArray{"source_id", "external_key"}));
+}
+
+// EV3 §1.1: the envelope of a public submission. The submitter is required but,
+// like events' person columns, a plain id rather than an FK, so deleting an
+// account never deletes what it submitted. A submission starts undecided: no
+// reason, no message, no email sent.
+TEST(MakeDatabaseInfoTest, EventSubmissionsRecordTheSubmitterAndTheDecision) {
+    DatabaseInfo databaseInfo = MakeDatabaseInfo("test_db");
+
+    EXPECT_EQ(ColumnNames(databaseInfo, kEventSubmissionsTable),
+              (std::vector<std::string>{
+                  "id", "submitted_by_person_id", "submitter_note", "relationship",
+                  "regular_thing", "reject_reason", "message_to_submitter",
+                  "decision_notified_us", "created_us", "updated_us"}));
+
+    EXPECT_FALSE(Column(databaseInfo, kEventSubmissionsTable,
+                        kEventSubmissionsSubmittedByPersonId).IsNullable());
+    EXPECT_EQ(ReferencedColumn(databaseInfo, kEventSubmissionsTable,
+                               kEventSubmissionsSubmittedByPersonId),
+              "");
+
+    EXPECT_EQ(CheckExpression(databaseInfo, kEventSubmissionsTable,
+                              kEventSubmissionsRelationshipCheck),
+              "relationship IN ('organizer', 'venue', 'performer', 'attendee', "
+              "'other')");
+    EXPECT_EQ(DefaultValue(databaseInfo, kEventSubmissionsTable,
+                           kEventSubmissionsRelationship),
+              "'other'");
+    // The six a curator picks, the submitter's withdrawal, and EV4's expiry.
+    EXPECT_EQ(CheckExpression(databaseInfo, kEventSubmissionsTable,
+                              kEventSubmissionsRejectReasonCheck),
+              "reject_reason IN ('duplicate', 'not-a-fit', 'missing-details', "
+              "'past', 'spam', 'other', 'withdrawn', 'expired')");
+    EXPECT_EQ(DefaultValue(databaseInfo, kEventSubmissionsTable,
+                           kEventSubmissionsRegularThing),
+              "FALSE");
+
+    for (std::string_view column :
+         {kEventSubmissionsRejectReason, kEventSubmissionsDecisionNotifiedUs}) {
+        EXPECT_TRUE(Column(databaseInfo, kEventSubmissionsTable, column).IsNullable())
+            << column;
+        EXPECT_EQ(DefaultValue(databaseInfo, kEventSubmissionsTable, column), "")
+            << column;
+    }
+    for (std::string_view column :
+         {kEventSubmissionsSubmitterNote, kEventSubmissionsMessageToSubmitter}) {
+        EXPECT_FALSE(Column(databaseInfo, kEventSubmissionsTable, column).IsNullable())
+            << column;
+        EXPECT_EQ(DefaultValue(databaseInfo, kEventSubmissionsTable, column), "''")
+            << column;
+    }
 }
 
 // EV1 OQ5: events and series each carry category and scene-tag assignments.
