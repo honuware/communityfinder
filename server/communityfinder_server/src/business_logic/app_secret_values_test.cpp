@@ -46,6 +46,13 @@ TEST(AppSecretValuesTest, RegistersBrandDefaultsForFrameworkKeys) {
     EXPECT_FALSE(d[std::string(Secrets::kWebsiteAddressLogin)].empty());
 }
 
+TEST(AppSecretValuesTest, RegistersTheSubmissionSettingDefaults) {
+    auto d = CollectAppDefaults();
+    EXPECT_EQ(d[std::string(Secrets::kEventSubmissionMaxPendingDates)], "10");
+    EXPECT_EQ(d[std::string(Secrets::kEventSubmissionMaxPerDay)], "5");
+    EXPECT_EQ(d[std::string(Secrets::kEventSubmissionsPaused)], "false");
+}
+
 TEST(AppSecretValuesTest, StringVariantMatchesStringViewVariant) {
     auto sv = CollectAppDefaults();
     std::map<std::string, std::string> s;

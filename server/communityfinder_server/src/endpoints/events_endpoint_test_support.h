@@ -12,10 +12,11 @@
 #include "test/src/util/database_test_helper.h"
 #include "util/json_value.h"
 
-// Shared setup for the EV1 events endpoint tests (get_upcoming_events_test,
+// Shared setup for the events endpoint tests (EV1's get_upcoming_events_test,
 // get_event_detail_test, get_event_series_test, admin_ingest_events_test,
-// admin_review_event_test). Plain helpers each test calls at its top — not a
-// fixture.
+// admin_review_event_test, and EV3's event_submissions_test,
+// admin_review_submission_test, admin_event_submission_settings_test). Plain
+// helpers each test calls at its top — not a fixture.
 namespace Endpoints::EventsEndpointTest {
 
 // The places, vocabulary, feed and series the tests share: categories dance /
@@ -50,6 +51,21 @@ int64_t AddEvent(Transaction& transaction, DatabaseHelper databaseHelper, const 
 // manage_events first — at most once per test (it creates a role).
 int64_t SignIn(Transaction& transaction, TestDatabaseUtil& testDb, EndpointTestHelper& helper,
                std::string_view email, bool manageEvents);
+
+// Signs a person SignIn already created back in (a fresh session), so a test
+// can switch between its people.
+void SwitchTo(Transaction& transaction, TestDatabaseUtil& testDb, EndpointTestHelper& helper,
+              std::string_view email);
+
+// A submission of "Sample Dance Night" from `personId` (a person SignIn
+// created), through SubmissionHelper: `dateCount` weekly dates from two days
+// out. Its event ids are the dates, in order.
+struct SampleSubmission {
+    int64_t submissionId = 0;
+    std::vector<int64_t> eventIds;
+};
+SampleSubmission AddSubmission(Transaction& transaction, TestDatabaseUtil& testDb,
+                               EndpointTestHelper& helper, int64_t personId, int dateCount);
 
 // One request through the routes; `query` is "a=1&b=2" without the "?". Shuts
 // the thread pool down before returning: an endpoint's async writes re-enter

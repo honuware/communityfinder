@@ -20,6 +20,9 @@ constexpr std::string_view kSqlCountSince =
     "SELECT count(*) FROM event_submissions "
     "WHERE submitted_by_person_id = $1 AND created_us >= $2";
 
+constexpr std::string_view kSqlGetForUpdate =
+    "SELECT * FROM event_submissions WHERE id = $1 FOR UPDATE";
+
 // The IS NULL guard is what makes the stamp a claim: RETURNING yields a row only
 // when this statement changed it.
 constexpr std::string_view kSqlMarkDecisionNotified =
@@ -48,6 +51,11 @@ KeyValueTable EventSubmissions::GetSubmission(Transaction& transaction, int64_t 
         DbSchema::kEventSubmissionsTable,
         DbSchema::kEventSubmissionsId,
         StringFromInt(id));
+}
+
+KeyValueTable EventSubmissions::GetSubmissionForUpdate(Transaction& transaction, int64_t id) {
+    return transaction.RunSqlStatementReturningOneRow(
+        std::string(kSqlGetForUpdate), StringFromInt(id));
 }
 
 KeyValueTableArray EventSubmissions::GetSubmissionsForPerson(

@@ -23,6 +23,15 @@ public:
     // READ — empty when there is no such submission.
     KeyValueTable GetSubmission(Transaction& transaction, int64_t id) const;
 
+    // READ — GetSubmission, holding the row's lock until the transaction ends.
+    // Every path that decides a submission's dates takes it first, so a second
+    // curator waits and then sees the first one's decisions: without it, two
+    // curators deciding the last two dates at once would each still see the
+    // other's date as pending, and neither would send the decision email.
+    // Taking it before touching the dates also keeps the lock order the same
+    // everywhere (submission, then events), so they can't deadlock.
+    KeyValueTable GetSubmissionForUpdate(Transaction& transaction, int64_t id);
+
     // READ — "My submissions": one person's, newest first (then id). Shaped for
     // the (submitted_by_person_id, created_us) index.
     KeyValueTableArray GetSubmissionsForPerson(

@@ -13,9 +13,12 @@
 // Include each APP endpoint header here as it is added (Phase 4 account surface,
 // Phase 10 events), and add its `anchor = ...` line in RegisterAllEndpoints below.
 #include "admin_create_user.h"
+#include "admin_event_submission_settings.h"
 #include "admin_ingest_events.h"
 #include "admin_reset_password.h"
 #include "admin_review_event.h"
+#include "admin_review_submission.h"
+#include "event_submissions.h"
 #include "get_event_detail.h"
 #include "get_event_ics.h"
 #include "get_event_series.h"
@@ -62,9 +65,14 @@ void RegisterAllEndpoints() {
     static AnchorFunc volatile anchor = nullptr;
     (void)anchor;
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminCreateUser);
+    // Both settings routes (GET and PUT) ride this one anchor.
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetAdminEventSubmissionSettings);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminIngestEvents);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminResetPassword);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminReviewEvent);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminReviewSubmission);
+    // All three submitter routes (submit, mine, withdraw) ride this one anchor.
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostEventSubmission);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEventDetail);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEventICal);
     // One anchor pulls in the whole TU, so both series routes register.

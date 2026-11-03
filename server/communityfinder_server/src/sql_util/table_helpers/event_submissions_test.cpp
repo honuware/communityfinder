@@ -72,6 +72,21 @@ TEST(EventSubmissionsTest, GetSubmissionNotFoundIsEmpty) {
     });
 }
 
+// The lock itself needs two connections to observe; one transaction can check
+// that it reads the same row GetSubmission does (re-locking a held row is fine).
+TEST(EventSubmissionsTest, GetSubmissionForUpdateReadsTheRow) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GetSubmissionForUpdateReadsTheRow", [&](Transaction& transaction) {
+        EventSubmissions submissions(testDb.GetDatabaseHelper());
+        int64_t id = submissions.AddSubmission(transaction, MakeSubmission(42));
+
+        KeyValueTable locked = submissions.GetSubmissionForUpdate(transaction, id);
+        EXPECT_EQ(locked, submissions.GetSubmission(transaction, id));
+        EXPECT_EQ(IdOf(submissions.GetSubmissionForUpdate(transaction, id)), StringFromInt(id));
+        EXPECT_TRUE(submissions.GetSubmissionForUpdate(transaction, 999999).empty());
+    });
+}
+
 TEST(EventSubmissionsTest, GetSubmissionsForPersonIsNewestFirstAndOnlyTheirs) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction(

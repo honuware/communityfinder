@@ -11,8 +11,10 @@
 #include "business_logic/create_app_tables.h"
 #include "business_logic/create_framework_tables.h"
 #include "db_schema/config_secrets.h"
+#include "db_schema/event_submissions.h"
 #include "db_schema/people.h"
 #include "db_schema/roles.h"
+#include "endpoints/events_endpoint_test_support.h"
 #include "sql_util/table_helpers/people.h"
 #include "sql_util/table_helpers/role_assignments.h"
 #include "sql_util/table_helpers/roles.h"
@@ -259,6 +261,38 @@ TEST(CommunityFinderCrudTest, AnonymousCannotReadTheEventPipeline) {
                 helper, crow::HTTPMethod::Get, "/api/get_table_rows/" + table);
             EXPECT_EQ(resp.code, 400) << table << ": " << resp.body;
         }
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// EV3 §4.3: curators read submissions in the generic CRUD editor — there is no
+// bespoke list endpoint — through manage_events' admin_table_permissions row.
+// Who submitted what is never public, so a signed-out visitor and a plain
+// member are refused (400, the generic contract).
+TEST(CommunityFinderCrudTest, OnlyManageEventsReadsEventSubmissions) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("CFEventSubmissionsCrud", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+        const std::string url =
+            "/api/get_table_rows/" + std::string(DbSchema::kEventSubmissionsTable);
+
+        crow::response signedOut = Handle(helper, crow::HTTPMethod::Get, url);
+        EXPECT_EQ(signedOut.code, 400) << signedOut.body;
+
+        int64_t memberId = EventsEndpointTest::SignIn(
+            transaction, testDb, helper, "member@example.com", false);
+        EventsEndpointTest::AddSubmission(transaction, testDb, helper, memberId, 1);
+        crow::response member = Handle(helper, crow::HTTPMethod::Get, url);
+        EXPECT_EQ(member.code, 400) << member.body;
+
+        EventsEndpointTest::SignIn(transaction, testDb, helper, "curator@example.com", true);
+        crow::response curator = Handle(helper, crow::HTTPMethod::Get, url);
+        ASSERT_EQ(curator.code, 200) << curator.body;
+        Json::Value body = Json::Value::FromText(curator.body);
+        EXPECT_EQ(body["dataTable"].GetArray().size(), 1u);
     });
     Auth::ServerConfig::Shutdown();
 }

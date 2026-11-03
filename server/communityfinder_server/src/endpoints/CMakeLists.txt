@@ -1,18 +1,24 @@
 # The app endpoint registration table (web_app.cpp) — anchors the framework
 # endpoints (via honuware's RegisterFrameworkEndpoints) plus the app's own
-# endpoints: the Phase 9 account admin pair, the EV1 events surface and the EV2
-# calendar (ICS) endpoints.
+# endpoints: the Phase 9 account admin pair, the EV1 events surface, the EV2
+# calendar (ICS) endpoints and the EV3 submission pipeline.
 target_sources(communityfinder_core PRIVATE
     endpoint_registrations.h
     web_app.cpp
     admin_create_user.h
     admin_create_user.cpp
+    admin_event_submission_settings.h
+    admin_event_submission_settings.cpp
     admin_ingest_events.h
     admin_ingest_events.cpp
     admin_reset_password.h
     admin_reset_password.cpp
     admin_review_event.h
     admin_review_event.cpp
+    admin_review_submission.h
+    admin_review_submission.cpp
+    event_submissions.h
+    event_submissions.cpp
     events_json.h
     events_json.cpp
     get_event_detail.h
@@ -27,6 +33,8 @@ target_sources(communityfinder_core PRIVATE
     get_upcoming_events.cpp
     register_app_services.h
     register_app_services.cpp
+    review_request_body.h
+    review_request_body.cpp
 )
 
 # Stream B — the guide's public read endpoints (GD2 §4): one TU per resource,
@@ -79,8 +87,11 @@ target_sources(communityfinder_test_cases PUBLIC
     admin_users_test.cpp
     events_endpoint_test_support.h
     events_endpoint_test_support.cpp
+    admin_event_submission_settings_test.cpp
     admin_ingest_events_test.cpp
     admin_review_event_test.cpp
+    admin_review_submission_test.cpp
+    event_submissions_test.cpp
     events_json_test.cpp
     get_event_detail_test.cpp
     get_event_ics_test.cpp

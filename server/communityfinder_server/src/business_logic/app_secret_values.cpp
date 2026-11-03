@@ -33,8 +33,12 @@ inline constexpr std::string_view kWebsiteAddressLoginValue = "http://localhost:
 #endif
 
 // --- Default values for APP-owned domain keys ---
-// None yet — CommunityFinder has no app-specific secret keys (see
-// app_secret_keys.h). Add them here when a domain feature introduces one.
+// EV3's submission settings. They must match the defaults in
+// business_logic/events/submission_settings.h, which a missing row reads as
+// (SubmissionSettingsTest.AppSecretDefaultsMatchTheCodeDefaults pins it).
+inline constexpr std::string_view kEventSubmissionMaxPendingDatesValue = "10";
+inline constexpr std::string_view kEventSubmissionMaxPerDayValue = "5";
+inline constexpr std::string_view kEventSubmissionsPausedValue = "false";
 
 }  // namespace
 
@@ -48,8 +52,11 @@ void FillInAppSecretDefaults(
     addSecret(Secrets::kWebsiteAddress, kWebsiteAddressValue);
     addSecret(Secrets::kWebsiteAddressLogin, kWebsiteAddressLoginValue);
 
-    // App-owned domain keys: none yet.
-    //
+    // App-owned domain keys.
+    addSecret(Secrets::kEventSubmissionMaxPendingDates, kEventSubmissionMaxPendingDatesValue);
+    addSecret(Secrets::kEventSubmissionMaxPerDay, kEventSubmissionMaxPerDayValue);
+    addSecret(Secrets::kEventSubmissionsPaused, kEventSubmissionsPausedValue);
+
     // NOTE: site_logo_url (Secrets::kSiteLogoUrl) is intentionally NOT registered
     // here — the framework owns it and already defaults it to "" (empty) in
     // util/secrets/secret_values.cpp. Registering it app-side too would violate

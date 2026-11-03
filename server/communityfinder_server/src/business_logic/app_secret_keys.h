@@ -12,13 +12,21 @@
 // with no symbol churn. Their DEFAULT VALUES live app-side too — see
 // business_logic/app_secret_values.{h,cpp}.
 //
-// NOTE: There are no app-specific secret keys yet — CommunityFinder is a
-// skeleton at this point. When a domain feature needs a tunable secret, add its
-// KEY here AND its DEFAULT VALUE in app_secret_values.cpp (keep the two in
-// sync). Framework keys (mail server, auth, image, website routing, site logo,
-// etc.) already live in util/secrets/secret_keys.h and are not repeated here.
+// When a domain feature needs a tunable secret, add its KEY here AND its DEFAULT
+// VALUE in app_secret_values.cpp (keep the two in sync). Framework keys (mail
+// server, auth, image, website routing, site logo, etc.) already live in
+// util/secrets/secret_keys.h and are not repeated here.
 namespace Secrets {
 
-// (No app-specific secret keys yet.)
+// EV3 §3.3 / §3.4 — the event submission settings (the two rate limits and the
+// pause switch), which curators change on the Submission limits page
+// (/api/admin/event_submission_settings). Read them only through
+// Events::LoadSubmissionSettings: a missing, blank or bad value reads as the
+// default there, so an older database without the rows still works.
+inline constexpr std::string_view kEventSubmissionMaxPendingDates =
+    "event_submission_max_pending_dates";
+inline constexpr std::string_view kEventSubmissionMaxPerDay = "event_submission_max_per_day";
+// "true" closes the submit form for everyone; anything else leaves it open.
+inline constexpr std::string_view kEventSubmissionsPaused = "event_submissions_paused";
 
 }  // namespace Secrets

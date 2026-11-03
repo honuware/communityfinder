@@ -1,19 +1,18 @@
 #include "admin_review_event.h"
 
+#include <optional>
 #include <string>
 
 #include "business_logic/auth/session.h"
-#include "business_logic/events/event_helper.h"
+#include "business_logic/events/submission_helper.h"
 #include "db_schema/events.h"
 #include "endpoints/endpoint_auth_helper.h"
+#include "endpoints/review_request_body.h"
 #include "util/error_codes.h"
 #include "util/error_response.h"
 
 namespace Endpoints {
 namespace {
-
-constexpr std::string_view kActionApprove = "approve";
-constexpr std::string_view kActionReject = "reject";
 
 void HandlePost(WebApp* webApp, const crow::request& req, crow::response& resp, int64_t eventId) {
     try {
@@ -62,45 +61,25 @@ Json::Value PostAdminReviewEvent(
             return;
         }
 
-        Json::Value body;
-        try {
-            body = Json::Value::FromText(req.body);
-        }
-        catch (const std::exception&) {
-            resp = ErrorResponse::BadRequest("Request body must be JSON");
+        std::optional<ReviewRequestBody> body = ReadReviewRequestBody(req, resp);
+        if (!body) {
             return;
-        }
-        const Json::Value* actionValue = nullptr;
-        const std::string* action = nullptr;
-        if (!body.HasChild("action", &actionValue)
-            || (action = actionValue->TryGet<std::string>()) == nullptr
-            || (*action != kActionApprove && *action != kActionReject)) {
-            resp = ErrorResponse::ValidationError(
-                "action must be \"approve\" or \"reject\"", "action");
-            return;
-        }
-        std::string notes;
-        const Json::Value* notesValue = nullptr;
-        if (body.HasChild("notes", &notesValue) && !notesValue->IsNull()) {
-            const std::string* text = notesValue->TryGet<std::string>();
-            if (text == nullptr) {
-                resp = ErrorResponse::ValidationError("notes must be a string", "notes");
-                return;
-            }
-            notes = *text;
         }
 
-        Events::EventHelper helper(endpointAuthHelper.GetDatabaseHelper());
-        Events::ReviewResult review = helper.ReviewEvent(
+        Events::SubmissionHelper helper(endpointAuthHelper.GetDatabaseHelper());
+        Events::DateReviewResult reviewed = helper.ReviewDate(
             transaction,
             eventId,
-            *action == kActionApprove ? Events::ReviewAction::Approve
-                                      : Events::ReviewAction::Reject,
+            body->action,
             endpointAuthHelper.GetSession().GetPersonId(),
-            notes);
+            body->notes,
+            body->decision);
+        const Events::ReviewResult& review = reviewed.review;
         if (!review.ok) {
             if (review.errorCode == Events::kEventErrorNotFound) {
                 resp = ErrorResponse::NotFound(review.errorCode);
+            } else if (IsDecisionError(review.errorCode)) {
+                resp = DecisionErrorResponse(review.errorCode);
             } else {
                 resp = ErrorResponse::Create(
                     ErrorCodes::kValidationError,
@@ -115,9 +94,19 @@ Json::Value PostAdminReviewEvent(
             return;
         }
 
+        // The last pending date of a submission: its one email. A failed send
+        // never fails the review (SendDecisionNotice alerts and retries later).
+        bool emailed = false;
+        if (reviewed.notice) {
+            emailed = helper.SendDecisionNotice(
+                transaction, *endpointAuthHelper.GetSecretsHelper(),
+                endpointAuthHelper.GetMailHelper(), *reviewed.notice);
+        }
+
         result = Json::Value(Json::JsonObject{
             { "event_id", Json::Value(eventId) },
             { "status", Json::Value(review.status) },
+            { "decision_emailed", Json::Value(emailed) },
         });
         resp.code = 200;
     });

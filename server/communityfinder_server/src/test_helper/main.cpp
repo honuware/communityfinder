@@ -36,6 +36,14 @@ ABSL_FLAG(bool, approve, false, "Approve the demo events left pending (for inges
 ABSL_FLAG(std::string, category, "", "Category slug filter (for list-upcoming)");
 ABSL_FLAG(std::string, scene, "", "Scene tag slug filter (for list-upcoming)");
 
+// EV3 submission commands (submit-event / list-submissions / submission-settings).
+// submit-event also takes --title, --starts_in_hours and --venue_id above.
+ABSL_FLAG(std::string, as, "", "Submitter email (for submit-event, list-submissions)");
+ABSL_FLAG(std::string, dates, "", "How many weekly dates (for submit-event)");
+ABSL_FLAG(std::string, paused, "", "true or false (for submission-settings)");
+ABSL_FLAG(std::string, max_pending_dates, "", "Dates one person may have waiting (for submission-settings)");
+ABSL_FLAG(std::string, max_submissions_per_day, "", "Submissions per person per 24 hours (for submission-settings)");
+
 int main(int argc, char** argv) {
     absl::ParseCommandLine(argc, argv);
     TestHelper::EnableAnsiColors();
@@ -89,6 +97,11 @@ int main(int argc, char** argv) {
         if (absl::GetFlag(FLAGS_approve)) args["approve"] = "true";
         addStr("category", absl::GetFlag(FLAGS_category));
         addStr("scene", absl::GetFlag(FLAGS_scene));
+        addStr("as", absl::GetFlag(FLAGS_as));
+        addStr("dates", absl::GetFlag(FLAGS_dates));
+        addStr("paused", absl::GetFlag(FLAGS_paused));
+        addStr("max_pending_dates", absl::GetFlag(FLAGS_max_pending_dates));
+        addStr("max_submissions_per_day", absl::GetFlag(FLAGS_max_submissions_per_day));
 
         return TestHelper::ExecuteCommand(*ctx, command, args);
     }

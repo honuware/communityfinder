@@ -5,6 +5,7 @@
 #include "business_logic/auth/cookie_manager_test_util.h"
 #include "business_logic/auth/person.h"
 #include "business_logic/events/event_helper.h"
+#include "business_logic/events/submission_helper.h"
 #include "db_schema/categories.h"
 #include "db_schema/event_sources.h"
 #include "db_schema/events.h"
@@ -139,6 +140,32 @@ int64_t SignIn(Transaction& transaction, TestDatabaseUtil& testDb, EndpointTestH
     cookieProperties.sameSite = Auth::CookieSameSitePolicy::None;
     helper.GetCookieManagerTest()->SetCookie("session_token", token, cookieProperties);
     return personId;
+}
+
+void SwitchTo(Transaction& transaction, TestDatabaseUtil& testDb, EndpointTestHelper& helper,
+              std::string_view email) {
+    std::string token;
+    EXPECT_TRUE(Auth::PersonHelper(testDb.GetDatabaseHelper())
+                    .CreateSessionToken(transaction, helper.GetSecretsHelper(), email, token));
+    Auth::CookieProperties cookieProperties;
+    cookieProperties.path = "/";
+    cookieProperties.sameSite = Auth::CookieSameSitePolicy::None;
+    helper.GetCookieManagerTest()->SetCookie("session_token", token, cookieProperties);
+}
+
+SampleSubmission AddSubmission(Transaction& transaction, TestDatabaseUtil& testDb,
+                               EndpointTestHelper& helper, int64_t personId, int dateCount) {
+    Events::SubmissionRequest request;
+    request.title = "Sample Dance Night";
+    request.agreed = true;
+    const int64_t nowUs = NowUs(transaction);
+    for (int index = 0; index < dateCount; ++index) {
+        request.dates.push_back({ nowUs + (2 + 7 * index) * Events::kUsPerDay });
+    }
+    Events::SubmitResult result = Events::SubmissionHelper(testDb.GetDatabaseHelper())
+        .Submit(transaction, *helper.GetSecretsHelper(), request, personId);
+    EXPECT_TRUE(result.ok) << result.errorCode;
+    return { result.submissionId, result.eventIds };
 }
 
 crow::response Request(EndpointTestHelper& helper, crow::HTTPMethod method,
