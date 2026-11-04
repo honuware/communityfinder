@@ -126,6 +126,62 @@ a {
   margin-bottom: 8px;
 }
 
+// Folder tabs, for a mat-tab-group that should read as tabs rather than a row
+// of links: each tab a box with rounded top corners, the unselected ones
+// lavender, the selected one white with a plum top edge and open into the
+// white panel below it.
+.folder-tabs {
+  @include mat.tabs-overrides((
+    active-indicator-height: 0,
+    divider-height: 0,
+    active-label-text-color: var(--mat-sys-primary),
+    active-focus-label-text-color: var(--mat-sys-primary),
+    active-hover-label-text-color: var(--mat-sys-primary),
+    inactive-label-text-color: var(--mat-sys-on-surface-variant),
+    inactive-focus-label-text-color: var(--mat-sys-on-surface),
+    inactive-hover-label-text-color: var(--mat-sys-on-surface),
+  ));
+
+  // The line the tabs stand on. Drawn as an inset shadow so the selected
+  // tab's white background covers it where the tab opens into the panel.
+  .mat-mdc-tab-label-container {
+    box-shadow: inset 0 -1px 0 var(--mat-sys-outline-variant);
+  }
+
+  .mat-mdc-tab-labels {
+    gap: 4px;
+  }
+
+  .mat-mdc-tab {
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: var(--radius-control) var(--radius-control) 0 0;
+    background: var(--mat-sys-secondary-container);
+    overflow: hidden;
+
+    &:hover {
+      background: var(--mat-sys-surface-container-highest);
+    }
+  }
+
+  .mat-mdc-tab.mdc-tab--active {
+    border-top: 3px solid var(--mat-sys-primary);
+    border-bottom-color: transparent;
+    background: var(--mat-sys-surface);
+
+    .mdc-tab__text-label {
+      font-weight: 600;
+    }
+  }
+
+  .mat-mdc-tab-body-wrapper {
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-top: none;
+    border-radius: 0 0 var(--radius-card) var(--radius-card);
+    background: var(--mat-sys-surface);
+    box-shadow: var(--shadow-raised);
+  }
+}
+
 // Neighborhood / category / scene chips on the events pages: small links to
 // that filtered list. Global because the event row, the detail page and the
 // series page all show them. Neighborhoods are lavender; tags are coral.

@@ -10,6 +10,7 @@ import {
 import { Home } from './pages/home/home';
 import { AccountPage } from './pages/account/account';
 import { ChangePasswordPage } from './pages/account/change-password';
+import { MySubmissionsPage } from './pages/account/my-submissions';
 
 export const routes: Routes = [
   { path: '', component: Home },
@@ -24,6 +25,8 @@ export const routes: Routes = [
   // forced-password-change users are steered to /account/password by AUTH_ROUTES.
   { path: 'account', component: AccountPage, canActivate: [AuthGuard] },
   { path: 'account/password', component: ChangePasswordPage, canActivate: [AuthGuard] },
+  // The member's own event submissions (EV3 §5.3).
+  { path: 'account/submissions', component: MySubmissionsPage, canActivate: [AuthGuard] },
 
   // The public events pages (EV2 §3): list, calendar, series, and each event.
   // Lazy-loaded; anonymous.

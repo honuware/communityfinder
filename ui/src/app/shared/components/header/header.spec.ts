@@ -50,19 +50,40 @@ describe('Header', () => {
     ]);
   });
 
+  const user = {
+    isAuth: true,
+    personId: 7,
+    firstName: 'Ada',
+    lastName: 'Lovelace',
+    email: 'ada@example.com',
+    createdAt: '2026-01-01',
+    isAdmin: false,
+    roles: [],
+    permissions: [],
+    mustChangePassword: false,
+  };
+
+  it('lists "My submissions" in the account menu', () => {
+    configure({ authData$: of(user) } as unknown as AuthService);
+    const fixture = TestBed.createComponent(Header);
+    fixture.detectChanges();
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('.app-header__chip')!
+      .click();
+    fixture.detectChanges();
+    // The menu opens in the CDK overlay, outside the component.
+    const items = Array.from(document.querySelectorAll('.mat-mdc-menu-item')).map((item) => [
+      item.textContent?.trim(),
+      item.getAttribute('href'),
+    ]);
+    expect(items).toEqual([
+      ['My account', '/account'],
+      ['My submissions', '/account/submissions'],
+      ['Logout', null],
+    ]);
+  });
+
   it('shows only the first name when logged in', () => {
-    const user = {
-      isAuth: true,
-      personId: 7,
-      firstName: 'Ada',
-      lastName: 'Lovelace',
-      email: 'ada@example.com',
-      createdAt: '2026-01-01',
-      isAdmin: false,
-      roles: [],
-      permissions: [],
-      mustChangePassword: false,
-    };
     configure({ authData$: of(user) } as unknown as AuthService);
     const fixture = TestBed.createComponent(Header);
     fixture.detectChanges();

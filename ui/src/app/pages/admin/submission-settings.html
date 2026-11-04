@@ -1,0 +1,72 @@
+<div class="submission-settings">
+  <a mat-button routerLink="/admin/events" class="admin-back">
+    <mat-icon>arrow_back</mat-icon>
+    Events
+  </a>
+  <h1 class="submission-settings__title">Submission limits</h1>
+
+  @if (loading()) {
+    <mat-progress-spinner mode="indeterminate" diameter="36" />
+  } @else if (failed()) {
+    <p class="submission-settings__error">The settings couldn't be loaded. Please try again.</p>
+  } @else {
+    <mat-card appearance="outlined" class="submission-settings__card">
+      <div class="submission-settings__switch">
+        <mat-slide-toggle
+          [checked]="!paused()"
+          [disabled]="savingSwitch() || confirmingPause()"
+          (change)="onSwitchChange($event)"
+        >
+          {{ paused() ? 'Paused' : 'Taking submissions' }}
+        </mat-slide-toggle>
+        <p class="submission-settings__hint">
+          Pausing closes the submit form for everyone, for a spam wave the limits below can't stop.
+          "My submissions," withdrawals and the review queue keep working.
+        </p>
+      </div>
+      @if (confirmingPause()) {
+        <div class="submission-settings__confirm" role="alertdialog">
+          <p>Nobody will be able to submit an event until you turn this back on.</p>
+          <button mat-flat-button type="button" (click)="confirmPause()">Pause submissions</button>
+          <button mat-button type="button" (click)="cancelPause()">Cancel</button>
+        </div>
+      }
+    </mat-card>
+
+    <mat-card appearance="outlined" class="submission-settings__card">
+      <form [formGroup]="form" (ngSubmit)="save()">
+        @for (field of limitFields; track field.name) {
+          @if (limit(field.name); as range) {
+            <div class="submission-settings__limit" [attr.data-field]="field.name">
+              <mat-form-field appearance="outline">
+                <mat-label>{{ field.label }}</mat-label>
+                <input
+                  matInput
+                  type="number"
+                  [formControlName]="field.control"
+                  [min]="range.min"
+                  [max]="range.max"
+                />
+                <mat-hint
+                  >Default {{ range.default }} · allowed {{ range.min }} to
+                  {{ range.max }}</mat-hint
+                >
+              </mat-form-field>
+              <p class="submission-settings__hint">{{ field.explanation }}</p>
+              @if (fieldError(field.name); as message) {
+                <p class="submission-settings__error">{{ message }}</p>
+              }
+            </div>
+          }
+        }
+        @if (formError()) {
+          <p class="submission-settings__error">{{ formError() }}</p>
+        }
+        <div class="submission-settings__actions">
+          <button mat-flat-button type="submit" [disabled]="!changed() || saving()">Save</button>
+          <button mat-button type="button" (click)="resetToDefaults()">Reset to defaults</button>
+        </div>
+      </form>
+    </mat-card>
+  }
+</div>

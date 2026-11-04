@@ -9,6 +9,7 @@ import { AdminPage } from './admin';
 import { ManageEventsPage } from './manage-events';
 import { ManageRolesPage } from './manage-roles';
 import { ManageUsersPage } from './manage-users';
+import { SubmissionSettingsPage } from './submission-settings';
 
 // Mounted at /admin (behind AuthGuard + AdminGuard).
 //   /admin        → the dashboard landing (also @honuware/ui/crud's default
@@ -28,6 +29,9 @@ const routes: Routes = [
   // Admin-only for now, like the rest of /admin; the server checks
   // manage_events on every write.
   { path: 'events', component: ManageEventsPage },
+  // The Submission limits page (EV3 §5.6): the rate limits and the pause
+  // switch. Ahead of any future /admin/events/:id route.
+  { path: 'events/settings', component: SubmissionSettingsPage },
   {
     path: 'tables',
     component: AdminPage,

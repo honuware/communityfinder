@@ -1,12 +1,15 @@
 import { ColumnDataInfo, TableSchema } from '@honuware/ui/access';
 import { MockRow } from '@honuware/ui/testing';
+import { pacificDateTime, pacificWallClockToUs } from '../utils/events-date.utils';
+import { US_PER_DAY } from '../types/events.types';
 import { EventsMockData } from './events-mock-data';
 
 // The events tables as the offline (mock) generic CRUD store holds them, so
 // the bespoke event editor (/admin/events) works with no server: the pending
 // queue, the venue and series pickers, the title search, the assignment
-// checkboxes. The rows come from the same demo dataset the public pages show
-// (events-mock-data). Only the columns the editor reads and writes are here.
+// checkboxes, and submitted events grouped by submission (EV3). The rows come
+// from the same demo dataset the public pages show (events-mock-data), plus
+// two sample submissions. Only the columns the pages read and write are here.
 
 function column(
   columnName: string,
@@ -62,12 +65,30 @@ export const EVENTS_CRUD_MOCK_TABLES: TableSchema[] = [
       column('status', 'VARCHAR'),
       column('created_by_person_id', 'BIGINT', { nullable: true }),
       column('review_notes', 'VARCHAR'),
+      column('submission_id', 'BIGINT', { nullable: true, readonly: true }),
     ],
     [
       { column_name: 'venue_id', parent_table_name: 'venues', parent_column_name: 'id' },
       { column_name: 'series_id', parent_table_name: 'series', parent_column_name: 'id' },
+      {
+        column_name: 'submission_id',
+        parent_table_name: 'event_submissions',
+        parent_column_name: 'id',
+      },
     ],
   ),
+  table('event_submissions', 'Event Submissions', [
+    ID,
+    column('submitted_by_person_id', 'BIGINT', { readonly: true }),
+    column('submitter_note', 'VARCHAR'),
+    column('relationship', 'VARCHAR'),
+    column('regular_thing', 'BOOLEAN'),
+    column('reject_reason', 'VARCHAR', { nullable: true }),
+    column('message_to_submitter', 'VARCHAR'),
+    column('decision_notified_us', 'BIGINT', { nullable: true }),
+    column('created_us', 'BIGINT', { readonly: true }),
+    column('updated_us', 'BIGINT', { readonly: true }),
+  ]),
   table(
     'event_category_assignments',
     'Event Categories',
@@ -86,6 +107,7 @@ export const EVENTS_CRUD_MOCK_DISPLAY_TEMPLATES: Record<string, string> = {
   events: '{title}',
   venues: '{name}',
   series: '{title}',
+  event_submissions: 'Submission #{id}',
 };
 
 function sameSlugs(a: string[], b: string[]): boolean {
@@ -139,6 +161,7 @@ export function buildEventsCrudSeedRows(data: EventsMockData): Record<string, Mo
       status,
       created_by_person_id: '',
       review_notes: '',
+      submission_id: '',
     };
   });
 
@@ -156,5 +179,105 @@ export function buildEventsCrudSeedRows(data: EventsMockData): Record<string, Mo
     events,
     event_category_assignments: categoryRows,
     event_scene_tag_assignments: sceneTagRows,
+  };
+}
+
+const HOUR_US = 3_600 * 1_000_000;
+
+// Two sample submissions waiting for review, so the queue's grouping and flags
+// show offline (EV3 §5.5). Their dates are pending, so the public pages never
+// show them.
+//   #1: Ada's "Queer Craft Night", two dates, a regular thing with no link.
+//   #2: Grace's "Leather Night!", an hour after the listed Leather Night at
+//       the same venue, so the queue flags it as a possible duplicate.
+// The people are the admin seed's (people 2 and 3).
+export function buildSubmissionsCrudSeedRows(
+  data: EventsMockData,
+  now: number,
+): Record<string, MockRow[]> {
+  const today = pacificDateTime(now);
+  const at = (dayOffset: number, hour: number) =>
+    pacificWallClockToUs(today.year, today.month, today.day + dayOffset, hour);
+  const leatherNightStartsAtUs =
+    data.events.find(({ event }) => event.id === 103)?.event.starts_at_us ?? at(2, 21);
+
+  const submissions: MockRow[] = [
+    {
+      id: '1',
+      submitted_by_person_id: '2',
+      submitter_note: 'We meet every other week at the back tables.',
+      relationship: 'organizer',
+      regular_thing: 't',
+      reject_reason: '',
+      message_to_submitter: '',
+      decision_notified_us: '',
+      created_us: String(now - 2 * US_PER_DAY),
+      updated_us: String(now - 2 * US_PER_DAY),
+    },
+    {
+      id: '2',
+      submitted_by_person_id: '3',
+      submitter_note: '',
+      relationship: 'attendee',
+      regular_thing: 'f',
+      reject_reason: '',
+      message_to_submitter: '',
+      decision_notified_us: '',
+      created_us: String(now - US_PER_DAY),
+      updated_us: String(now - US_PER_DAY),
+    },
+  ];
+
+  const submitted = (
+    id: number,
+    submissionId: string,
+    personId: string,
+    fields: {
+      title: string;
+      description: string;
+      startsAtUs: number;
+      venueId: number;
+      url: string;
+      costText: string;
+    },
+  ): MockRow => ({
+    id: String(id),
+    title: fields.title,
+    description: fields.description,
+    starts_at_us: String(fields.startsAtUs),
+    ends_at_us: String(fields.startsAtUs + 2 * HOUR_US),
+    venue_id: String(fields.venueId),
+    location_text: '',
+    url: fields.url,
+    cost_text: fields.costText,
+    series_id: '',
+    origin: 'user_submitted',
+    status: 'pending',
+    created_by_person_id: personId,
+    review_notes: '',
+    submission_id: submissionId,
+  });
+  const craftNight = {
+    title: 'Queer Craft Night',
+    description: 'Bring a project, or start one with the yarn and fabric we bring.',
+    venueId: 3,
+    url: '',
+    costText: 'Free',
+  };
+
+  return {
+    event_submissions: submissions,
+    events: [
+      submitted(201, '1', '2', { ...craftNight, startsAtUs: at(6, 19) }),
+      submitted(202, '1', '2', { ...craftNight, startsAtUs: at(20, 19) }),
+      submitted(203, '2', '3', {
+        title: 'Leather Night!',
+        description: 'Gear night. Coat check at the door.',
+        startsAtUs: leatherNightStartsAtUs + HOUR_US,
+        venueId: 1,
+        url: 'https://example.org/leather-night',
+        costText: '$10 cover',
+      }),
+    ],
   };
 }

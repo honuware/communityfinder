@@ -166,6 +166,14 @@ describe('CommunityMockAccess (events)', () => {
         expect(orders).toEqual([...orders].sort((a, b) => a - b));
       }
     });
+
+    it('offers the dataset’s venues by name, for the submit form', async () => {
+      const venues = await firstValueFrom(mockAt(NOW_US).getVenueChoices());
+      const names = venues.map((venue) => venue.name);
+      expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+      expect(venues).toContainEqual(expect.objectContaining({ id: 1, name: 'The Lantern Room' }));
+      expect(venues.length).toBe(buildEventsMockData(NOW_US).venues.length);
+    });
   });
 
   describe('the dataset', () => {

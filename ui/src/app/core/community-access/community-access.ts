@@ -9,6 +9,7 @@ import {
   SceneTag,
   UpcomingEvents,
   UpcomingEventsQuery,
+  VenueChoice,
 } from '../types/events.types';
 
 export interface HealthInfo {
@@ -48,6 +49,8 @@ export interface CommunityAccess {
   getCategories(): Observable<Category[]>;
   getSceneTags(): Observable<SceneTag[]>;
   getNeighborhoods(): Observable<Neighborhood[]>;
+  // The venues a submitter can pick (EV3 §5.2), through the same public read.
+  getVenueChoices(): Observable<VenueChoice[]>;
 }
 
 export const COMMUNITY_ACCESS = new InjectionToken<CommunityAccess>('COMMUNITY_ACCESS');

@@ -170,5 +170,19 @@ describe('CommunityHttpAccess (events)', () => {
       expect(neighborhoods.url).toBe('/api/get_table_rows/neighborhoods');
       expect(neighborhoods.result[0].region).toBe('seattle-core');
     });
+
+    it('reads the venues a submitter can pick from the public venues table', async () => {
+      const { access, http } = setUp();
+      const { url, withCredentials, result } = await answer(http, access.getVenueChoices(), {
+        sortedColumnNames: ['address', 'id', 'name', 'status'],
+        dataTable: [
+          ['1533 13th Ave', '7', 'The Cuff', 'open'],
+          ['', '3', 'Driftwood Hall', 'closed'],
+        ],
+      });
+      expect(url).toBe('/api/get_table_rows/venues');
+      expect(withCredentials).toBe(true);
+      expect(result).toEqual([{ id: 7, name: 'The Cuff', address: '1533 13th Ave' }]);
+    });
   });
 });

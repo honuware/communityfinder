@@ -3,85 +3,215 @@
   max-width: 760px;
 }
 
-.manage-events__title {
+.manage-events__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0 0 16px;
+}
+
+.manage-events__title {
+  margin: 0;
   font-weight: 600;
 }
 
-.manage-events__subtitle {
+.manage-events__paused {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+
+.manage-events__subtitle {
   margin: 0 0 8px;
   font-size: 1.1rem;
   font-weight: 600;
 }
 
 .manage-events__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   margin: 0 0 24px;
   padding: 0;
   list-style: none;
 }
 
-.manage-events__item {
+// Each queue entry is a white card on the cream page, raised so it stands
+// apart from the page and from the next one.
+.manage-events__entry {
+  padding: 12px 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--radius-card);
+  background: var(--mat-sys-surface);
+  box-shadow: var(--shadow-raised);
+}
+
+.manage-events__entry-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.manage-events__entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.manage-events__entry-title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.manage-events__entry-when {
+  font-size: 0.9rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.manage-events__item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.manage-events__details {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.manage-events__submitter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.manage-events__badge {
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.manage-events__note {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--mat-sys-outline);
+  white-space: pre-line;
+}
+
+.manage-events__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 12px 0;
+
+  dt {
+    font-weight: 500;
+  }
+
+  dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.manage-events__description {
+  white-space: pre-line;
+}
+
+.manage-events__dates-title {
+  margin: 12px 0 4px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.manage-events__dates {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.manage-events__date {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 8px 0;
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  & + & {
+    border-top: 1px solid var(--mat-sys-outline-variant);
+  }
 }
 
-.manage-events__item-text {
+.manage-events__date-text {
   display: flex;
   flex-direction: column;
 }
 
-.manage-events__item-actions,
-.manage-events__find,
-.manage-events__row,
-.manage-events__actions {
+.manage-events__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.manage-events__flag {
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+}
+
+.manage-events__reject {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  padding-top: 12px;
 }
 
-.manage-events__card {
+// The New Event / Edit Event tabs (folder tabs, styles.scss). Scrolled to
+// from a queue card's Edit; the margin keeps the tabs clear of the sticky
+// header.
+.manage-events__editor {
+  scroll-margin-top: 88px;
+}
+
+.manage-events__tab {
   padding: 16px;
 }
 
 .manage-events__search {
-  flex: 1 1 260px;
-}
-
-.manage-events__row mat-form-field {
-  flex: 1 1 220px;
+  width: 100%;
 }
 
 .manage-events__wide {
   width: 100%;
 }
 
-.manage-events__tags {
-  display: flex;
-  flex-wrap: wrap;
-  margin: 8px 0;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 8px;
-
-  legend {
-    padding: 0 4px;
-    font-weight: 500;
-  }
-}
-
 .manage-events__hint {
   font-size: 0.85rem;
   opacity: 0.7;
-}
-
-.manage-events__error {
-  color: var(--mat-sys-error, #b3261e);
 }

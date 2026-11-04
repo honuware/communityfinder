@@ -134,6 +134,14 @@ export interface Neighborhood {
   sort_order: number;
 }
 
+// A venue the submit form's type-ahead offers (EV3 §5.2), from the public
+// venues table read.
+export interface VenueChoice {
+  id: number;
+  name: string;
+  address: string;
+}
+
 // ---- normalizers: wire JSON → the types above ----
 
 type Raw = Record<string, unknown>;
@@ -296,6 +304,19 @@ export function neighborhoodsFromRows(results: DataResults): Neighborhood[] {
     region: toText(record['region']) as NeighborhoodRegion,
     sort_order: toNumber(record['sort_order']),
   }));
+}
+
+// The venues table's rows → the venues a submitter can pick, by name. A
+// closed or moved venue isn't offered.
+export function venueChoicesFromRows(results: DataResults): VenueChoice[] {
+  return dataResultsToRecords(results)
+    .filter((record) => record['status'] !== 'closed' && record['status'] !== 'moved')
+    .map((record) => ({
+      id: toNumber(record['id']),
+      name: toText(record['name']),
+      address: toText(record['address']),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
 }
 
 // The upcoming list's query string ("" or "?category=drag&…"), in a fixed

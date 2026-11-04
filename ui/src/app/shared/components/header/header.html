@@ -32,6 +32,7 @@
     </button>
     <mat-menu #menu="matMenu">
       <a mat-menu-item routerLink="/account">My account</a>
+      <a mat-menu-item routerLink="/account/submissions">My submissions</a>
       @if (u.isAdmin) {
         <a mat-menu-item routerLink="/admin">Admin Dashboard</a>
         <a mat-menu-item routerLink="/admin/tables">Manage Data</a>

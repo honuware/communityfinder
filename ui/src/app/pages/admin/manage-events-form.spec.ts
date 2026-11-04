@@ -6,6 +6,7 @@ import {
   eventFormFromRow,
   EventFormValue,
   eventRowValue,
+  nextDayEndNote,
   rowChanges,
   rowForCreate,
 } from './manage-events-form';
@@ -105,6 +106,37 @@ describe('manage-events-form', () => {
     });
   });
 
+  describe('nextDayEndNote', () => {
+    it('speaks up only when an end time alone rolls past midnight', () => {
+      expect(
+        nextDayEndNote(form({ startDate: '2026-08-14', startTime: '22:00', endTime: '02:00' })),
+      ).toBe('Ends the next day: Sat, Aug 15, 2:00 AM.');
+      // Across a month end.
+      expect(
+        nextDayEndNote(form({ startDate: '2026-08-31', startTime: '21:00', endTime: '01:30' })),
+      ).toBe('Ends the next day: Tue, Sep 1, 1:30 AM.');
+    });
+
+    it('says nothing for a same-day end, an end date, or times not yet whole', () => {
+      expect(
+        nextDayEndNote(form({ startDate: '2026-08-14', startTime: '19:00', endTime: '21:00' })),
+      ).toBe('');
+      expect(
+        nextDayEndNote(
+          form({
+            startDate: '2026-08-14',
+            startTime: '22:00',
+            endDate: '2026-08-15',
+            endTime: '02:00',
+          }),
+        ),
+      ).toBe('');
+      expect(nextDayEndNote(form({ startDate: '2026-08-14', startTime: '22:00' }))).toBe('');
+      expect(nextDayEndNote(form({ startDate: '2026-08-14', endTime: '02:00' }))).toBe('');
+      expect(nextDayEndNote(form({ startTime: '22:00', endTime: '02:00' }))).toBe('');
+    });
+  });
+
   it('loads an events row into the form in Seattle time', () => {
     const row = {
       id: '7',
@@ -118,12 +150,13 @@ describe('manage-events-form', () => {
       url: '',
       cost_text: '$10 cover',
     };
+    // A 9 PM – 2 AM night: the end time alone says it, so no end date.
     expect(eventFormFromRow(row)).toEqual({
       title: 'Leather Night',
       description: 'Coat check at the door.',
       startDate: '2026-08-14',
       startTime: '21:00',
-      endDate: '2026-08-15',
+      endDate: '',
       endTime: '02:00',
       venueId: '1',
       seriesId: '',
@@ -135,6 +168,31 @@ describe('manage-events-form', () => {
       endDate: '',
       endTime: '',
     });
+  });
+
+  it('fills in the end date only when the end time alone would not say it', () => {
+    const at = (day: number, hour: number) => String(pacificWallClockToUs(2026, 8, day, hour));
+    const times = (startsAt: string, endsAt: string) => {
+      const value = eventFormFromRow({ starts_at_us: startsAt, ends_at_us: endsAt });
+      return [value.endDate, value.endTime];
+    };
+    // Same evening.
+    expect(times(at(14, 19), at(14, 21))).toEqual(['', '21:00']);
+    // A festival: the next day, but later than the start time.
+    expect(times(at(14, 10), at(15, 18))).toEqual(['2026-08-15', '18:00']);
+    expect(times(at(14, 10), at(16, 18))).toEqual(['2026-08-16', '18:00']);
+    // Each loads and saves back to the same instants.
+    for (const [startsAt, endsAt] of [
+      [at(14, 21), at(15, 2)],
+      [at(14, 10), at(15, 18)],
+    ]) {
+      const value = eventFormFromRow({ starts_at_us: startsAt, ends_at_us: endsAt });
+      expect(composeEventTimes(value)).toEqual({
+        ok: true,
+        startsAtUs: Number(startsAt),
+        endsAtUs: Number(endsAt),
+      });
+    }
   });
 
   describe('the row it writes', () => {

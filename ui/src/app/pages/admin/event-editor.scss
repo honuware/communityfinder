@@ -1,0 +1,77 @@
+:host {
+  display: block;
+}
+
+.event-editor__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.event-editor__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.event-editor__wide {
+  width: 100%;
+}
+
+.event-editor__group {
+  margin: 0 0 16px;
+  padding: 8px 12px 4px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+
+  legend {
+    padding: 0 4px;
+    font-weight: 500;
+  }
+}
+
+// The start's date and time, then the end's time and date. Each pair stays
+// together, so a narrow form wraps between them.
+.event-editor__times,
+.event-editor__pair,
+.event-editor__row,
+.event-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.event-editor__times {
+  column-gap: 24px;
+}
+
+.event-editor__row mat-form-field {
+  flex: 1 1 220px;
+}
+
+// Room under a row whose hint grows (subscriptSizing="dynamic"), so it never
+// runs into the label of the field below.
+.event-editor__row {
+  margin-bottom: 8px;
+}
+
+.event-editor__tags {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.event-editor__end-note {
+  margin-top: 0;
+}
+
+.event-editor__hint {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.event-editor__error {
+  color: var(--mat-sys-error, #b3261e);
+}

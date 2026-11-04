@@ -1,0 +1,311 @@
+<section class="submit-event">
+  <h1 class="submit-event__title">Submit an event</h1>
+  <p class="submit-event__intake">
+    This form is the only way we take event listings. We don't take events by email, DM, or comment,
+    so please don't send them that way.
+  </p>
+
+  @if (state() === 'loading') {
+    <mat-progress-spinner mode="indeterminate" diameter="36" />
+  } @else if (state() === 'paused') {
+    <div class="submit-event__notice submit-event__paused" role="status">
+      <p>We're not taking event submissions right now. Please check back soon.</p>
+      <button mat-stroked-button type="button" (click)="checkStatus()">Check again</button>
+    </div>
+  } @else if (!signedIn()) {
+    <div class="submit-event__notice submit-event__signed-out">
+      <p>
+        To submit an event, sign in or create an account. We ask so we can tell you when it's
+        listed, and so you can see everything you've sent us on "My submissions."
+      </p>
+      <div class="submit-event__actions">
+        <a mat-flat-button routerLink="/login" [queryParams]="{ returnUrl: '/events/submit' }"
+          >Sign in</a
+        >
+        <a mat-stroked-button routerLink="/register">Create an account</a>
+      </div>
+      <p class="submit-event__hint">
+        After registering, confirm your email address, then sign in and come back here.
+      </p>
+    </div>
+  } @else if (unverified()) {
+    <div class="submit-event__notice submit-event__unverified" role="status">
+      <p>
+        Confirm your email address first. We sent you a link when you registered: open it, then sign
+        in again.
+      </p>
+    </div>
+  } @else if (sent(); as result) {
+    <div class="submit-event__sent" role="status">
+      <h2 class="submit-event__subtitle">Thanks, it's waiting for review.</h2>
+      <p>We'll email you when it's decided.</p>
+      @if (result.possible_duplicates.length) {
+        <div class="submit-event__duplicates">
+          <p>
+            These listed events look similar. If yours is already listed, you can withdraw yours
+            from "My submissions."
+          </p>
+          <ul>
+            @for (duplicate of result.possible_duplicates; track $index) {
+              <li>
+                <a [routerLink]="eventPath(duplicate.event_id)">{{ duplicate.title }}</a>
+                · {{ when(duplicate.starts_at_us) }}{{ dateLabel(duplicate.date_index) }}
+              </li>
+            }
+          </ul>
+        </div>
+      }
+      @if (ignoredTags()) {
+        <p class="submit-event__hint">Some tags weren't available and were left off.</p>
+      }
+      <div class="submit-event__actions">
+        <a mat-flat-button routerLink="/account/submissions">My submissions</a>
+        <button mat-stroked-button type="button" (click)="startOver()">Submit another</button>
+      </div>
+    </div>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="send()" class="submit-event__form">
+      <mat-form-field appearance="outline" class="submit-event__wide">
+        <mat-label>Event title</mat-label>
+        <input matInput formControlName="title" maxlength="120" />
+      </mat-form-field>
+      @if (fieldError('title'); as message) {
+        <p class="submit-event__error" data-field="title">{{ message }}</p>
+      }
+
+      <fieldset class="submit-event__group">
+        <legend>When</legend>
+        <p class="submit-event__hint">
+          Times are Seattle time (Pacific). Up to {{ maxDates }} dates. The end is optional; give an
+          end date only when it ends on a later day. For something that repeats, add the next few
+          and tick "This is a regular thing" below.
+        </p>
+        @for (row of dateRows.controls; track row; let index = $index) {
+          <div class="submit-event__date">
+            <div class="submit-event__pair">
+              <hw-simple-date
+                #startDatePicker
+                type="date"
+                [dataInfo]="startPickerField"
+                [value]="pickerStart(row.controls.date, 'date')"
+                (valueChange)="syncPicked(row.controls.date, startDatePicker)"
+                (input)="syncPicked(row.controls.date, startDatePicker)"
+              />
+              <hw-simple-date
+                #startTimePicker
+                type="time"
+                [timeIncrementMinutes]="15"
+                [dataInfo]="startPickerField"
+                [value]="pickerStart(row.controls.startTime, 'time')"
+                (valueChange)="syncPicked(row.controls.startTime, startTimePicker)"
+                (input)="syncPicked(row.controls.startTime, startTimePicker)"
+              />
+            </div>
+            <div class="submit-event__pair">
+              <hw-simple-date
+                #endTimePicker
+                type="time"
+                [timeIncrementMinutes]="15"
+                [dataInfo]="endPickerField"
+                [value]="pickerStart(row.controls.endTime, 'time')"
+                (valueChange)="syncPicked(row.controls.endTime, endTimePicker)"
+                (input)="syncPicked(row.controls.endTime, endTimePicker)"
+              />
+              <hw-simple-date
+                #endDatePicker
+                type="date"
+                [dataInfo]="endPickerField"
+                [value]="pickerStart(row.controls.endDate, 'date')"
+                (valueChange)="syncPicked(row.controls.endDate, endDatePicker)"
+                (input)="syncPicked(row.controls.endDate, endDatePicker)"
+              />
+            </div>
+            @if (dateRows.length > 1) {
+              <button
+                mat-icon-button
+                type="button"
+                [attr.aria-label]="'Remove date ' + (index + 1)"
+                (click)="removeDate(index)"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+            @if (endNote(row.getRawValue()); as note) {
+              <p class="submit-event__hint submit-event__end-note">{{ note }}</p>
+            }
+            @if (dateError(index); as message) {
+              <p class="submit-event__error" [attr.data-date-index]="index">{{ message }}</p>
+            }
+          </div>
+        }
+        @if (fieldError('dates'); as message) {
+          <p class="submit-event__error" data-field="dates">{{ message }}</p>
+        }
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="dateRows.length >= maxDates"
+          (click)="addDate()"
+        >
+          <mat-icon>add</mat-icon>
+          Add another date
+        </button>
+      </fieldset>
+
+      <fieldset class="submit-event__group">
+        <legend>Where</legend>
+        <mat-radio-group formControlName="placeMode" class="submit-event__place-mode">
+          <mat-radio-button value="venue">A venue in our list</mat-radio-button>
+          <mat-radio-button value="elsewhere">Somewhere else</mat-radio-button>
+        </mat-radio-group>
+        @if (form.controls.placeMode.value === 'venue') {
+          <mat-form-field appearance="outline" class="submit-event__wide">
+            <mat-label>Venue</mat-label>
+            <input
+              matInput
+              formControlName="venue"
+              [matAutocomplete]="venueAuto"
+              placeholder="Start typing a venue's name"
+            />
+            <mat-autocomplete
+              #venueAuto="matAutocomplete"
+              [displayWith]="displayVenue"
+              (optionSelected)="onVenueSelected($event)"
+            >
+              @for (venue of venueOptions(); track venue.id) {
+                <mat-option [value]="venue">
+                  {{ venue.name }}
+                  <span class="submit-event__hint">{{ venue.address }}</span>
+                </mat-option>
+              }
+            </mat-autocomplete>
+          </mat-form-field>
+          @if (fieldError('venue_id'); as message) {
+            <p class="submit-event__error" data-field="venue_id">{{ message }}</p>
+          }
+        } @else {
+          <mat-form-field appearance="outline" class="submit-event__wide">
+            <mat-label>Place name and address</mat-label>
+            <input matInput formControlName="locationText" maxlength="300" />
+          </mat-form-field>
+          @if (fieldError('location_text'); as message) {
+            <p class="submit-event__error" data-field="location_text">{{ message }}</p>
+          }
+        }
+      </fieldset>
+
+      <mat-form-field appearance="outline" class="submit-event__wide">
+        <mat-label>Description</mat-label>
+        <textarea matInput formControlName="description" rows="5" maxlength="4000"></textarea>
+      </mat-form-field>
+      @if (fieldError('description'); as message) {
+        <p class="submit-event__error" data-field="description">{{ message }}</p>
+      }
+
+      <div class="submit-event__row">
+        <mat-form-field appearance="outline">
+          <mat-label>Link</mat-label>
+          <input matInput type="url" formControlName="url" maxlength="500" />
+          <mat-hint>A ticket page, an Instagram post, or the venue's page.</mat-hint>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Cost</mat-label>
+          <input matInput formControlName="costText" maxlength="100" />
+          <mat-hint>Write "Free" for a free event.</mat-hint>
+        </mat-form-field>
+      </div>
+      @if (fieldError('url'); as message) {
+        <p class="submit-event__error" data-field="url">{{ message }}</p>
+      }
+      @if (fieldError('cost_text'); as message) {
+        <p class="submit-event__error" data-field="cost_text">{{ message }}</p>
+      }
+
+      <fieldset class="submit-event__group">
+        <legend>Categories (up to {{ maxTags }})</legend>
+        <mat-chip-listbox multiple aria-label="Categories">
+          @for (category of vocabularies().categories; track category.slug) {
+            <mat-chip-option
+              [selected]="isCategorySelected(category.slug)"
+              [disabled]="!isCategorySelected(category.slug) && categorySlugs().length >= maxTags"
+              (selectionChange)="toggleCategory(category.slug, $event.selected)"
+            >
+              {{ category.display_name }}
+            </mat-chip-option>
+          }
+        </mat-chip-listbox>
+        @if (fieldError('category_slugs'); as message) {
+          <p class="submit-event__error" data-field="category_slugs">{{ message }}</p>
+        }
+      </fieldset>
+      <fieldset class="submit-event__group">
+        <legend>Scenes (up to {{ maxTags }})</legend>
+        <mat-chip-listbox multiple aria-label="Scenes">
+          @for (tag of vocabularies().sceneTags; track tag.slug) {
+            <mat-chip-option
+              [selected]="isSceneTagSelected(tag.slug)"
+              [disabled]="!isSceneTagSelected(tag.slug) && sceneTagSlugs().length >= maxTags"
+              (selectionChange)="toggleSceneTag(tag.slug, $event.selected)"
+            >
+              {{ tag.display_name }}
+            </mat-chip-option>
+          }
+        </mat-chip-listbox>
+        @if (fieldError('scene_tag_slugs'); as message) {
+          <p class="submit-event__error" data-field="scene_tag_slugs">{{ message }}</p>
+        }
+      </fieldset>
+
+      <mat-checkbox formControlName="regularThing">This is a regular thing</mat-checkbox>
+      <p class="submit-event__hint">
+        Tick this if it repeats, and our curators will consider giving it a page of its own.
+      </p>
+
+      <mat-form-field appearance="outline" class="submit-event__wide">
+        <mat-label>How do you know about it?</mat-label>
+        <mat-select formControlName="relationship">
+          @for (relationship of relationships; track relationship.value) {
+            <mat-option [value]="relationship.value">{{ relationship.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      @if (fieldError('relationship'); as message) {
+        <p class="submit-event__error" data-field="relationship">{{ message }}</p>
+      }
+
+      <mat-form-field appearance="outline" class="submit-event__wide">
+        <mat-label>Note to our curators (optional)</mat-label>
+        <textarea matInput formControlName="submitterNote" rows="3" maxlength="1000"></textarea>
+        <mat-hint>Only our curators see this.</mat-hint>
+      </mat-form-field>
+      @if (fieldError('submitter_note'); as message) {
+        <p class="submit-event__error" data-field="submitter_note">{{ message }}</p>
+      }
+
+      <!-- The honeypot: off-screen and out of the tab order, so only a bot fills it in. -->
+      <div class="submit-event__website" aria-hidden="true">
+        <label for="submit-event-website">Website</label>
+        <input
+          id="submit-event-website"
+          formControlName="website"
+          tabindex="-1"
+          autocomplete="off"
+        />
+      </div>
+
+      <mat-checkbox formControlName="agreed">
+        This is accurate, and I'm OK with it being listed publicly.
+      </mat-checkbox>
+      @if (fieldError('agreed'); as message) {
+        <p class="submit-event__error" data-field="agreed">{{ message }}</p>
+      }
+
+      @if (formError()) {
+        <p class="submit-event__error submit-event__form-error">{{ formError() }}</p>
+      }
+      <div class="submit-event__actions">
+        <button mat-flat-button type="submit" [disabled]="sending()">Send for review</button>
+      </div>
+    </form>
+  }
+</section>

@@ -1,0 +1,45 @@
+.submission-settings {
+  padding: 16px;
+  max-width: 760px;
+}
+
+.submission-settings__title {
+  margin: 0 0 16px;
+  font-weight: 600;
+}
+
+.submission-settings__card {
+  margin: 0 0 16px;
+  padding: 16px;
+}
+
+.submission-settings__limit {
+  margin: 0 0 16px;
+
+  mat-form-field {
+    width: 100%;
+    max-width: 420px;
+  }
+}
+
+.submission-settings__confirm,
+.submission-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.submission-settings__confirm p {
+  flex-basis: 100%;
+  margin: 8px 0 0;
+}
+
+.submission-settings__hint {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.submission-settings__error {
+  color: var(--mat-sys-error, #b3261e);
+}

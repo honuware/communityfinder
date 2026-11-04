@@ -8,6 +8,7 @@ import {
   normalizeEventSeriesList,
   normalizeUpcomingEvents,
   sceneTagsFromRows,
+  venueChoicesFromRows,
 } from './events.types';
 
 // A full event as GET /api/events/<id> sends it (events_json.cpp): ids and
@@ -167,6 +168,24 @@ describe('events.types', () => {
 
     it('tolerates an empty reply', () => {
       expect(categoriesFromRows({ sortedColumnNames: [], dataTable: [] })).toEqual([]);
+    });
+
+    it('offers the open venues by name, for the submit form', () => {
+      const venues = venueChoicesFromRows({
+        sortedColumnNames: ['address', 'id', 'name', 'status'],
+        dataTable: [
+          ['1533 13th Ave', '7', 'The Cuff', 'open'],
+          ['', '3', 'Driftwood Hall', 'closed'],
+          ['900 Pike St', '9', 'Arcade Room', 'open'],
+          ['', '4', 'Old Spot', 'moved'],
+          ['', '5', 'No status yet', ''],
+        ],
+      });
+      expect(venues).toEqual([
+        { id: 9, name: 'Arcade Room', address: '900 Pike St' },
+        { id: 5, name: 'No status yet', address: '' },
+        { id: 7, name: 'The Cuff', address: '1533 13th Ave' },
+      ]);
     });
   });
 

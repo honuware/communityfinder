@@ -20,6 +20,8 @@ import {
   sceneTagsFromRows,
   UpcomingEvents,
   UpcomingEventsQuery,
+  VenueChoice,
+  venueChoicesFromRows,
 } from '../types/events.types';
 
 // The real HTTP implementation. `withCredentials` matches the library's HTTP
@@ -79,6 +81,10 @@ export class CommunityHttpAccess implements CommunityAccess {
 
   getNeighborhoods(): Observable<Neighborhood[]> {
     return this.getTableRows('neighborhoods').pipe(map(neighborhoodsFromRows));
+  }
+
+  getVenueChoices(): Observable<VenueChoice[]> {
+    return this.getTableRows('venues').pipe(map(venueChoicesFromRows));
   }
 
   // The same endpoint as the library's CrudAccess.getTableRows, called directly:

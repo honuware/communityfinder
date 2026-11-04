@@ -40,8 +40,13 @@
   color: var(--theme-on-primary);
 }
 
-.app-footer__tagline {
+.app-footer__tagline,
+.app-footer__intake {
   font-size: 0.9rem;
+}
+
+.app-footer__intake a {
+  text-decoration: underline;
 }
 
 .app-footer__links {

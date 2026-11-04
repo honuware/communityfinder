@@ -1,0 +1,78 @@
+<div class="my-submissions">
+  <h1 class="my-submissions__title">My submissions</h1>
+  <p class="my-submissions__hint">
+    Everything you've sent us, newest first. We email you when a submission has been decided.
+  </p>
+
+  @if (loading()) {
+    <mat-progress-spinner mode="indeterminate" diameter="36" />
+  } @else if (failed()) {
+    <p class="my-submissions__empty">Your submissions couldn't be loaded. Please try again.</p>
+  } @else if (submissions().length === 0) {
+    <p class="my-submissions__empty">
+      You haven't submitted any events yet.
+      <a routerLink="/events/submit">Submit an event</a>
+    </p>
+  } @else {
+    @for (submission of submissions(); track submission.id) {
+      <mat-card appearance="outlined" class="my-submissions__card" [attr.data-id]="submission.id">
+        <h2 class="my-submissions__heading">{{ heading(submission) }}</h2>
+        <p class="my-submissions__hint">
+          Sent {{ sentOn(submission) }} · {{ relationship(submission) }}
+          @if (submission.regular_thing) {
+            · A regular thing
+          }
+        </p>
+
+        <ul class="my-submissions__dates">
+          @for (date of submission.dates; track date.event_id) {
+            <li class="my-submissions__date">
+              <span class="my-submissions__when">{{ when(date) }}</span>
+              <span class="my-submissions__state my-submissions__state--{{ date.state }}">
+                {{ stateLabel(date) }}
+              </span>
+              @if (date.state === 'listed') {
+                <a [routerLink]="eventPath(date)">See it</a>
+              }
+            </li>
+          }
+        </ul>
+
+        @if (reason(submission); as reason) {
+          <p class="my-submissions__reason">Why: {{ reason }}</p>
+        }
+        @if (submission.message_to_submitter) {
+          <blockquote class="my-submissions__message">
+            {{ submission.message_to_submitter }}
+          </blockquote>
+        }
+
+        @if (canWithdraw(submission)) {
+          @if (confirmingId() === submission.id) {
+            <div class="my-submissions__confirm" role="alertdialog">
+              <p>
+                Withdraw this submission? Its {{ waitingCount(submission) }} waiting
+                {{ waitingCount(submission) === 1 ? 'date' : 'dates' }} will be taken out of the
+                queue. Anything already listed stays listed.
+              </p>
+              <button mat-flat-button type="button" (click)="withdraw(submission)">
+                Withdraw it
+              </button>
+              <button mat-button type="button" (click)="cancelWithdraw()">Keep it</button>
+            </div>
+          } @else {
+            <button
+              mat-stroked-button
+              type="button"
+              class="my-submissions__withdraw"
+              [disabled]="withdrawingId() === submission.id"
+              (click)="askToWithdraw(submission)"
+            >
+              Withdraw
+            </button>
+          }
+        }
+      </mat-card>
+    }
+  }
+</div>

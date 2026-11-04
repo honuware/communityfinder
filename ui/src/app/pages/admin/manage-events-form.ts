@@ -1,4 +1,6 @@
 import {
+  formatEventShortDate,
+  formatEventTime,
   pacificDayKey,
   pacificInputsToUs,
   pacificTimeOfDay,
@@ -12,7 +14,7 @@ import {
 export interface EventFormValue {
   title: string;
   description: string;
-  // <input type="date"> / <input type="time"> values: "2026-08-14", "22:00",
+  // The date and time pickers' values as text: "2026-08-14", "22:00",
   // Pacific wall-clock time.
   startDate: string;
   startTime: string;
@@ -42,6 +44,12 @@ export const EMPTY_EVENT_FORM: EventFormValue = {
   costText: '',
 };
 
+// Just the start and end of the form (the submit form's date rows share it).
+export type EventTimesValue = Pick<
+  EventFormValue,
+  'startDate' | 'startTime' | 'endDate' | 'endTime'
+>;
+
 export type ComposedTimes =
   { ok: true; startsAtUs: number; endsAtUs: number | null } | { ok: false; error: string };
 
@@ -58,7 +66,7 @@ function nextDay(dateText: string): string {
 }
 
 // The form's date and time inputs → the start and end instants.
-export function composeEventTimes(value: EventFormValue): ComposedTimes {
+export function composeEventTimes(value: EventTimesValue): ComposedTimes {
   const startsAtUs = pacificInputsToUs(value.startDate, value.startTime);
   if (startsAtUs === null) {
     return { ok: false, error: 'Enter a start date and time.' };
@@ -82,18 +90,41 @@ export function composeEventTimes(value: EventFormValue): ComposedTimes {
   return { ok: true, startsAtUs, endsAtUs };
 }
 
+// Said under the times only when it applies: an end time with no end date
+// that's earlier than the start, so it ends the next day (a 10 PM – 2 AM
+// night). "Ends the next day: Sat, Aug 15, 2:00 AM." Otherwise ''.
+export function nextDayEndNote(value: EventTimesValue): string {
+  if (value.endDate.trim() || !value.endTime.trim()) {
+    return '';
+  }
+  const times = composeEventTimes(value);
+  if (!times.ok || times.endsAtUs === null || pacificDayKey(times.endsAtUs) === value.startDate) {
+    return '';
+  }
+  return `Ends the next day: ${formatEventShortDate(times.endsAtUs)}, ${formatEventTime(times.endsAtUs)}.`;
+}
+
 // An `events` row (every value a string, as the generic table read sends it)
-// → the form.
+// → the form. The end date is filled in only when the end time alone
+// wouldn't say it (the form's own rule): a same-day end, or a 10 PM – 2 AM
+// night, loads with the end date blank.
 export function eventFormFromRow(row: Record<string, string>): EventFormValue {
   const startsAtUs = Number(row['starts_at_us']);
   const endsAtUs = row['ends_at_us'] ? Number(row['ends_at_us']) : null;
-  return {
-    title: row['title'] ?? '',
-    description: row['description'] ?? '',
+  const times: EventTimesValue = {
     startDate: startsAtUs ? pacificDayKey(startsAtUs) : '',
     startTime: startsAtUs ? pacificTimeOfDay(startsAtUs) : '',
     endDate: endsAtUs ? pacificDayKey(endsAtUs) : '',
     endTime: endsAtUs ? pacificTimeOfDay(endsAtUs) : '',
+  };
+  const fromTimeAlone = composeEventTimes({ ...times, endDate: '' });
+  if (fromTimeAlone.ok && fromTimeAlone.endsAtUs === endsAtUs) {
+    times.endDate = '';
+  }
+  return {
+    title: row['title'] ?? '',
+    description: row['description'] ?? '',
+    ...times,
     venueId: row['venue_id'] ?? '',
     seriesId: row['series_id'] ?? '',
     locationText: row['location_text'] ?? '',

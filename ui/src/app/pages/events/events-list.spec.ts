@@ -112,13 +112,23 @@ describe('EventsListPage', () => {
     expect(titles(element).length).toBe(14);
   });
 
-  it('says so when nothing is on the calendar at all', async () => {
+  it('offers the submit form in its header', async () => {
+    const { element } = await open('/events');
+    const submit = element.querySelector('.events-list__header .events-list__submit')!;
+    expect(submit.textContent?.replace(/\s+/g, ' ').trim()).toBe('add Submit an event');
+    expect(submit.getAttribute('href')).toBe('/events/submit');
+  });
+
+  it('says so when nothing is on the calendar at all, and asks for a submission', async () => {
     vi.spyOn(TestBed.inject(COMMUNITY_ACCESS), 'getUpcomingEvents').mockReturnValue(
       of({ items: [], from_us: 0, to_us: 0 }),
     );
     const { element } = await open('/events?when=tonight');
     expect(element.textContent).toContain("Nothing's on the calendar yet.");
     expect(element.textContent).not.toContain('No events match these filters.');
+    const empty = element.querySelector('.events-list__empty')!;
+    expect(empty.textContent).toContain('Know of something?');
+    expect(empty.querySelector('a')?.getAttribute('href')).toBe('/events/submit');
   });
 
   it('says so when the events could not be loaded', async () => {

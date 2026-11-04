@@ -3,7 +3,21 @@
     <mat-icon>arrow_back</mat-icon>
     Admin Dashboard
   </a>
-  <h1 class="manage-events__title">Events</h1>
+  <div class="manage-events__header">
+    <h1 class="manage-events__title">Events</h1>
+    <a mat-stroked-button routerLink="/admin/events/settings">
+      <mat-icon>tune</mat-icon>
+      Submission limits
+    </a>
+  </div>
+
+  @if (submissionsPaused()) {
+    <div class="manage-events__paused" role="status">
+      <mat-icon>pause_circle</mat-icon>
+      <span>Submissions are paused. Nobody can submit an event right now.</span>
+      <a mat-button routerLink="/admin/events/settings">Turn them back on</a>
+    </div>
+  }
 
   <section class="manage-events__queue">
     <h2 class="manage-events__subtitle">Waiting for review ({{ pending().length }})</h2>
@@ -13,179 +27,283 @@
       <p class="manage-events__hint">Nothing is waiting for review.</p>
     } @else {
       <ul class="manage-events__list">
-        @for (item of pending(); track item.id) {
-          <li class="manage-events__item">
-            <div class="manage-events__item-text">
-              <a [routerLink]="previewPath(item.id)">{{ item.title }}</a>
-              <span class="manage-events__hint">{{ item.summary }}</span>
+        @for (group of queue(); track group.key) {
+          @let first = group.events[0];
+          @let single = group.events.length === 1;
+          <li
+            class="manage-events__entry"
+            [attr.data-submission]="group.submission?.id ?? null"
+            [attr.data-event]="single ? first.id : null"
+          >
+            <div class="manage-events__entry-header">
+              <div class="manage-events__entry-text">
+                <h3 class="manage-events__entry-title">{{ first.title }}</h3>
+                <span class="manage-events__entry-when"
+                  >{{ first.when }}{{ moreDates(group) }}</span
+                >
+                <ng-container
+                  *ngTemplateOutlet="
+                    flags;
+                    context: { duplicates: group.possibleDuplicates, noLink: group.noLink }
+                  "
+                ></ng-container>
+              </div>
+              <div class="manage-events__item-actions">
+                @if (single) {
+                  <button
+                    mat-flat-button
+                    type="button"
+                    [disabled]="reviewingKey() === eventKey(first)"
+                    (click)="approve(first)"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="reviewingKey() === eventKey(first)"
+                    (click)="reject(first)"
+                  >
+                    Reject
+                  </button>
+                } @else {
+                  <button
+                    mat-flat-button
+                    type="button"
+                    [disabled]="reviewingKey() === groupKey(group)"
+                    (click)="approveAll(group)"
+                  >
+                    Approve all
+                  </button>
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="reviewingKey() === groupKey(group)"
+                    (click)="rejectAll(group)"
+                  >
+                    Reject all
+                  </button>
+                }
+                <button
+                  mat-button
+                  type="button"
+                  class="manage-events__toggle"
+                  [attr.aria-expanded]="isExpanded(group.key)"
+                  [attr.aria-controls]="'details-' + group.key"
+                  (click)="toggleDetails(group.key)"
+                >
+                  Details
+                  <mat-icon iconPositionEnd>{{
+                    isExpanded(group.key) ? 'expand_less' : 'expand_more'
+                  }}</mat-icon>
+                </button>
+              </div>
             </div>
-            <div class="manage-events__item-actions">
-              <button
-                mat-flat-button
-                type="button"
-                [disabled]="reviewingId() === item.id"
-                (click)="approve(item)"
-              >
-                Approve
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                [disabled]="reviewingId() === item.id"
-                (click)="reject(item)"
-              >
-                Reject
-              </button>
-              <button mat-button type="button" (click)="openEvent(item.id.toString())">Edit</button>
-            </div>
+            @if (isRejecting(headerKey(group))) {
+              <ng-container *ngTemplateOutlet="rejectPanel"></ng-container>
+            }
+
+            @if (isExpanded(group.key)) {
+              <div class="manage-events__details" [id]="'details-' + group.key">
+                @if (group.submission; as submission) {
+                  <div class="manage-events__submitter">
+                    <span class="manage-events__badge"
+                      >Submitted by {{ submission.submitter }}</span
+                    >
+                    <span class="manage-events__hint">
+                      {{ submission.relationship }}
+                      @if (submission.regularThing) {
+                        · A regular thing
+                      }
+                    </span>
+                  </div>
+                  @if (submission.note) {
+                    <blockquote class="manage-events__note">{{ submission.note }}</blockquote>
+                  }
+                }
+                <dl class="manage-events__facts">
+                  <dt>Where</dt>
+                  <dd>{{ first.where || 'Not given' }}</dd>
+                  @if (first.costText) {
+                    <dt>Cost</dt>
+                    <dd>{{ first.costText }}</dd>
+                  }
+                  @if (first.url) {
+                    <dt>Link</dt>
+                    <dd>
+                      <a [href]="first.url" target="_blank" rel="noopener noreferrer">{{
+                        first.url
+                      }}</a>
+                    </dd>
+                  }
+                  @if (first.description) {
+                    <dt>Description</dt>
+                    <dd class="manage-events__description">{{ first.description }}</dd>
+                  }
+                </dl>
+
+                @if (single) {
+                  <div class="manage-events__item-actions">
+                    <button mat-stroked-button type="button" (click)="editFromQueue(first)">
+                      <mat-icon>edit</mat-icon>
+                      Edit
+                    </button>
+                    <a mat-button [routerLink]="previewPath(first.id)">See its page</a>
+                  </div>
+                } @else {
+                  <h4 class="manage-events__dates-title">Dates</h4>
+                  <ul class="manage-events__dates">
+                    @for (item of group.events; track item.id) {
+                      <li class="manage-events__date" [attr.data-event]="item.id">
+                        <div class="manage-events__date-text">
+                          <span>{{ item.when }}</span>
+                          <ng-container
+                            *ngTemplateOutlet="
+                              flags;
+                              context: { duplicates: item.possibleDuplicates, noLink: item.noLink }
+                            "
+                          ></ng-container>
+                        </div>
+                        <div class="manage-events__item-actions">
+                          <button
+                            mat-flat-button
+                            type="button"
+                            [disabled]="reviewingKey() === eventKey(item)"
+                            (click)="approve(item)"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            mat-stroked-button
+                            type="button"
+                            [disabled]="reviewingKey() === eventKey(item)"
+                            (click)="reject(item)"
+                          >
+                            Reject
+                          </button>
+                          <button mat-button type="button" (click)="editFromQueue(item)">
+                            Edit
+                          </button>
+                          <a mat-button [routerLink]="previewPath(item.id)">See its page</a>
+                        </div>
+                        @if (isRejecting(eventKey(item))) {
+                          <ng-container *ngTemplateOutlet="rejectPanel"></ng-container>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+            }
           </li>
         }
       </ul>
     }
   </section>
 
-  <mat-card appearance="outlined" class="manage-events__card">
-    <div class="manage-events__find">
-      <mat-form-field appearance="outline" class="manage-events__search">
-        <mat-label>Find an event to edit</mat-label>
-        <input
-          matInput
-          [formControl]="searchControl"
-          [matAutocomplete]="eventAuto"
-          placeholder="Search by title"
-        />
-        <mat-autocomplete
-          #eventAuto="matAutocomplete"
-          [displayWith]="displayOption"
-          (optionSelected)="onSearchSelected($event)"
-        >
-          @for (option of searchOptions(); track option.value) {
-            <mat-option [value]="option">{{ option.display }}</mat-option>
-          }
-        </mat-autocomplete>
-      </mat-form-field>
-      <button mat-stroked-button type="button" (click)="newEvent()">
-        <mat-icon>add</mat-icon>
-        New event
-      </button>
-    </div>
+  <ng-template #flags let-duplicates="duplicates" let-noLink="noLink">
+    @if (duplicates.length || noLink) {
+      <span class="manage-events__flags">
+        @for (duplicate of duplicates; track duplicate.id) {
+          <a class="manage-events__flag" [routerLink]="previewPath(duplicate.id)">
+            Possible duplicate of #{{ duplicate.id }} {{ duplicate.title }}
+          </a>
+        }
+        @if (noLink) {
+          <span class="manage-events__flag">No link</span>
+        }
+      </span>
+    }
+  </ng-template>
 
-    <h2 class="manage-events__subtitle">
-      @if (editingId(); as id) {
-        Editing event {{ id }}
-        <a mat-button [routerLink]="previewPath(id)">View page</a>
-      } @else {
-        New event
-      }
-    </h2>
-
-    <form [formGroup]="form" (ngSubmit)="save()">
-      <mat-form-field appearance="outline" class="manage-events__wide">
-        <mat-label>Title</mat-label>
-        <input matInput formControlName="title" />
-      </mat-form-field>
-      <mat-form-field appearance="outline" class="manage-events__wide">
-        <mat-label>Description</mat-label>
-        <textarea matInput formControlName="description" rows="4"></textarea>
-      </mat-form-field>
-
-      <p class="manage-events__hint">Times are Seattle time (Pacific).</p>
-      <div class="manage-events__row">
+  <ng-template #rejectPanel>
+    <form class="manage-events__reject" [formGroup]="rejectForm" (ngSubmit)="confirmReject()">
+      @if (rejectingSubmitted()) {
         <mat-form-field appearance="outline">
-          <mat-label>Start date</mat-label>
-          <input matInput type="date" formControlName="startDate" />
-        </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>Start time</mat-label>
-          <input matInput type="time" formControlName="startTime" />
-        </mat-form-field>
-      </div>
-      <div class="manage-events__row">
-        <mat-form-field appearance="outline">
-          <mat-label>End date (optional)</mat-label>
-          <input matInput type="date" formControlName="endDate" />
-        </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>End time (optional)</mat-label>
-          <input matInput type="time" formControlName="endTime" />
-          <mat-hint>Earlier than the start, with no end date, means the next morning.</mat-hint>
-        </mat-form-field>
-      </div>
-
-      <div class="manage-events__row">
-        <mat-form-field appearance="outline">
-          <mat-label>Venue</mat-label>
-          <mat-select formControlName="venueId">
-            <mat-option value="">No venue</mat-option>
-            @for (venue of venues(); track venue.value) {
-              <mat-option [value]="venue.value">{{ venue.display }}</mat-option>
+          <mat-label>Reason</mat-label>
+          <mat-select formControlName="reason">
+            <mat-option value="">No reason given</mat-option>
+            @for (reason of rejectReasons; track reason.value) {
+              <mat-option [value]="reason.value">{{ reason.label }}</mat-option>
             }
           </mat-select>
         </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>Location (without a venue)</mat-label>
-          <input matInput formControlName="locationText" />
-        </mat-form-field>
-      </div>
-
-      <div class="manage-events__row">
-        <mat-form-field appearance="outline">
-          <mat-label>Series</mat-label>
-          <mat-select formControlName="seriesId">
-            <mat-option value="">Not part of a series</mat-option>
-            @for (item of series(); track item.value) {
-              <mat-option [value]="item.value">{{ item.display }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>Cost</mat-label>
-          <input matInput formControlName="costText" />
-          <mat-hint>Write exactly "Free" for a free event.</mat-hint>
-        </mat-form-field>
-      </div>
-
+      }
       <mat-form-field appearance="outline" class="manage-events__wide">
-        <mat-label>Event website</mat-label>
-        <input matInput type="url" formControlName="url" />
+        <mat-label>Note for the record (curators only)</mat-label>
+        <input matInput formControlName="notes" />
       </mat-form-field>
-
-      <fieldset class="manage-events__tags">
-        <legend>Categories</legend>
-        @for (tag of categories(); track tag.id) {
-          <mat-checkbox
-            [checked]="isCategorySelected(tag.id)"
-            (change)="toggleCategory(tag.id, $event.checked)"
-          >
-            {{ tag.label }}
-          </mat-checkbox>
-        }
-      </fieldset>
-      <fieldset class="manage-events__tags">
-        <legend>Scenes</legend>
-        @for (tag of sceneTags(); track tag.id) {
-          <mat-checkbox
-            [checked]="isSceneTagSelected(tag.id)"
-            (change)="toggleSceneTag(tag.id, $event.checked)"
-          >
-            {{ tag.label }}
-          </mat-checkbox>
-        }
-      </fieldset>
-      @if (form.controls.seriesId.value) {
-        <p class="manage-events__hint">
-          Leave the categories (or the scenes) all unchecked to use the series' own.
-        </p>
+      @if (rejectingSubmitted()) {
+        <mat-form-field appearance="outline" class="manage-events__wide" subscriptSizing="dynamic">
+          <mat-label>Message to the submitter (optional)</mat-label>
+          <textarea matInput formControlName="message" rows="3" maxlength="2000"></textarea>
+          <mat-hint>Goes in the email they get once their submission is decided.</mat-hint>
+        </mat-form-field>
       }
-
-      @if (formError()) {
-        <p class="manage-events__error">{{ formError() }}</p>
-      }
-      <div class="manage-events__actions">
-        <button mat-flat-button type="submit" [disabled]="saving()">
-          {{ editingId() ? 'Save changes' : 'Add event' }}
-        </button>
+      <div class="manage-events__item-actions">
+        <button mat-flat-button type="submit">Reject</button>
+        <button mat-button type="button" (click)="cancelReject()">Cancel</button>
       </div>
     </form>
-  </mat-card>
+  </ng-template>
+
+  <section class="manage-events__editor" #editorSection>
+    <mat-tab-group
+      class="folder-tabs"
+      [selectedIndex]="selectedTab()"
+      (selectedIndexChange)="selectedTab.set($event)"
+      mat-stretch-tabs="false"
+      mat-align-tabs="start"
+      preserveContent
+    >
+      <mat-tab label="New Event">
+        <div class="manage-events__tab">
+          <app-event-editor
+            [venues]="venues()"
+            [series]="series()"
+            [categories]="categories()"
+            [sceneTags]="sceneTags()"
+            (saved)="onSaved($event)"
+          />
+        </div>
+      </mat-tab>
+      <mat-tab label="Edit Event">
+        <div class="manage-events__tab">
+          <mat-form-field appearance="outline" class="manage-events__search">
+            <mat-label>Find an event to edit</mat-label>
+            <input
+              matInput
+              [formControl]="searchControl"
+              [matAutocomplete]="eventAuto"
+              placeholder="Search by title"
+            />
+            <mat-icon matIconSuffix>search</mat-icon>
+            <mat-autocomplete
+              #eventAuto="matAutocomplete"
+              [displayWith]="displayOption"
+              (optionSelected)="onSearchSelected($event)"
+            >
+              @for (option of searchOptions(); track option.value) {
+                <mat-option [value]="option">{{ option.display }}</mat-option>
+              }
+            </mat-autocomplete>
+          </mat-form-field>
+          @if (editRequest(); as request) {
+            <app-event-editor
+              [request]="request"
+              [venues]="venues()"
+              [series]="series()"
+              [categories]="categories()"
+              [sceneTags]="sceneTags()"
+              (saved)="onSaved($event)"
+            />
+          } @else {
+            <p class="manage-events__hint">
+              Search for an event by its title, or press Edit on one in the queue.
+            </p>
+          }
+        </div>
+      </mat-tab>
+    </mat-tab-group>
+  </section>
 </div>

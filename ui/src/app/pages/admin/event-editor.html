@@ -1,0 +1,156 @@
+@if (request() && !editingId()) {
+  @if (formError()) {
+    <p class="event-editor__error">{{ formError() }}</p>
+  } @else {
+    <mat-progress-spinner mode="indeterminate" diameter="28" />
+  }
+} @else {
+  @if (editingId(); as id) {
+    <div class="event-editor__heading">
+      <h3 class="event-editor__title">{{ editingTitle() }}</h3>
+      <span class="event-editor__hint">Event #{{ id }}</span>
+      <a mat-button [routerLink]="previewPath(id)">View page</a>
+    </div>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="save()">
+    <mat-form-field appearance="outline" class="event-editor__wide">
+      <mat-label>Title</mat-label>
+      <input matInput formControlName="title" />
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="event-editor__wide">
+      <mat-label>Description</mat-label>
+      <textarea matInput formControlName="description" rows="4"></textarea>
+    </mat-form-field>
+
+    <fieldset class="event-editor__group">
+      <legend>When</legend>
+      <p class="event-editor__hint">
+        Times are Seattle time (Pacific). The end is optional; give an end date only when it ends on
+        a later day.
+      </p>
+      <!-- One pass per load: a new `load` number remakes the pickers with the
+           loaded event's times (see PickerStarts). -->
+      @for (starts of [pickerStarts()]; track starts.load) {
+        <div class="event-editor__times">
+          <div class="event-editor__pair">
+            <hw-simple-date
+              #startDatePicker
+              type="date"
+              [dataInfo]="startPickerField"
+              [value]="starts.startDate"
+              (valueChange)="syncPicked(form.controls.startDate, startDatePicker)"
+              (input)="syncPicked(form.controls.startDate, startDatePicker)"
+            />
+            <hw-simple-date
+              #startTimePicker
+              type="time"
+              [timeIncrementMinutes]="15"
+              [dataInfo]="startPickerField"
+              [value]="starts.startTime"
+              (valueChange)="syncPicked(form.controls.startTime, startTimePicker)"
+              (input)="syncPicked(form.controls.startTime, startTimePicker)"
+            />
+          </div>
+          <div class="event-editor__pair">
+            <hw-simple-date
+              #endTimePicker
+              type="time"
+              [timeIncrementMinutes]="15"
+              [dataInfo]="endPickerField"
+              [value]="starts.endTime"
+              (valueChange)="syncPicked(form.controls.endTime, endTimePicker)"
+              (input)="syncPicked(form.controls.endTime, endTimePicker)"
+            />
+            <hw-simple-date
+              #endDatePicker
+              type="date"
+              [dataInfo]="endPickerField"
+              [value]="starts.endDate"
+              (valueChange)="syncPicked(form.controls.endDate, endDatePicker)"
+              (input)="syncPicked(form.controls.endDate, endDatePicker)"
+            />
+          </div>
+        </div>
+      }
+      @if (endNote(); as note) {
+        <p class="event-editor__hint event-editor__end-note">{{ note }}</p>
+      }
+    </fieldset>
+
+    <div class="event-editor__row">
+      <mat-form-field appearance="outline">
+        <mat-label>Venue</mat-label>
+        <mat-select formControlName="venueId">
+          <mat-option value="">No venue</mat-option>
+          @for (venue of venues(); track venue.value) {
+            <mat-option [value]="venue.value">{{ venue.display }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Location (without a venue)</mat-label>
+        <input matInput formControlName="locationText" />
+      </mat-form-field>
+    </div>
+
+    <div class="event-editor__row">
+      <mat-form-field appearance="outline">
+        <mat-label>Series</mat-label>
+        <mat-select formControlName="seriesId">
+          <mat-option value="">Not part of a series</mat-option>
+          @for (item of series(); track item.value) {
+            <mat-option [value]="item.value">{{ item.display }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Cost</mat-label>
+        <input matInput formControlName="costText" />
+        <mat-hint>Write exactly "Free" for a free event.</mat-hint>
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline" class="event-editor__wide">
+      <mat-label>Event website</mat-label>
+      <input matInput type="url" formControlName="url" />
+    </mat-form-field>
+
+    <fieldset class="event-editor__group event-editor__tags">
+      <legend>Categories</legend>
+      @for (tag of categories(); track tag.id) {
+        <mat-checkbox
+          [checked]="isCategorySelected(tag.id)"
+          (change)="toggleCategory(tag.id, $event.checked)"
+        >
+          {{ tag.label }}
+        </mat-checkbox>
+      }
+    </fieldset>
+    <fieldset class="event-editor__group event-editor__tags">
+      <legend>Scenes</legend>
+      @for (tag of sceneTags(); track tag.id) {
+        <mat-checkbox
+          [checked]="isSceneTagSelected(tag.id)"
+          (change)="toggleSceneTag(tag.id, $event.checked)"
+        >
+          {{ tag.label }}
+        </mat-checkbox>
+      }
+    </fieldset>
+    @if (form.controls.seriesId.value) {
+      <p class="event-editor__hint">
+        Leave the categories (or the scenes) all unchecked to use the series' own.
+      </p>
+    }
+
+    @if (formError()) {
+      <p class="event-editor__error">{{ formError() }}</p>
+    }
+    <div class="event-editor__actions">
+      <button mat-flat-button type="submit" [disabled]="saving()">
+        {{ editingId() ? 'Save changes' : 'Add event' }}
+      </button>
+    </div>
+  </form>
+}

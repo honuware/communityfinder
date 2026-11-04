@@ -16,6 +16,7 @@ import {
   UpcomingEvents,
   UpcomingEventsQuery,
   US_PER_DAY,
+  VenueChoice,
 } from '../types/events.types';
 import { nowUs } from '../utils/events-date.utils';
 
@@ -107,6 +108,14 @@ export class CommunityMockAccess implements CommunityAccess {
 
   getNeighborhoods(): Observable<Neighborhood[]> {
     return of(structuredClone(this.data.neighborhoods));
+  }
+
+  getVenueChoices(): Observable<VenueChoice[]> {
+    return of(
+      this.data.venues
+        .map(({ id, name, address }) => ({ id, name, address }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    );
   }
 
   // Approved events starting in [fromUs, toUs), filtered, in start order. The

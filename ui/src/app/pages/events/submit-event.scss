@@ -1,0 +1,103 @@
+.submit-event {
+  padding: 16px;
+  max-width: 760px;
+}
+
+.submit-event__title {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.submit-event__subtitle {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.submit-event__intake {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-left: 4px solid var(--mat-sys-primary);
+  background: var(--mat-sys-surface-container-low);
+  font-weight: 500;
+}
+
+.submit-event__notice {
+  padding: 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+}
+
+.submit-event__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.submit-event__wide {
+  width: 100%;
+}
+
+.submit-event__group {
+  margin: 8px 0;
+  padding: 8px 12px 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+
+  legend {
+    padding: 0 4px;
+    font-weight: 500;
+  }
+}
+
+.submit-event__date,
+.submit-event__row,
+.submit-event__actions,
+.submit-event__place-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+// A date row: the start's date and time, then the end's time and date. Each
+// pair stays together, so a narrow row wraps between them.
+.submit-event__pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.submit-event__date + .submit-event__date {
+  padding-top: 8px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.submit-event__row mat-form-field {
+  flex: 1 1 260px;
+}
+
+.submit-event__date .submit-event__error,
+.submit-event__end-note {
+  flex-basis: 100%;
+  margin-top: 0;
+}
+
+.submit-event__hint {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.submit-event__error {
+  margin: 0 0 8px;
+  color: var(--mat-sys-error, #b3261e);
+}
+
+// The honeypot: kept off-screen rather than display: none, which some bots skip.
+.submit-event__website {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}

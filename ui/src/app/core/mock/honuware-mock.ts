@@ -3,6 +3,7 @@ import { MockRow, ProvideHonuwareAccessMockOptions } from '@honuware/ui/testing'
 import { nowUs } from '../utils/events-date.utils';
 import {
   buildEventsCrudSeedRows,
+  buildSubmissionsCrudSeedRows,
   EVENTS_CRUD_MOCK_DISPLAY_TEMPLATES,
   EVENTS_CRUD_MOCK_TABLES,
 } from './events-crud-mock';
@@ -37,6 +38,7 @@ export const ADMIN_MOCK_SCHEMA: DatabaseSchema = {
     'series',
     'event_category_assignments',
     'event_scene_tag_assignments',
+    'event_submissions',
   ],
   nested_tables: ['role_assignments', 'event_category_assignments', 'event_scene_tag_assignments'],
   tables: [
@@ -136,9 +138,15 @@ export const HONUWARE_MOCK_OPTIONS: ProvideHonuwareAccessMockOptions = {
     // A getter, so the events rows are built only in mock mode, when the
     // store is created, relative to that moment.
     get seedRows(): Record<string, MockRow[]> {
+      const now = nowUs();
+      const data = buildEventsMockData(now);
+      const events = buildEventsCrudSeedRows(data);
+      const submissions = buildSubmissionsCrudSeedRows(data, now);
       return {
         ...ADMIN_MOCK_SEED_ROWS,
-        ...buildEventsCrudSeedRows(buildEventsMockData(nowUs())),
+        ...events,
+        events: [...events['events'], ...submissions['events']],
+        event_submissions: submissions['event_submissions'],
       };
     },
   },

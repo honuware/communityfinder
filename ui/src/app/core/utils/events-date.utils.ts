@@ -179,14 +179,14 @@ function twoDigits(value: number): string {
 }
 
 // "2026-08-14": the Pacific day an instant falls on. A 10 PM Friday event is
-// Friday here, though it's already Saturday in UTC. Also the value of an
-// <input type="date">.
+// Friday here, though it's already Saturday in UTC. Also the forms' date text
+// (see date-picker-values).
 export function pacificDayKey(us: number): string {
   const { year, month, day } = pacificDateTime(us);
   return `${year}-${twoDigits(month)}-${twoDigits(day)}`;
 }
 
-// "22:00": the Pacific time of day, as an <input type="time"> holds it.
+// "22:00": the Pacific time of day, as the forms' time text holds it.
 export function pacificTimeOfDay(us: number): string {
   const { hour, minute } = pacificDateTime(us);
   return `${twoDigits(hour)}:${twoDigits(minute)}`;

@@ -27,6 +27,7 @@ import { environment } from '../environments/environment';
 import { provideCommunityAccess } from './core/community-access/community-access.providers';
 import { provideAdminUsersAccess } from './core/admin-users-access/admin-users-access.providers';
 import { provideEventsAdminAccess } from './core/events-admin-access/events-admin-access.providers';
+import { provideEventSubmissionsAccess } from './core/event-submissions-access/event-submissions-access.providers';
 import { SiteConfigService } from './core/services/site-config.service';
 import { HONUWARE_MOCK_OPTIONS } from './core/mock/honuware-mock';
 
@@ -60,9 +61,13 @@ export const appConfig: ApplicationConfig = {
     // Admin user-management access (create user + reset password) — the two
     // bespoke, admin_portal-gated endpoints the generic CRUD doesn't cover.
     provideAdminUsersAccess(environment.useMock),
-    // The event editor's approve / reject (POST /api/admin/review_event), the
-    // one manage_events action the generic CRUD doesn't cover.
+    // The curator's events actions the generic CRUD doesn't cover: reviewing
+    // an event or a whole submission, and the submission settings
+    // (manage_events gated).
     provideEventsAdminAccess(environment.useMock),
+    // The submitter's side (EV3): the submit form, "My submissions", withdraw,
+    // and whether the form is open.
+    provideEventSubmissionsAccess(environment.useMock),
     // Bootstrap-time silent login (me() → on 401 remember() → me()). Registered
     // after the interceptors so its calls are CSRF-stamped + error-handled.
     provideAppInitializer(() => {
@@ -73,7 +78,8 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => inject(SiteConfigService).load()),
     // CF's auth navigation targets: guards + the auth pages redirect through these
     // instead of @honuware/ui's defaults. mustChangePasswordPath points at CF's own
-    // change-password page; the allowlist bounds post-login returnUrl redirects.
+    // change-password page; the allowlist bounds post-login returnUrl redirects
+    // ('/events' so signing in from the submit form comes back to it).
     {
       provide: AUTH_ROUTES,
       useValue: {
@@ -81,7 +87,7 @@ export const appConfig: ApplicationConfig = {
         registerPath: '/register',
         postLogoutPath: '/',
         mustChangePasswordPath: '/account/password',
-        returnUrlAllowlist: ['/account', '/'],
+        returnUrlAllowlist: ['/account', '/events', '/'],
       } satisfies AuthRoutes,
     },
     provideRouter(routes, withInMemoryScrolling({ scrollPositionRestoration: 'enabled' })),

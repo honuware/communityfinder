@@ -10,6 +10,10 @@
         <mat-icon>repeat</mat-icon>
         Recurring
       </a>
+      <a mat-flat-button routerLink="/events/submit" class="events-list__submit">
+        <mat-icon>add</mat-icon>
+        Submit an event
+      </a>
     </nav>
   </header>
 
@@ -76,7 +80,10 @@
   } @else if (failed()) {
     <p class="events-list__empty">Events couldn't be loaded. Please try again in a moment.</p>
   } @else if (rawItemCount() === 0) {
-    <p class="events-list__empty">Nothing's on the calendar yet. Check back soon.</p>
+    <p class="events-list__empty">
+      Nothing's on the calendar yet. Check back soon. Know of something?
+      <a routerLink="/events/submit">Submit it</a>.
+    </p>
   } @else if (groups().length === 0) {
     <p class="events-list__empty">
       No events match these filters.
