@@ -29,8 +29,9 @@ const routes: Routes = [
   // Admin-only for now, like the rest of /admin; the server checks
   // manage_events on every write.
   { path: 'events', component: ManageEventsPage },
-  // The Submission limits page (EV3 §5.6): the rate limits and the pause
-  // switch. Ahead of any future /admin/events/:id route.
+  // The Event settings page (EV3 §5.6, EV4 §10.4): the submission rate limits
+  // and pause switch, and the past-event settings. Ahead of any future
+  // /admin/events/:id route.
   { path: 'events/settings', component: SubmissionSettingsPage },
   {
     path: 'tables',

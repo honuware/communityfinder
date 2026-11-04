@@ -18,6 +18,7 @@ import {
   SubmissionSettingsUpdate,
 } from '../../core/events-admin-access/events-admin-access';
 import { toSubmissionProblem } from '../../core/event-submissions-access/event-submissions-access';
+import { PastEventSettingsCard } from './past-event-settings-card';
 
 interface LimitField {
   name: SubmissionLimitName;
@@ -42,9 +43,10 @@ export const LIMIT_FIELDS: ReadonlyArray<LimitField> = [
   },
 ];
 
-// The Submission limits page (/admin/events/settings, EV3 §5.6), for anyone
-// who can review events. The rate limits and the pause switch take effect on
-// the very next submission; no deploy needed.
+// The Event settings page (/admin/events/settings, EV3 §5.6), for anyone who
+// can review events. The rate limits and the pause switch take effect on the
+// very next submission; no deploy needed. The past-event settings (EV4 §10.4)
+// are their own card below, with their own load and save.
 //
 // - The switch at the top saves on its own. Pausing asks first, in the page;
 //   turning submissions back on doesn't.
@@ -63,6 +65,7 @@ export const LIMIT_FIELDS: ReadonlyArray<LimitField> = [
     MatInputModule,
     MatProgressSpinnerModule,
     MatSlideToggleModule,
+    PastEventSettingsCard,
   ],
   templateUrl: './submission-settings.html',
   styleUrl: './submission-settings.scss',

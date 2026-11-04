@@ -23,8 +23,9 @@ cmake_policy(SET CMP0057 NEW)
 #   on foundation only; CommunityFinder's core deliberately does NOT link it (no
 #   payments yet), but honuware_testing does (a Square service double), so it stays
 #   in testing's allow-list. honuware_scheduler is the generic scheduler engine
-#   (foundation only), consumed by communityfinder_test_cases (the job catalog,
-#   Phase 12) + the communityfinder_helper executable.
+#   (foundation only), consumed by communityfinder_test_cases (the job catalog and
+#   its test, EV4 §6) + the communityfinder_helper executable (a leaf, like the
+#   server, so not in the DAG; src/scheduler/CMakeLists.txt).
 set(HONUWARE_ALLOW_honuware_foundation        "")
 set(HONUWARE_ALLOW_honuware_data              honuware_foundation)
 set(HONUWARE_ALLOW_honuware_services          honuware_data honuware_foundation)

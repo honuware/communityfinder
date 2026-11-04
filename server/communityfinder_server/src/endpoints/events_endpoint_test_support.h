@@ -33,7 +33,8 @@ World MakeWorld(Transaction& transaction, DatabaseHelper databaseHelper);
 int64_t NowUs(Transaction& transaction);
 
 // An event from `world.feed`, ingested through EventHelper and then reviewed
-// into `status` (approved / rejected; pending is left as ingested).
+// into `status` (approved / rejected; pending is left as ingested; archived is
+// approved, then archived as EV4's sweep would).
 struct EventSpec {
     std::string externalKey;
     int64_t startsAtUs = 0;

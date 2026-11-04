@@ -95,7 +95,9 @@ Json::Value GetEventSeriesDetail(
 
     Json::Value result;
     tp->RunInTransaction([&](Transaction& transaction) {
-        Events::EventHelper helper(endpointAuthHelper.GetDatabaseHelper());
+        Events::EventHelper helper = Events::MakePublicEventHelper(
+            endpointAuthHelper.GetDatabaseHelper(), *endpointAuthHelper.GetSecretsHelper(),
+            transaction);
         std::optional<Events::SeriesDetail> detail = helper.GetSeriesDetail(transaction, slug);
         if (!detail) {
             resp = ErrorResponse::NotFound("Series not found");

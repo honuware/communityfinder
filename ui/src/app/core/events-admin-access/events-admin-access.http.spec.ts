@@ -3,7 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import { HONUWARE_API_BASE } from '@honuware/ui/access';
-import { SubmissionSettings } from './events-admin-access';
+import { PastEventSettings, SubmissionSettings } from './events-admin-access';
 import { EventsAdminHttpAccess } from './events-admin-access.http';
 
 function setUp() {
@@ -124,6 +124,46 @@ describe('EventsAdminHttpAccess', () => {
     await expect(saved).rejects.toMatchObject({
       error_code: 'LIMIT_OUT_OF_RANGE',
       field: 'max_submissions_per_day',
+    });
+  });
+
+  it('reads and saves the past-event settings, naming the field of a refusal', async () => {
+    const { access, http } = setUp();
+    const settings: PastEventSettings = {
+      archived_events_visible_days: { value: 365, default: 365, min: 1, max: 730 },
+      events_show_past_by_default: { value: false, default: false },
+    };
+    const loaded = firstValueFrom(access.getPastEventSettings());
+    const get = http.expectOne('/api/admin/past_event_settings');
+    expect(get.request.method).toBe('GET');
+    expect(get.request.withCredentials).toBe(true);
+    get.flush(settings);
+    expect(await loaded).toEqual(settings);
+
+    const saved = firstValueFrom(
+      access.savePastEventSettings({ events_show_past_by_default: true }),
+    );
+    const put = http.expectOne('/api/admin/past_event_settings');
+    expect(put.request.method).toBe('PUT');
+    expect(put.request.body).toEqual({ events_show_past_by_default: true });
+    put.flush({ ...settings, events_show_past_by_default: { value: true, default: false } });
+    expect((await saved).events_show_past_by_default.value).toBe(true);
+
+    const refused = firstValueFrom(
+      access.savePastEventSettings({ archived_events_visible_days: 0 }),
+    );
+    http.expectOne('/api/admin/past_event_settings').flush(
+      {
+        status: 400,
+        detail: 'archived_events_visible_days is outside its allowed range',
+        error_code: 'DAYS_OUT_OF_RANGE',
+        field: 'archived_events_visible_days',
+      },
+      { status: 400, statusText: 'Bad Request' },
+    );
+    await expect(refused).rejects.toMatchObject({
+      error_code: 'DAYS_OUT_OF_RANGE',
+      field: 'archived_events_visible_days',
     });
   });
 });

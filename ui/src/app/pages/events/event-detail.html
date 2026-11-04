@@ -19,6 +19,12 @@
         Curator preview: this event is <strong>{{ event.status }}</strong> and not public.
       </p>
     }
+    @if (hasPassed()) {
+      <p class="event-detail__passed">
+        <mat-icon>history</mat-icon>
+        This event has passed.
+      </p>
+    }
 
     @if (photoUrl()) {
       <img class="event-detail__photo" [src]="photoUrl()" alt="" />
@@ -61,7 +67,7 @@
       }
     </dl>
 
-    @if (isPublic()) {
+    @if (isPublic() && !hasPassed()) {
       <div class="event-detail__calendar">
         <a mat-flat-button [href]="icsUrl()" download>
           <mat-icon>event</mat-icon>

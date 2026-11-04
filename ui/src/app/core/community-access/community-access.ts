@@ -4,7 +4,10 @@ import {
   Category,
   EventSeries,
   EventSeriesDetail,
+  EventSettings,
   Neighborhood,
+  PastEvents,
+  PastEventsQuery,
   PublicEvent,
   SceneTag,
   UpcomingEvents,
@@ -31,11 +34,19 @@ export interface CommunityAccess {
   getHealth(): Observable<HealthInfo>;
   getSiteInfo(): Observable<SiteInfo>;
 
-  // GET /api/events/upcoming — approved events in the window (default now →
-  // +42 days, at most 92), filtered; the reply says which window was served.
+  // GET /api/events/upcoming — public (approved or archived) events in the
+  // window (default now → +42 days, at most 92, back no further than the
+  // past-events window), filtered; the reply says which window was served.
   getUpcomingEvents(query?: UpcomingEventsQuery): Observable<UpcomingEvents>;
-  // GET /api/events/<id> — one approved event (a curator also gets pending
-  // ones, with `status`); errors with a 404 HttpErrorResponse otherwise.
+  // GET /api/events/past — public events that have started, newest first, a
+  // page at a time (EV4 §10.2), filtered like the upcoming list.
+  getPastEvents(query?: PastEventsQuery): Observable<PastEvents>;
+  // GET /api/events/settings — the past-events window and the calendar's
+  // default; the defaults when the call fails is the caller's choice.
+  getEventSettings(): Observable<EventSettings>;
+  // GET /api/events/<id> — one public event, past ones within the window
+  // included (a curator also gets pending ones, and older ones, with
+  // `status`); errors with a 404 HttpErrorResponse otherwise.
   getEvent(id: number): Observable<PublicEvent>;
   // GET /api/event_series — the active series, by title.
   getEventSeriesList(): Observable<EventSeries[]>;

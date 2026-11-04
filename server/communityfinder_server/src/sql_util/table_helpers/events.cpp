@@ -15,11 +15,8 @@ namespace {
 constexpr std::string_view kSqlGetBySourceAndExternalKey =
     "SELECT * FROM events WHERE source_id = $1 AND external_key = $2";
 
-// Served by events_status_starts_at_idx.
-constexpr std::string_view kSqlGetInRange =
-    "SELECT * FROM events "
-    "WHERE status = $1 AND starts_at_us >= $2 AND starts_at_us < $3 "
-    "ORDER BY starts_at_us ASC, id ASC";
+constexpr std::string_view kSqlGetForUpdate =
+    "SELECT * FROM events WHERE id = $1 FOR UPDATE";
 
 // Served by events_series_idx.
 constexpr std::string_view kSqlGetBySeries =
@@ -48,6 +45,28 @@ constexpr std::string_view kSqlGetStartingBetween =
     "SELECT * FROM events "
     "WHERE status = ANY($1::text[]) AND starts_at_us >= $2 AND starts_at_us < $3 "
     "ORDER BY starts_at_us ASC, id ASC";
+
+// $2 the cutoff, $3 the no-end duration. The starts_at_us bound keeps
+// events_status_starts_at_idx in play.
+constexpr std::string_view kSqlGetEndedBefore =
+    "SELECT * FROM events "
+    "WHERE status = $1 AND starts_at_us < $2 "
+    "AND COALESCE(ends_at_us, starts_at_us + $3) < $2 "
+    "ORDER BY starts_at_us ASC, id ASC LIMIT $4";
+
+// $1 a text array literal, $2 the start bound, $3 the earliest end, $4 the
+// no-end duration. Newest first; events_status_starts_at_idx serves the
+// status and start bound.
+constexpr std::string_view kSqlGetStartedBeforeEndingSince =
+    "SELECT * FROM events "
+    "WHERE status = ANY($1::text[]) AND starts_at_us < $2 "
+    "AND COALESCE(ends_at_us, starts_at_us + $4) >= $3 "
+    "ORDER BY starts_at_us DESC, id DESC";
+
+// Served by events_status_starts_at_idx.
+constexpr std::string_view kSqlGetStartedBefore =
+    "SELECT * FROM events WHERE status = $1 AND starts_at_us < $2 "
+    "ORDER BY starts_at_us ASC, id ASC LIMIT $3";
 
 // "{"a","b"}": each element double-quoted, with \ and " escaped, so the one
 // bound parameter is a valid text[] whatever the strings hold.
@@ -94,16 +113,15 @@ KeyValueTable Events::GetEvent(Transaction& transaction, int64_t id) const {
         StringFromInt(id));
 }
 
+KeyValueTable Events::GetEventForUpdate(Transaction& transaction, int64_t id) {
+    return transaction.RunSqlStatementReturningOneRow(
+        std::string(kSqlGetForUpdate), StringFromInt(id));
+}
+
 KeyValueTable Events::GetEventBySourceAndExternalKey(
     Transaction& transaction, int64_t sourceId, std::string_view externalKey) const {
     return transaction.RunSqlStatementReturningOneRow(
         std::string(kSqlGetBySourceAndExternalKey), StringFromInt(sourceId), externalKey);
-}
-
-KeyValueTableArray Events::GetEventsInRange(
-    Transaction& transaction, int64_t fromUs, int64_t toUs, std::string_view status) const {
-    return transaction.RunSqlStatementReturningKeyValueTableArray(
-        std::string(kSqlGetInRange), status, StringFromInt(fromUs), StringFromInt(toUs));
 }
 
 KeyValueTableArray Events::GetEventsBySeries(Transaction& transaction, int64_t seriesId) const {
@@ -146,6 +164,33 @@ KeyValueTableArray Events::GetEventsStartingBetween(
     return transaction.RunSqlStatementReturningKeyValueTableArray(
         std::string(kSqlGetStartingBetween), TextArrayLiteral(statuses),
         StringFromInt(fromUs), StringFromInt(toUs));
+}
+
+KeyValueTableArray Events::GetStartedBeforeEndingSince(
+    Transaction& transaction, int64_t startedBeforeUs, int64_t endingSinceUs,
+    int64_t defaultDurationUs, const std::vector<std::string_view>& statuses) const {
+    if (statuses.empty()) {
+        return {};
+    }
+    return transaction.RunSqlStatementReturningKeyValueTableArray(
+        std::string(kSqlGetStartedBeforeEndingSince), TextArrayLiteral(statuses),
+        StringFromInt(startedBeforeUs), StringFromInt(endingSinceUs),
+        StringFromInt(defaultDurationUs));
+}
+
+KeyValueTableArray Events::GetApprovedEndedBefore(
+    Transaction& transaction, int64_t cutoffUs, int64_t defaultDurationUs,
+    int64_t limit) const {
+    return transaction.RunSqlStatementReturningKeyValueTableArray(
+        std::string(kSqlGetEndedBefore), DbSchema::kEventsStatusApproved,
+        StringFromInt(cutoffUs), StringFromInt(defaultDurationUs), StringFromInt(limit));
+}
+
+KeyValueTableArray Events::GetPendingStartedBefore(
+    Transaction& transaction, int64_t nowUs, int64_t limit) const {
+    return transaction.RunSqlStatementReturningKeyValueTableArray(
+        std::string(kSqlGetStartedBefore), DbSchema::kEventsStatusPending,
+        StringFromInt(nowUs), StringFromInt(limit));
 }
 
 void Events::UpdateEvent(Transaction& transaction, int64_t id, const KeyValueTable& updates) {

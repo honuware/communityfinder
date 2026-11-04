@@ -1,6 +1,7 @@
 import { firstValueFrom } from 'rxjs';
 import { CommunityMockAccess } from './community-access.mock';
 import { buildEventsMockData } from '../mock/events-mock-data';
+import { PastEventSettingsMockStore } from '../mock/past-event-settings-mock-store';
 import {
   normalizeEvent,
   normalizeEventSeries,
@@ -27,6 +28,10 @@ function ids(events: PublicEvent[]): number[] {
 const PAST_EVENT = 116;
 const PENDING_EVENT = 117;
 const PICNIC_50_DAYS_OUT = 115;
+// Trivia Night 3 days ago, Bear Happy Hour last Thursday, the farewell brunch
+// 100 days ago, the coat drive 200 days ago; the ball 400 days ago is hidden.
+const PAST_EVENTS_NEWEST_FIRST = [PAST_EVENT, 118, 119, 120];
+const OVER_A_YEAR_AGO = 121;
 
 describe('CommunityMockAccess (events)', () => {
   beforeEach(() => vi.useFakeTimers({ toFake: ['Date'] }));
@@ -56,7 +61,7 @@ describe('CommunityMockAccess (events)', () => {
       expect(within(weekendRangeUs(NOW_US)).length).toBeGreaterThanOrEqual(4);
     });
 
-    it('clamps the window as the server does: one day back, 92 days at most', async () => {
+    it('clamps the window as the server does: back to the past-events window, 92 days at most', async () => {
       const access = mockAt(NOW_US);
       const wide = await firstValueFrom(
         access.getUpcomingEvents({
@@ -64,10 +69,15 @@ describe('CommunityMockAccess (events)', () => {
           to_us: NOW_US + 60 * US_PER_DAY,
         }),
       );
-      expect(wide.from_us).toBe(NOW_US - US_PER_DAY);
+      expect(wide.from_us).toBe(NOW_US - 5 * US_PER_DAY);
       expect(ids(wide.items)).toContain(PICNIC_50_DAYS_OUT);
-      expect(ids(wide.items)).not.toContain(PAST_EVENT);
+      expect(ids(wide.items)).toContain(PAST_EVENT);
       expect(ids(wide.items)).not.toContain(PENDING_EVENT);
+
+      const tooFarBack = await firstValueFrom(
+        access.getUpcomingEvents({ from_us: NOW_US - 500 * US_PER_DAY }),
+      );
+      expect(tooFarBack.from_us).toBe(NOW_US - 365 * US_PER_DAY);
 
       const capped = await firstValueFrom(
         access.getUpcomingEvents({ to_us: NOW_US + 200 * US_PER_DAY }),
@@ -109,19 +119,75 @@ describe('CommunityMockAccess (events)', () => {
     });
   });
 
+  describe('getPastEvents', () => {
+    it('serves the started events in the window, newest first, a page at a time', async () => {
+      const access = mockAt(NOW_US);
+      const all = await firstValueFrom(access.getPastEvents());
+      expect(ids(all.items)).toEqual(PAST_EVENTS_NEWEST_FIRST);
+      expect(all.has_more).toBe(false);
+      expect(all.since_us).toBe(NOW_US - 365 * US_PER_DAY);
+      expect(ids(all.items)).not.toContain(OVER_A_YEAR_AGO);
+      expect(all.items.some((event) => 'status' in event)).toBe(false);
+
+      const first = await firstValueFrom(access.getPastEvents({ limit: 3 }));
+      expect(ids(first.items)).toEqual(PAST_EVENTS_NEWEST_FIRST.slice(0, 3));
+      expect(first.has_more).toBe(true);
+      const second = await firstValueFrom(access.getPastEvents({ limit: 3, offset: 3 }));
+      expect(ids(second.items)).toEqual(PAST_EVENTS_NEWEST_FIRST.slice(3));
+      expect(second.has_more).toBe(false);
+    });
+
+    it('filters as the upcoming list does', async () => {
+      const access = mockAt(NOW_US);
+      const query = async (q: Parameters<CommunityMockAccess['getPastEvents']>[0]) =>
+        ids((await firstValueFrom(access.getPastEvents(q))).items);
+      // Last week's Bear Happy Hour inherits the series' bar / bear.
+      expect(await query({ scene: 'bear' })).toEqual([118]);
+      expect(await query({ series_id: 13 })).toEqual([119]);
+      expect(await query({ category: 'volunteer' })).toEqual([120]);
+      expect(await query({ neighborhood: 'capitol-hill' })).toEqual([PAST_EVENT, 118]);
+    });
+  });
+
+  describe('a shorter past-events window', () => {
+    it('hides what ended before it, everywhere', async () => {
+      vi.setSystemTime(new Date(NOW_US / 1000));
+      const store = new PastEventSettingsMockStore();
+      store.save({ archived_events_visible_days: 2 });
+      const access = new CommunityMockAccess(store);
+
+      const upcoming = await firstValueFrom(
+        access.getUpcomingEvents({ from_us: NOW_US - 30 * US_PER_DAY }),
+      );
+      expect(upcoming.from_us).toBe(NOW_US - 2 * US_PER_DAY);
+      expect(ids(upcoming.items)).not.toContain(PAST_EVENT);
+      expect((await firstValueFrom(access.getPastEvents())).items).toEqual([]);
+      await expect(firstValueFrom(access.getEvent(PAST_EVENT))).rejects.toMatchObject({
+        status: 404,
+      });
+      expect(await firstValueFrom(access.getEventSettings())).toEqual({
+        archived_events_visible_days: 2,
+        events_show_past_by_default: false,
+      });
+    });
+  });
+
   describe('getEvent', () => {
-    it('serves an approved event, even a past one', async () => {
+    it('serves an approved event, and an archived past one', async () => {
       const access = mockAt(NOW_US);
       expect((await firstValueFrom(access.getEvent(101))).title).toBe('Karaoke Night');
       expect((await firstValueFrom(access.getEvent(PAST_EVENT))).id).toBe(PAST_EVENT);
     });
 
-    it('is a 404 for a pending or unknown event', async () => {
+    it('is a 404 for a pending or unknown event, or one past the window', async () => {
       const access = mockAt(NOW_US);
       await expect(firstValueFrom(access.getEvent(PENDING_EVENT))).rejects.toMatchObject({
         status: 404,
       });
       await expect(firstValueFrom(access.getEvent(999))).rejects.toMatchObject({ status: 404 });
+      await expect(firstValueFrom(access.getEvent(OVER_A_YEAR_AGO))).rejects.toMatchObject({
+        status: 404,
+      });
     });
   });
 

@@ -170,36 +170,82 @@ const PublicEvent* FindEvent(const std::vector<PublicEvent>& events, int64_t id)
 // ---- The clamp (no database) ----
 
 constexpr int64_t kNow = 1'800'000'000'000'000LL;
+// The smallest past-events window, which leaves only the one-day slack.
+constexpr int64_t kOneDayWindow = 1;
 
 TEST(ClampUpcomingWindowTest, DefaultsToNowPlusTheDefaultWindow) {
-    UpcomingWindow window = ClampUpcomingWindow(kNow, 0, 0);
+    UpcomingWindow window = ClampUpcomingWindow(kNow, 0, 0, kOneDayWindow);
     EXPECT_EQ(window.fromUs, kNow);
     EXPECT_EQ(window.toUs, kNow + kUpcomingDefaultWindowDays * kUsPerDay);
+    // A longer past-events window doesn't move the default.
+    window = ClampUpcomingWindow(kNow, 0, 0, 365);
+    EXPECT_EQ(window.fromUs, kNow);
 }
 
 TEST(ClampUpcomingWindowTest, CapsAtTheMaxWindow) {
-    UpcomingWindow window = ClampUpcomingWindow(kNow, kNow, kNow + 200 * kUsPerDay);
+    UpcomingWindow window = ClampUpcomingWindow(kNow, kNow, kNow + 200 * kUsPerDay, kOneDayWindow);
     EXPECT_EQ(window.toUs, kNow + kUpcomingMaxWindowDays * kUsPerDay);
 
     // Inside the cap, an explicit end is kept as asked.
-    window = ClampUpcomingWindow(kNow, kNow, kNow + 10 * kUsPerDay);
+    window = ClampUpcomingWindow(kNow, kNow, kNow + 10 * kUsPerDay, kOneDayWindow);
     EXPECT_EQ(window.toUs, kNow + 10 * kUsPerDay);
 }
 
-TEST(ClampUpcomingWindowTest, FromReachesBackOneDayAtMost) {
-    UpcomingWindow window = ClampUpcomingWindow(kNow, kNow - 10 * kUsPerDay, 0);
+TEST(ClampUpcomingWindowTest, FromReachesBackOneDayAtLeast) {
+    UpcomingWindow window = ClampUpcomingWindow(kNow, kNow - 10 * kUsPerDay, 0, kOneDayWindow);
     EXPECT_EQ(window.fromUs, kNow - kUpcomingLookBackDays * kUsPerDay);
     EXPECT_EQ(window.toUs, window.fromUs + kUpcomingDefaultWindowDays * kUsPerDay);
 
     // Within the slack (an evening already under way), kept.
-    window = ClampUpcomingWindow(kNow, kNow - 3 * kUsPerHour, 0);
+    window = ClampUpcomingWindow(kNow, kNow - 3 * kUsPerHour, 0, kOneDayWindow);
     EXPECT_EQ(window.fromUs, kNow - 3 * kUsPerHour);
+}
+
+// EV4 §10: the calendar's past months. `from` reaches back as far as the
+// past-events window, and no further.
+TEST(ClampUpcomingWindowTest, FromReachesBackToThePastEventsWindow) {
+    UpcomingWindow window = ClampUpcomingWindow(kNow, kNow - 10 * kUsPerDay, 0, 30);
+    EXPECT_EQ(window.fromUs, kNow - 10 * kUsPerDay);
+    window = ClampUpcomingWindow(kNow, kNow - 400 * kUsPerDay, 0, 30);
+    EXPECT_EQ(window.fromUs, kNow - 30 * kUsPerDay);
+    // The cap still counts from `from`.
+    window = ClampUpcomingWindow(kNow, kNow - 30 * kUsPerDay, kNow + 200 * kUsPerDay, 30);
+    EXPECT_EQ(window.toUs, kNow - 30 * kUsPerDay + kUpcomingMaxWindowDays * kUsPerDay);
 }
 
 TEST(ClampUpcomingWindowTest, BackwardsRequestIsAnEmptyWindow) {
     UpcomingWindow window =
-        ClampUpcomingWindow(kNow, kNow + 5 * kUsPerDay, kNow + 2 * kUsPerDay);
+        ClampUpcomingWindow(kNow, kNow + 5 * kUsPerDay, kNow + 2 * kUsPerDay, kOneDayWindow);
     EXPECT_EQ(window.toUs, window.fromUs);
+}
+
+// ---- The past-events rule (no database) ----
+
+TEST(PastEventRuleTest, AnEventEndsAtItsEndOrTwoHoursAfterItsStart) {
+    EXPECT_EQ(EventEndUs(kNow, kNow + 5 * kUsPerHour), kNow + 5 * kUsPerHour);
+    EXPECT_EQ(EventEndUs(kNow, std::nullopt), kNow + 2 * kUsPerHour);
+}
+
+TEST(PastEventRuleTest, PublicUntilTheWindowPassesItsEnd) {
+    const int64_t cutoffUs = PastEventCutoffUs(kNow, 30);
+    EXPECT_EQ(cutoffUs, kNow - 30 * kUsPerDay);
+    const std::string_view archived = DbSchema::kEventsStatusArchived;
+    // Ending exactly at the cutoff is still inside.
+    EXPECT_TRUE(IsPublicEvent(archived, cutoffUs - kUsPerHour, cutoffUs, kNow, 30));
+    EXPECT_FALSE(IsPublicEvent(archived, cutoffUs - kUsPerHour, cutoffUs - 1, kNow, 30));
+    // Without an end, two hours after the start.
+    EXPECT_TRUE(IsPublicEvent(archived, cutoffUs - 2 * kUsPerHour, std::nullopt, kNow, 30));
+    EXPECT_FALSE(IsPublicEvent(archived, cutoffUs - 2 * kUsPerHour - 1, std::nullopt, kNow, 30));
+    // An approved one the sweep hasn't reached follows the same rule.
+    EXPECT_FALSE(IsPublicEvent(DbSchema::kEventsStatusApproved, cutoffUs - kUsPerDay,
+                               std::nullopt, kNow, 30));
+    EXPECT_TRUE(IsPublicEvent(DbSchema::kEventsStatusApproved, kNow + kUsPerDay,
+                              std::nullopt, kNow, 30));
+    // The status rule still comes first.
+    EXPECT_FALSE(IsPublicEvent(DbSchema::kEventsStatusPending, kNow + kUsPerDay,
+                               std::nullopt, kNow, 30));
+    EXPECT_FALSE(IsPublicEvent(DbSchema::kEventsStatusRejected, kNow + kUsPerDay,
+                               std::nullopt, kNow, 30));
 }
 
 // ---- The venue address line (no database) ----
@@ -643,9 +689,9 @@ TEST(EventHelperTest, ReviewRefusesArchivedAndUnknownEvents) {
 
 // ---- The public list ----
 
-TEST(EventHelperTest, OnlyApprovedEventsAreEverPublic) {
+TEST(EventHelperTest, PendingAndRejectedEventsAreNeverPublic) {
     TestDatabaseUtil testDb;
-    testDb.RunInTransaction("OnlyApprovedEventsAreEverPublic", [&](Transaction& transaction) {
+    testDb.RunInTransaction("PendingAndRejectedEventsAreNeverPublic", [&](Transaction& transaction) {
         DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
         World world = MakeWorld(transaction, databaseHelper);
         EventHelper helper(databaseHelper);
@@ -653,16 +699,153 @@ TEST(EventHelperTest, OnlyApprovedEventsAreEverPublic) {
         int64_t approved = IngestOne(transaction, helper, Item(world.feed, "approved", startsAtUs)).eventId;
         IngestOne(transaction, helper, Item(world.feed, "pending", startsAtUs));
         int64_t rejected = IngestOne(transaction, helper, Item(world.feed, "rejected", startsAtUs)).eventId;
-        int64_t archived = IngestOne(transaction, helper, Item(world.feed, "archived", startsAtUs)).eventId;
         Approve(transaction, helper, approved);
-        Approve(transaction, helper, archived);
         helper.ReviewEvent(transaction, rejected, ReviewAction::Reject, kReviewerPersonId, "");
-        TableHelpers::Events(databaseHelper).UpdateEvent(transaction, archived, {
-            { std::string(DbSchema::kEventsStatus), std::string(DbSchema::kEventsStatusArchived) },
-        });
 
         EXPECT_EQ(IdsOf(helper.GetUpcomingPublic(transaction, UpcomingQuery())),
                   std::vector<int64_t>{ approved });
+        EXPECT_TRUE(IsPublicEventStatus(DbSchema::kEventsStatusApproved));
+        EXPECT_TRUE(IsPublicEventStatus(DbSchema::kEventsStatusArchived));
+        EXPECT_FALSE(IsPublicEventStatus(DbSchema::kEventsStatusPending));
+        EXPECT_FALSE(IsPublicEventStatus(DbSchema::kEventsStatusRejected));
+    });
+}
+
+// EV4 OQ3: archived means "past and settled," not hidden. A past-dated window
+// still shows it, its detail still loads, but the default window, which starts
+// at now, has moved past it.
+TEST(EventHelperTest, ArchivedEventsStayReadableButLeaveTheUpcomingList) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("ArchivedEventsStayReadable", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        const int64_t nowUs = NowUs(transaction);
+        int64_t lastNight = IngestOne(
+            transaction, helper, Item(world.feed, "last-night", nowUs - 20 * kUsPerHour)).eventId;
+        int64_t pendingLastNight = IngestOne(
+            transaction, helper, Item(world.feed, "pending-last-night", nowUs - 19 * kUsPerHour)).eventId;
+        Approve(transaction, helper, lastNight);
+        TableHelpers::Events(databaseHelper).UpdateEvent(transaction, lastNight, {
+            { std::string(DbSchema::kEventsStatus), std::string(DbSchema::kEventsStatusArchived) },
+        });
+
+        UpcomingQuery sinceYesterday;
+        sinceYesterday.fromUs = nowUs - kUsPerDay;
+        EXPECT_EQ(IdsOf(helper.GetUpcomingPublic(transaction, sinceYesterday)),
+                  std::vector<int64_t>{ lastNight });
+        EXPECT_TRUE(helper.GetUpcomingPublic(transaction, UpcomingQuery()).events.empty());
+
+        std::optional<EventDetail> detail = helper.GetEventDetail(transaction, lastNight);
+        ASSERT_TRUE(detail.has_value());
+        EXPECT_EQ(detail->status, DbSchema::kEventsStatusArchived);
+        EXPECT_TRUE(IsPublicEventStatus(detail->status));
+        EXPECT_TRUE(detail->isPublic);
+        EXPECT_FALSE(IsPublicEventStatus(helper.GetEventDetail(transaction, pendingLastNight)->status));
+        EXPECT_FALSE(helper.GetEventDetail(transaction, pendingLastNight)->isPublic);
+    });
+}
+
+// EV4 §10 (OQ8): past the window, an event is hidden from every public read —
+// the calendar range, the past list and its page — but not deleted.
+TEST(EventHelperTest, ThePastEventsWindowHidesOlderEvents) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("ThePastEventsWindowHidesOlderEvents", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper, 30);
+        const int64_t nowUs = NowUs(transaction);
+        auto addApproved = [&](std::string_view key, int64_t startsAtUs) {
+            int64_t id = IngestOne(transaction, helper, Item(world.feed, key, startsAtUs)).eventId;
+            Approve(transaction, helper, id);
+            return id;
+        };
+        auto addArchived = [&](std::string_view key, int64_t startsAtUs) {
+            int64_t id = addApproved(key, startsAtUs);
+            TableHelpers::Events(databaseHelper).UpdateEvent(transaction, id, {
+                { std::string(DbSchema::kEventsStatus), std::string(DbSchema::kEventsStatusArchived) },
+            });
+            return id;
+        };
+        int64_t inside = addArchived("inside", nowUs - 29 * kUsPerDay);
+        int64_t outside = addArchived("outside", nowUs - 31 * kUsPerDay);
+        // An approved one the sweep hasn't reached is held to the same window.
+        int64_t unswept = addApproved("unswept", nowUs - 31 * kUsPerDay);
+
+        UpcomingQuery lastTwoMonths;
+        lastTwoMonths.fromUs = nowUs - 60 * kUsPerDay;
+        lastTwoMonths.toUs = nowUs;
+        EXPECT_EQ(IdsOf(helper.GetUpcomingPublic(transaction, lastTwoMonths)),
+                  std::vector<int64_t>{ inside });
+        EXPECT_EQ(IdsOf(helper.GetPastPublic(transaction, PastQuery()).events),
+                  std::vector<int64_t>{ inside });
+        EXPECT_TRUE(helper.GetEventDetail(transaction, inside)->isPublic);
+        EXPECT_FALSE(helper.GetEventDetail(transaction, outside)->isPublic);
+        EXPECT_FALSE(helper.GetEventDetail(transaction, unswept)->isPublic);
+
+        // Hidden, not deleted: a longer window shows it again.
+        EventHelper longer(databaseHelper, 60);
+        EXPECT_TRUE(longer.GetEventDetail(transaction, outside)->isPublic);
+        EXPECT_EQ(longer.GetPastPublic(transaction, PastQuery()).events.size(), 3u);
+    });
+}
+
+// Paging counts matching events, newest first, even when the matches run past
+// one batch of candidates.
+TEST(EventHelperTest, PastEventsPageByMatchesAcrossBatches) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("PastEventsPageByMatchesAcrossBatches", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        TableHelpers::Events events(databaseHelper);
+        const int64_t nowUs = NowUs(transaction);
+        // Hourly into the past; every tenth at The Cuff (capitol-hill). The
+        // newest started an hour ago and is still going.
+        std::vector<int64_t> atTheCuff;
+        for (int index = 0; index < 105; ++index) {
+            const bool cuff = index % 10 == 0;
+            int64_t id = events.AddEvent(transaction, {
+                { std::string(DbSchema::kEventsTitle), "Past " + StringFromInt(index) },
+                { std::string(DbSchema::kEventsStartsAtUs), StringFromInt(nowUs - (index + 1) * kUsPerHour) },
+                { std::string(DbSchema::kEventsStatus), std::string(DbSchema::kEventsStatusArchived) },
+                { std::string(DbSchema::kEventsVenueId),
+                  StringFromInt(cuff ? world.theCuff : world.sunsetTavern) },
+            });
+            if (cuff) atTheCuff.push_back(id);
+        }
+        ASSERT_EQ(atTheCuff.size(), 11u);
+
+        PastQuery query;
+        query.neighborhoodSlug = "capitol-hill";
+        query.limit = 5;
+        PastEvents first = helper.GetPastPublic(transaction, query);
+        EXPECT_EQ(IdsOf(first.events), std::vector<int64_t>(atTheCuff.begin(), atTheCuff.begin() + 5));
+        EXPECT_TRUE(first.hasMore);
+        query.offset = 5;
+        PastEvents second = helper.GetPastPublic(transaction, query);
+        EXPECT_EQ(IdsOf(second.events), std::vector<int64_t>(atTheCuff.begin() + 5, atTheCuff.begin() + 10));
+        EXPECT_TRUE(second.hasMore);
+        query.offset = 10;
+        PastEvents third = helper.GetPastPublic(transaction, query);
+        EXPECT_EQ(IdsOf(third.events), std::vector<int64_t>{ atTheCuff[10] });
+        EXPECT_FALSE(third.hasMore);
+
+        // Without those filters, the page starts at the offset.
+        PastQuery plain;
+        plain.offset = 100;
+        plain.limit = 50;
+        PastEvents tail = helper.GetPastPublic(transaction, plain);
+        EXPECT_EQ(tail.events.size(), 5u);
+        EXPECT_FALSE(tail.hasMore);
+        // The page size is clamped, and a bad one is the default.
+        plain.offset = 0;
+        plain.limit = 1000;
+        EXPECT_EQ(helper.GetPastPublic(transaction, plain).events.size(),
+                  static_cast<size_t>(kPastEventsMaxPageSize));
+        plain.limit = 0;
+        EXPECT_EQ(helper.GetPastPublic(transaction, plain).events.size(),
+                  static_cast<size_t>(kPastEventsDefaultPageSize));
     });
 }
 
@@ -671,7 +854,8 @@ TEST(EventHelperTest, TheWindowDefaultsTo42DaysAndCapsAt92) {
     testDb.RunInTransaction("TheWindowDefaultsTo42DaysAndCapsAt92", [&](Transaction& transaction) {
         DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
         World world = MakeWorld(transaction, databaseHelper);
-        EventHelper helper(databaseHelper);
+        // The smallest past-events window, so `from` reaches back one day.
+        EventHelper helper(databaseHelper, kOneDayWindow);
         int64_t nowUs = NowUs(transaction);
         auto addApproved = [&](std::string_view key, int64_t startsAtUs) {
             int64_t id = IngestOne(transaction, helper, Item(world.feed, key, startsAtUs)).eventId;

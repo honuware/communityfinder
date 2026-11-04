@@ -54,9 +54,11 @@ void GetEventICal(
     }
 
     tp->RunInTransaction([&](Transaction& transaction) {
-        Events::EventHelper helper(endpointAuthHelper.GetDatabaseHelper());
+        Events::EventHelper helper = Events::MakePublicEventHelper(
+            endpointAuthHelper.GetDatabaseHelper(), *endpointAuthHelper.GetSecretsHelper(),
+            transaction);
         std::optional<Events::EventDetail> detail = helper.GetEventDetail(transaction, eventId);
-        if (!detail || detail->status != DbSchema::kEventsStatusApproved) {
+        if (!detail || !detail->isPublic) {
             resp = ErrorResponse::NotFound("Event not found");
             return;
         }

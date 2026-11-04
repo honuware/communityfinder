@@ -149,6 +149,60 @@ describe('EventDetailPage', () => {
     expect(getEvent).not.toHaveBeenCalled();
   });
 
+  // EV4 §3.3: an archived event's page still loads, says it's over, and stops
+  // offering it for a calendar.
+  it('says a past event has passed, without calendar links', async () => {
+    configure();
+    const { element } = await open('/events/116');
+    const document = TestBed.inject(DOCUMENT);
+    expect(element.querySelector('h1')?.textContent?.trim()).toBe('Trivia Night');
+    expect(element.textContent).toContain('This event has passed.');
+    expect(link(element, 'event Add to calendar')).toBeUndefined();
+    expect(link(element, 'Google Calendar')).toBeUndefined();
+    // Still a public page, so it keeps its JSON-LD.
+    expect(jsonLd(document)).toMatchObject({ '@type': 'Event', name: 'Trivia Night' });
+  });
+
+  // The time decides, not the status: an approved event the sweep hasn't
+  // archived yet is over once start + 2 hours (no end) is behind us.
+  it('counts an event with no end as over two hours after it starts', async () => {
+    configure();
+    const access = TestBed.inject(COMMUNITY_ACCESS);
+    const approved = await firstValueFrom(access.getEvent(101));
+    const MINUTE_US = 60 * 1_000_000;
+    const HOUR_US = 60 * MINUTE_US;
+    const getEvent = vi.spyOn(access, 'getEvent');
+
+    const startedAgo = (us: number) => ({
+      ...approved,
+      starts_at_us: NOW_US - us,
+      ends_at_us: null,
+    });
+
+    getEvent.mockReturnValue(of(startedAgo(2 * HOUR_US - MINUTE_US)));
+    const { harness, element } = await open('/events/101');
+    expect(element.textContent).not.toContain('This event has passed.');
+    expect(link(element, 'event Add to calendar')).toBeDefined();
+
+    getEvent.mockReturnValue(of({ ...startedAgo(2 * HOUR_US + MINUTE_US), id: 102 }));
+    await harness.navigateByUrl('/events/102');
+    const later = harness.routeNativeElement as HTMLElement;
+    expect(later.textContent).toContain('This event has passed.');
+    expect(link(later, 'event Add to calendar')).toBeUndefined();
+  });
+
+  it('shows a curator an archived event as public, with no preview banner', async () => {
+    configure(CURATOR);
+    const access = TestBed.inject(COMMUNITY_ACCESS);
+    const archived = await firstValueFrom(access.getEvent(116));
+    vi.spyOn(access, 'getEvent').mockReturnValue(
+      of({ ...archived, status: 'archived', review_notes: '' }),
+    );
+    const { element } = await open('/events/116');
+    expect(element.textContent).not.toContain('Curator preview');
+    expect(element.textContent).toContain('This event has passed.');
+  });
+
   it('gives a curator a preview of an unapproved event, without calendar links or JSON-LD', async () => {
     configure(CURATOR);
     const access = TestBed.inject(COMMUNITY_ACCESS);

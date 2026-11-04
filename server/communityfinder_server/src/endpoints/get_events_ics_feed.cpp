@@ -80,7 +80,9 @@ void GetEventsICalFeed(
     filters.seriesId = ParseIntParam(req, "series_id", 0);
 
     tp->RunInTransaction([&](Transaction& transaction) {
-        Events::EventHelper helper(endpointAuthHelper.GetDatabaseHelper());
+        Events::EventHelper helper = Events::MakePublicEventHelper(
+            endpointAuthHelper.GetDatabaseHelper(), *endpointAuthHelper.GetSecretsHelper(),
+            transaction);
         Events::UpcomingEvents feed = helper.GetFeedEvents(transaction, filters);
         std::string siteAddress = endpointAuthHelper.GetSecretsHelper()->LookupSecret(
             transaction, Secrets::kWebsiteAddressLogin);

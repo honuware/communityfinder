@@ -7,13 +7,18 @@ import {
   EventVocabularies,
   vocabularyLabel,
 } from '../../core/services/event-vocabularies.service';
-import { eventPagePath } from '../../core/utils/event-links';
-import { formatEventShortDate, formatEventTimeRange } from '../../core/utils/events-date.utils';
+import { eventHasEnded, eventPagePath } from '../../core/utils/event-links';
+import {
+  formatEventShortDate,
+  formatEventTimeRange,
+  nowUs,
+} from '../../core/utils/events-date.utils';
 import { tagChips } from './events-view';
 
 // One event in a list: photo thumb, time, title, place, neighborhood, and
 // its category / scene chips (each a link to that filtered list). The list
-// page groups rows under day headers; the series page passes `showDate`.
+// page groups rows under day headers; the series page and the past list pass
+// `showDate`. An event that's over is muted (EV4 OQ7).
 @Component({
   selector: 'app-event-row',
   imports: [RouterLink],
@@ -32,6 +37,8 @@ export class EventRow {
   readonly photoFailed = signal(false);
 
   readonly pagePath = computed(() => eventPagePath(this.event().id));
+  // Read when the event arrives.
+  readonly hasEnded = computed(() => eventHasEnded(this.event(), nowUs()));
   readonly photoUrl = computed(() =>
     this.photoUrls.scaledPhotoUrl('events', this.event().id, 160, 160),
   );

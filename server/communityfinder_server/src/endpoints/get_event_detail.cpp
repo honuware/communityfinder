@@ -71,10 +71,15 @@ Json::Value GetEventDetail(
 
     Json::Value result;
     tp->RunInTransaction([&](Transaction& transaction) {
-        Events::EventHelper helper(endpointAuthHelper.GetDatabaseHelper());
+        Events::EventHelper helper = Events::MakePublicEventHelper(
+            endpointAuthHelper.GetDatabaseHelper(), *endpointAuthHelper.GetSecretsHelper(),
+            transaction);
         std::optional<Events::EventDetail> detail = helper.GetEventDetail(transaction, eventId);
         const bool reviewer = HoldsManageEvents(endpointAuthHelper, transaction);
-        if (!detail || (detail->status != DbSchema::kEventsStatusApproved && !reviewer)) {
+        // Archived events stay readable (EV4 OQ3), so an old link still works,
+        // until the past-events window passes them (§10). A curator still sees
+        // every event.
+        if (!detail || (!detail->isPublic && !reviewer)) {
             resp = ErrorResponse::NotFound("Event not found");
             return;
         }

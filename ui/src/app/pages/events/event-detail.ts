@@ -15,15 +15,20 @@ import {
   EventVocabulariesService,
   vocabularyLabel,
 } from '../../core/services/event-vocabularies.service';
-import { PublicEvent } from '../../core/types/events.types';
+import { isPublicEvent, PublicEvent } from '../../core/types/events.types';
 import {
   absoluteUrl,
+  eventHasEnded,
   eventIcsUrl,
   eventPagePath,
   googleCalendarUrl,
   seriesPagePath,
 } from '../../core/utils/event-links';
-import { formatEventDateLine, formatEventTimeRange } from '../../core/utils/events-date.utils';
+import {
+  formatEventDateLine,
+  formatEventTimeRange,
+  nowUs,
+} from '../../core/utils/events-date.utils';
 import { PageMeta } from '../../core/utils/page-meta';
 import { tagChips } from './events-view';
 
@@ -36,7 +41,8 @@ const PHOTO_HEIGHT = 630;
 // download plus Google Calendar's quick-add, OQ1). Sets the page's full
 // metadata and its schema.org JSON-LD. A signed-in curator can also open an
 // event that isn't approved yet: it shows a preview banner, and no Add to
-// calendar, since the download serves approved events only (OQ6 (c)).
+// calendar, since the download serves public events only (OQ6 (c)). An event
+// that's over says so and drops Add to calendar too (EV4 §3.3).
 @Component({
   selector: 'app-event-detail',
   imports: [RouterLink, MatButtonModule, MatIconModule, MatProgressSpinnerModule],
@@ -64,8 +70,14 @@ export class EventDetailPage implements OnInit {
   readonly canManage = signal(false);
 
   readonly isPublic = computed(() => {
-    const status = this.event()?.status;
-    return status === undefined || status === 'approved';
+    const event = this.event();
+    return event ? isPublicEvent(event) : true;
+  });
+  // EV4 §3.3: an old event's page still loads, so say it's over and stop
+  // offering it for a calendar. Read when the event arrives.
+  readonly hasPassed = computed(() => {
+    const event = this.event();
+    return event ? eventHasEnded(event, nowUs()) : false;
   });
   readonly dateLine = computed(() => {
     const event = this.event();

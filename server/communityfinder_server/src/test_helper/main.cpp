@@ -24,7 +24,7 @@ ABSL_FLAG(std::string, table, "", "Table name (for peek)");
 ABSL_FLAG(int64_t, limit, 0, "Row limit (for peek)");
 
 // EV1 events commands (create-venue / create-event / ingest-demo / list-upcoming).
-ABSL_FLAG(std::string, name, "", "Venue name (for create-venue)");
+ABSL_FLAG(std::string, name, "", "Venue name (for create-venue); job name (for run-job)");
 ABSL_FLAG(std::string, neighborhood, "", "Neighborhood slug (for create-venue, list-upcoming)");
 ABSL_FLAG(std::string, title, "", "Event title (for create-event)");
 ABSL_FLAG(std::string, starts_in_hours, "", "Hours from now the event starts (for create-event)");
@@ -43,6 +43,11 @@ ABSL_FLAG(std::string, dates, "", "How many weekly dates (for submit-event)");
 ABSL_FLAG(std::string, paused, "", "true or false (for submission-settings)");
 ABSL_FLAG(std::string, max_pending_dates, "", "Dates one person may have waiting (for submission-settings)");
 ABSL_FLAG(std::string, max_submissions_per_day, "", "Submissions per person per 24 hours (for submission-settings)");
+
+// EV4 jobs commands (run-job / create-alert / age-event). run-job takes --name above.
+ABSL_FLAG(std::string, description, "", "What the alert says (for create-alert)");
+ABSL_FLAG(std::string, id, "", "Event id (for age-event)");
+ABSL_FLAG(std::string, hours_ago, "", "Hours ago the event now starts (for age-event)");
 
 int main(int argc, char** argv) {
     absl::ParseCommandLine(argc, argv);
@@ -102,6 +107,9 @@ int main(int argc, char** argv) {
         addStr("paused", absl::GetFlag(FLAGS_paused));
         addStr("max_pending_dates", absl::GetFlag(FLAGS_max_pending_dates));
         addStr("max_submissions_per_day", absl::GetFlag(FLAGS_max_submissions_per_day));
+        addStr("description", absl::GetFlag(FLAGS_description));
+        addStr("id", absl::GetFlag(FLAGS_id));
+        addStr("hours_ago", absl::GetFlag(FLAGS_hours_ago));
 
         return TestHelper::ExecuteCommand(*ctx, command, args);
     }

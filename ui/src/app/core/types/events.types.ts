@@ -20,9 +20,9 @@ export type SceneCoverage = 'full' | 'link_out';
 export type NeighborhoodRegion =
   'seattle-core' | 'seattle-north' | 'seattle-south' | 'eastside' | 'south-king';
 
-// An approved event (GET /api/events/upcoming, /api/events/<id>,
-// /api/event_series/<slug>). The slug lists are the EFFECTIVE ones: the
-// event's own, or its series' when it has none.
+// A public event, approved or archived (GET /api/events/upcoming,
+// /api/events/<id>, /api/event_series/<slug>). The slug lists are the EFFECTIVE
+// ones: the event's own, or its series' when it has none.
 export interface PublicEvent {
   id: number;
   title: string;
@@ -52,6 +52,13 @@ export interface PublicEvent {
   review_notes?: string;
 }
 
+// Whether the public can see it (EV4 OQ3): approved, or archived ("past and
+// settled," still readable). No status means the server sent the public view,
+// which only ever carries public events.
+export function isPublicEvent(event: PublicEvent): boolean {
+  return event.status === undefined || event.status === 'approved' || event.status === 'archived';
+}
+
 // GET /api/events/upcoming — the events plus the window the server actually
 // served after clamping it, so a client paging through months knows where the
 // next one starts.
@@ -75,10 +82,50 @@ export interface UpcomingEventsQuery {
 }
 
 // The server's window pins (EV1 behavior pin), for clients that page by month.
+// A `from_us` can reach back as far as the past-events window (EV4 §10), and
+// never less than the one-day look-back.
 export const UPCOMING_DEFAULT_WINDOW_DAYS = 42;
 export const UPCOMING_MAX_WINDOW_DAYS = 92;
 export const UPCOMING_LOOK_BACK_DAYS = 1;
 export const US_PER_DAY = 86_400 * 1_000_000;
+
+// GET /api/events/past (EV4 §10.2) — public events that have started, newest
+// first, a page at a time, back to the past-events window. `since_us` is where
+// the window starts: an event that ended before it is hidden everywhere.
+export interface PastEvents {
+  items: PublicEvent[];
+  has_more: boolean;
+  since_us: number;
+}
+
+// The past list's query string: paging plus the upcoming list's filters.
+export interface PastEventsQuery {
+  offset?: number;
+  limit?: number;
+  category?: string;
+  scene?: string;
+  neighborhood?: string;
+  venue_id?: number;
+  series_id?: number;
+}
+
+// The server's page sizes (EventHelper's kPastEvents*PageSize).
+export const PAST_EVENTS_PAGE_SIZE = 20;
+export const PAST_EVENTS_MAX_PAGE_SIZE = 50;
+
+// GET /api/events/settings (EV4 §10.3): how long an event stays on the site
+// after it ends, and whether the calendar shows past events until a visitor
+// says otherwise.
+export interface EventSettings {
+  archived_events_visible_days: number;
+  events_show_past_by_default: boolean;
+}
+
+// The server's defaults, for when the settings can't be read.
+export const DEFAULT_EVENT_SETTINGS: EventSettings = {
+  archived_events_visible_days: 365,
+  events_show_past_by_default: false,
+};
 
 // A recurring series (GET /api/event_series, /api/event_series/<slug>). The
 // slug lists are the series' own, which its events inherit.
@@ -219,6 +266,28 @@ export function normalizeUpcomingEvents(value: unknown): UpcomingEvents {
   };
 }
 
+export function normalizePastEvents(value: unknown): PastEvents {
+  const raw = asRaw(value);
+  return {
+    items: normalizeEvents(raw['items']),
+    has_more: raw['has_more'] === true,
+    since_us: toNumber(raw['since_us']),
+  };
+}
+
+// A missing or unusable setting reads as its default, as on the server.
+export function normalizeEventSettings(value: unknown): EventSettings {
+  const raw = asRaw(value);
+  const days = Number(raw['archived_events_visible_days']);
+  return {
+    archived_events_visible_days:
+      Number.isInteger(days) && days > 0
+        ? days
+        : DEFAULT_EVENT_SETTINGS.archived_events_visible_days,
+    events_show_past_by_default: raw['events_show_past_by_default'] === true,
+  };
+}
+
 export function normalizeEventSeries(value: unknown): EventSeries {
   const raw = asRaw(value);
   return {
@@ -319,22 +388,37 @@ export function venueChoicesFromRows(results: DataResults): VenueChoice[] {
     .sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
 }
 
-// The upcoming list's query string ("" or "?category=drag&…"), in a fixed
-// order, leaving out unset fields. 0 counts as unset, as it does on the server.
-export function buildEventsQueryString(query: UpcomingEventsQuery): string {
-  const pairs: string[] = [];
-  const add = (key: string, value: string | number | undefined) => {
-    if (value === undefined || value === null || value === '' || value === 0) {
-      return;
-    }
-    pairs.push(`${key}=${encodeURIComponent(String(value))}`);
-  };
-  add('from_us', query.from_us);
-  add('to_us', query.to_us);
-  add('category', query.category);
-  add('scene', query.scene);
-  add('neighborhood', query.neighborhood);
-  add('venue_id', query.venue_id);
-  add('series_id', query.series_id);
+// "" or "?category=drag&…", in the order given, leaving out unset fields. 0
+// counts as unset, as it does on the server.
+function queryString(fields: ReadonlyArray<[string, string | number | undefined]>): string {
+  const pairs = fields
+    .filter(([, value]) => value !== undefined && value !== null && value !== '' && value !== 0)
+    .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`);
   return pairs.length > 0 ? `?${pairs.join('&')}` : '';
+}
+
+// The upcoming list's query string.
+export function buildEventsQueryString(query: UpcomingEventsQuery): string {
+  return queryString([
+    ['from_us', query.from_us],
+    ['to_us', query.to_us],
+    ['category', query.category],
+    ['scene', query.scene],
+    ['neighborhood', query.neighborhood],
+    ['venue_id', query.venue_id],
+    ['series_id', query.series_id],
+  ]);
+}
+
+// The past list's query string.
+export function buildPastEventsQueryString(query: PastEventsQuery): string {
+  return queryString([
+    ['offset', query.offset],
+    ['limit', query.limit],
+    ['category', query.category],
+    ['scene', query.scene],
+    ['neighborhood', query.neighborhood],
+    ['venue_id', query.venue_id],
+    ['series_id', query.series_id],
+  ]);
 }

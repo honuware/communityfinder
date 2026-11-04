@@ -6,6 +6,7 @@
 #include <string_view>
 #include <vector>
 
+#include "business_logic/events/past_event_settings.h"
 #include "sql_util/database_access/database_helper.h"
 #include "sql_util/table_helpers/categories.h"
 #include "sql_util/table_helpers/event_category_assignments.h"
@@ -57,15 +58,41 @@ inline constexpr std::string_view kIngestOutcomeArchivedKept = "archived_kept";
 inline constexpr std::string_view kReviewNoteChangedByRescan = "date/venue changed by re-scan";
 
 // The public window (behavior pin): default now → +42 days, at most 92 days
-// per request, and `from` may reach back one day (time-zone slack).
+// per request, and `from` may reach back one day (time-zone slack), or as far
+// as the past-events window (EV4 §10) so the calendar can show past months.
 inline constexpr int64_t kUsPerDay = 86'400LL * 1'000'000LL;
 inline constexpr int64_t kUpcomingDefaultWindowDays = 42;
 inline constexpr int64_t kUpcomingMaxWindowDays = 92;
 inline constexpr int64_t kUpcomingLookBackDays = 1;
 
+// The past-events list's page (EV4 §10): 20 by default, at most 50.
+inline constexpr int64_t kPastEventsDefaultPageSize = 20;
+inline constexpr int64_t kPastEventsMaxPageSize = 50;
+
 // The ICS subscribe feed's window (EV2 pin): now − 1 day → now + 60 days.
 inline constexpr int64_t kFeedLookBackDays = 1;
 inline constexpr int64_t kFeedWindowDays = 60;
+
+// The statuses the public may read (EV4 OQ3): approved events, and archived
+// ones. Archived means "past and settled," not hidden. Pending and rejected
+// never show. The windows still start at now, so the upcoming list and the
+// feeds show what's coming.
+bool IsPublicEventStatus(std::string_view status);
+const std::vector<std::string_view>& PublicEventStatuses();
+
+// When an event is over: its end, or its start + kICalDefaultDurationUs when it
+// has none (EV2's ICS default, which the archive sweep uses too).
+int64_t EventEndUs(int64_t startsAtUs, std::optional<int64_t> endsAtUs);
+
+// The past-events window (EV4 §10, OQ8): a public-status event stays public
+// until it has been over for `pastEventVisibleDays` days, and is hidden after
+// that, not deleted. This is the earliest end a public event can have.
+int64_t PastEventCutoffUs(int64_t nowUs, int64_t pastEventVisibleDays);
+
+// The whole public rule: a public status and an end inside the window.
+bool IsPublicEvent(std::string_view status, int64_t startsAtUs,
+                   std::optional<int64_t> endsAtUs, int64_t nowUs,
+                   int64_t pastEventVisibleDays);
 
 // One item from a feed. Optional fields follow one rule: **absent = not
 // stated** — a new event takes the column default, an existing one keeps what
@@ -124,10 +151,8 @@ struct UpcomingWindow {
     int64_t toUs = 0;
 };
 
-// 0 / empty = not filtered.
-struct UpcomingQuery {
-    int64_t fromUs = 0;  // 0 = now
-    int64_t toUs = 0;    // 0 = from + the default window
+// The public lists' filters. 0 / empty = not filtered.
+struct EventFilters {
     std::string categorySlug;
     std::string sceneTagSlug;
     std::string neighborhoodSlug;
@@ -135,8 +160,19 @@ struct UpcomingQuery {
     int64_t seriesId = 0;
 };
 
-// An approved event as the public sees it. Deliberately has no review fields:
-// a public shape cannot leak what it never carries.
+struct UpcomingQuery : EventFilters {
+    int64_t fromUs = 0;  // 0 = now
+    int64_t toUs = 0;    // 0 = from + the default window
+};
+
+// EV4 §10's past-events list, newest first.
+struct PastQuery : EventFilters {
+    int64_t offset = 0;                         // matching events to skip
+    int64_t limit = kPastEventsDefaultPageSize;  // clamped to 1..kPastEventsMaxPageSize
+};
+
+// A public (approved or archived) event as the public sees it. Deliberately has
+// no review fields: a public shape cannot leak what it never carries.
 struct PublicEvent {
     int64_t id = 0;
     std::string title;
@@ -167,12 +203,23 @@ struct UpcomingEvents {
     std::vector<PublicEvent> events;
 };
 
+// GetPastPublic's answer: one page, and whether another follows.
+struct PastEvents {
+    std::vector<PublicEvent> events;
+    bool hasMore = false;
+    // The window's start (PastEventCutoffUs): nothing that ended before it is
+    // listed.
+    int64_t sinceUs = 0;
+};
+
 // One event, whatever its status, for the detail page. `status` and
 // `reviewNotes` are for a curator's preview; the endpoint decides who sees them.
 struct EventDetail {
     PublicEvent event;
     std::string status;
     std::string reviewNotes;
+    // IsPublicEvent, with the helper's past-events window.
+    bool isPublic = false;
 };
 
 // A series as the public sees it: the durable label plus its OWN category and
@@ -200,8 +247,10 @@ struct SeriesDetail {
     UpcomingEvents upcoming;
 };
 
-// The clamp itself, separate so tests can pin it without a DB.
-UpcomingWindow ClampUpcomingWindow(int64_t nowUs, int64_t fromUs, int64_t toUs);
+// The clamp itself, separate so tests can pin it without a DB. `from` reaches
+// back the larger of kUpcomingLookBackDays and the past-events window.
+UpcomingWindow ClampUpcomingWindow(int64_t nowUs, int64_t fromUs, int64_t toUs,
+                                   int64_t pastEventVisibleDays);
 
 // A venue's address parts as one line — "1533 13th Ave, Seattle, WA 98122" —
 // skipping whatever is blank.
@@ -210,7 +259,12 @@ std::string FormatVenueAddress(std::string_view street, std::string_view city,
 
 class EventHelper {
 public:
-    explicit EventHelper(DatabaseHelper databaseHelper);
+    // `pastEventVisibleDays` is the past-events window every public read
+    // applies (PastEventCutoffUs). Endpoints pass the site's setting
+    // (LoadPastEventSettings); the default is that setting's default.
+    explicit EventHelper(
+        DatabaseHelper databaseHelper,
+        int64_t pastEventVisibleDays = kArchivedEventsVisibleDaysRange.defaultValue);
     EventHelper(const EventHelper&) = default;
     EventHelper& operator=(const EventHelper&) = default;
     ~EventHelper() = default;
@@ -235,11 +289,17 @@ public:
         int64_t reviewerPersonId,
         std::string_view notes);
 
-    // Approved events starting in the clamped window, in start order, each with
-    // its venue, neighborhood, series and EFFECTIVE category / scene-tag slugs
-    // resolved in a handful of batch queries. Category and scene filters match
-    // the effective sets (the OQ5 inheritance pin).
+    // Public events (IsPublicEvent) starting in the clamped window, in start
+    // order, each with its venue, neighborhood, series and EFFECTIVE category /
+    // scene-tag slugs resolved in a handful of batch queries. Category and
+    // scene filters match the effective sets (the OQ5 inheritance pin).
     UpcomingEvents GetUpcomingPublic(Transaction& transaction, const UpcomingQuery& query);
+
+    // EV4 §10: public events that started before now and are still inside the
+    // past-events window, newest start first, one page at a time, with the
+    // upcoming list's filters. An event that is still going counts: it has
+    // left the upcoming list, which starts at now.
+    PastEvents GetPastPublic(Transaction& transaction, const PastQuery& query);
 
     // The ICS feed's events: GetUpcomingPublic over now − kFeedLookBackDays →
     // now + kFeedWindowDays with the caller's filters. Any window in `filters`
@@ -254,7 +314,8 @@ public:
         Transaction& transaction, const UpcomingQuery& filters);
 
     // One event in the public shape, any status; nullopt when there is no such
-    // event. Visibility is the caller's call (approved-only for the public).
+    // event. Visibility is the caller's call: `isPublic` says whether the
+    // public may see it.
     std::optional<EventDetail> GetEventDetail(Transaction& transaction, int64_t eventId);
 
     // The series index: every active series (Series::GetActiveSeries — all but
@@ -267,6 +328,7 @@ public:
 
 private:
     DatabaseHelper databaseHelper_;
+    int64_t pastEventVisibleDays_;
     TableHelpers::Categories categories_;
     TableHelpers::SceneTags sceneTags_;
     TableHelpers::Neighborhoods neighborhoods_;
@@ -288,5 +350,10 @@ private:
     std::vector<PublicSeries> AssemblePublicSeries(
         Transaction& transaction, const KeyValueTableArray& rows);
 };
+
+// An EventHelper with the site's past-events window (LoadPastEventSettings),
+// for the endpoints that serve the public.
+EventHelper MakePublicEventHelper(
+    DatabaseHelper databaseHelper, Secrets::SecretsHelper& secrets, Transaction& transaction);
 
 }  // namespace Events

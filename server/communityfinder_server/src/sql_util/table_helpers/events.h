@@ -26,16 +26,17 @@ public:
     // READ — empty when there is no such event.
     KeyValueTable GetEvent(Transaction& transaction, int64_t id) const;
 
+    // READ — GetEvent, holding the row's lock until the transaction ends. EV4's
+    // sweeps re-read each event this way before changing it, so a curator's
+    // decision that landed after the sweep's scan is seen, not overwritten. A
+    // submitted date's submission is locked first
+    // (EventSubmissions::GetSubmissionForUpdate), keeping the lock order.
+    KeyValueTable GetEventForUpdate(Transaction& transaction, int64_t id);
+
     // READ — the ingest's match: the event a source already gave this key, or
     // empty when it is new.
     KeyValueTable GetEventBySourceAndExternalKey(
         Transaction& transaction, int64_t sourceId, std::string_view externalKey) const;
-
-    // READ — events in one status starting in [fromUs, toUs), ordered by start
-    // then id. Shaped for the (status, starts_at_us) index; the public calendar
-    // passes `approved`.
-    KeyValueTableArray GetEventsInRange(
-        Transaction& transaction, int64_t fromUs, int64_t toUs, std::string_view status) const;
 
     // READ — a series' instances in every status, ordered by start then id. The
     // caller picks the statuses and window it shows.
@@ -61,12 +62,35 @@ public:
     // hand-entered pending events never count against their submissions.
     int64_t CountPendingSubmittedBy(Transaction& transaction, int64_t personId) const;
 
-    // READ — EV3's duplicate-hint scan: events in any of `statuses` starting in
-    // [fromUs, toUs), ordered by start then id. Shaped for the
-    // (status, starts_at_us) index. No statuses, no rows.
+    // READ — events in any of `statuses` starting in [fromUs, toUs), ordered by
+    // start then id. Shaped for the (status, starts_at_us) index. The public
+    // calendar passes approved + archived (EV4); EV3's duplicate-hint scan,
+    // approved. No statuses, no rows.
     KeyValueTableArray GetEventsStartingBetween(
         Transaction& transaction, int64_t fromUs, int64_t toUs,
         const std::vector<std::string_view>& statuses) const;
+
+    // READ — EV4 §10's past-events list: events in any of `statuses` that
+    // started before `startedBeforeUs` and END at or after `endingSinceUs`,
+    // newest start first (then id, descending). An event with no end ends
+    // `defaultDurationUs` after its start. No statuses, no rows.
+    KeyValueTableArray GetStartedBeforeEndingSince(
+        Transaction& transaction, int64_t startedBeforeUs, int64_t endingSinceUs,
+        int64_t defaultDurationUs, const std::vector<std::string_view>& statuses) const;
+
+    // READ — EV4's archive sweep: approved events that ENDED before `cutoffUs`,
+    // oldest start first, at most `limit`. An event with no end ends
+    // `defaultDurationUs` after its start (the ICS default). Only events that
+    // also started before the cutoff qualify, so a bad end time before the start
+    // can't archive a future event.
+    KeyValueTableArray GetApprovedEndedBefore(
+        Transaction& transaction, int64_t cutoffUs, int64_t defaultDurationUs,
+        int64_t limit) const;
+
+    // READ — EV4's expiry sweep: pending events that STARTED before `nowUs`,
+    // oldest first, at most `limit`.
+    KeyValueTableArray GetPendingStartedBefore(
+        Transaction& transaction, int64_t nowUs, int64_t limit) const;
 
     // UPDATE — bumps updated_us. A value of "NULL" clears a nullable column.
     void UpdateEvent(Transaction& transaction, int64_t id, const KeyValueTable& updates);

@@ -30,7 +30,15 @@ export function seriesPagePath(slug: string): string {
   return `/events/series/${encodeURIComponent(slug)}`;
 }
 
-// GET /api/events/<id>/ical — approved events only.
+// Whether the event is over: its end, or its start plus the default two hours
+// without one, is behind `nowUs`. Time decides, not status, so it's right before
+// EV4's archive sweep runs.
+export function eventHasEnded(event: PublicEvent, nowUs: number): boolean {
+  const endsAtUs = event.ends_at_us ?? event.starts_at_us + CALENDAR_DEFAULT_DURATION_US;
+  return endsAtUs < nowUs;
+}
+
+// GET /api/events/<id>/ical — public (approved or archived) events only.
 export function eventIcsUrl(apiBase: string, eventId: number): string {
   return `${apiBase}/events/${eventId}/ical`;
 }

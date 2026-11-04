@@ -5,6 +5,8 @@ import { HONUWARE_API_BASE } from '@honuware/ui/access';
 import { toSubmissionProblem } from '../event-submissions-access/event-submissions-access';
 import {
   EventsAdminAccess,
+  PastEventSettings,
+  PastEventSettingsUpdate,
   ReviewAction,
   ReviewDecision,
   ReviewEventResult,
@@ -59,6 +61,22 @@ export class EventsAdminHttpAccess implements EventsAdminAccess {
   saveSubmissionSettings(update: SubmissionSettingsUpdate): Observable<SubmissionSettings> {
     return this.http
       .put<SubmissionSettings>(`${this.apiBase}/admin/event_submission_settings`, update, {
+        withCredentials: true,
+      })
+      .pipe(catchError((error) => throwError(() => toSubmissionProblem(error))));
+  }
+
+  getPastEventSettings(): Observable<PastEventSettings> {
+    return this.http
+      .get<PastEventSettings>(`${this.apiBase}/admin/past_event_settings`, {
+        withCredentials: true,
+      })
+      .pipe(catchError((error) => throwError(() => toSubmissionProblem(error))));
+  }
+
+  savePastEventSettings(update: PastEventSettingsUpdate): Observable<PastEventSettings> {
+    return this.http
+      .put<PastEventSettings>(`${this.apiBase}/admin/past_event_settings`, update, {
         withCredentials: true,
       })
       .pipe(catchError((error) => throwError(() => toSubmissionProblem(error))));

@@ -35,6 +35,16 @@
 #include "get_guide_services.h"
 #include "get_guide_venues.h"
 
+// EV4 — the app's scheduled jobs (POSTed by communityfinder_helper). The
+// cleanups and the admin-alerts digest are honuware's, anchored there.
+#include "admin_archive_past_events.h"
+#include "admin_expire_unreviewed_events.h"
+
+// EV4 §10 — past events: the list, its settings, and the admin side.
+#include "admin_past_event_settings.h"
+#include "get_event_settings.h"
+#include "get_past_events.h"
+
 namespace Endpoints {
 
 // Anchor every endpoint's translation unit into the final link.
@@ -89,6 +99,16 @@ void RegisterAllEndpoints() {
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetGuideScenes);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetGuideServices);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetGuideVenues);
+
+    // EV4 — the app's scheduled jobs. A missing anchor here 404s the job in
+    // Release only, and the helper just logs the failure every interval.
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminArchivePastEvents);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminExpireUnreviewedEvents);
+
+    // EV4 §10 — past events. Both admin settings routes ride one anchor.
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetAdminPastEventSettings);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEventSettings);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetPastEvents);
 }
 
 }  // namespace Endpoints

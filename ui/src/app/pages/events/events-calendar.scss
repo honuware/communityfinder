@@ -1,8 +1,14 @@
 .calendar__header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   margin: 8px 0 12px;
+}
+
+// To the right on a wide screen; its own line on a phone.
+.calendar__show-past {
+  margin-left: auto;
 }
 
 .calendar__title {
@@ -86,6 +92,12 @@
 
 .calendar__event-time {
   font-weight: 600;
+}
+
+// Over (EV4 OQ7): a quieter chip, so the past reads as history.
+.calendar__event--past {
+  color: var(--mat-sys-on-surface-variant);
+  background: var(--mat-sys-surface-container-high);
 }
 
 // Phones: the grid stacks into a list of this month's days that have events.

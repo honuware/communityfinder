@@ -1,7 +1,16 @@
 <section class="events-list">
   <header class="events-list__header">
-    <h1 class="events-list__title">Events</h1>
+    <h1 class="events-list__title">{{ isPast() ? 'Past events' : 'Events' }}</h1>
     <nav class="events-list__views">
+      <a
+        mat-button
+        routerLink="/events"
+        [queryParams]="otherViewParams()"
+        class="events-list__other-view"
+      >
+        <mat-icon>{{ isPast() ? 'event' : 'history' }}</mat-icon>
+        {{ isPast() ? 'Upcoming' : 'Past events' }}
+      </a>
       <a mat-button routerLink="/events/calendar">
         <mat-icon>calendar_month</mat-icon>
         Calendar
@@ -17,18 +26,20 @@
     </nav>
   </header>
 
-  <div class="events-list__presets" role="group" aria-label="When">
-    @for (preset of presets; track preset.when) {
-      <button
-        type="button"
-        [matButton]="filters().when === preset.when ? 'filled' : 'outlined'"
-        [attr.aria-pressed]="filters().when === preset.when"
-        (click)="togglePreset(preset.when)"
-      >
-        {{ preset.label }}
-      </button>
-    }
-  </div>
+  @if (!isPast()) {
+    <div class="events-list__presets" role="group" aria-label="When">
+      @for (preset of presets; track preset.when) {
+        <button
+          type="button"
+          [matButton]="filters().when === preset.when ? 'filled' : 'outlined'"
+          [attr.aria-pressed]="filters().when === preset.when"
+          (click)="togglePreset(preset.when)"
+        >
+          {{ preset.label }}
+        </button>
+      }
+    </div>
+  }
 
   <div class="events-list__filters">
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -69,16 +80,53 @@
     }
   </div>
 
-  <app-subscribe-link
-    class="events-list__subscribe"
-    [filters]="feedFilters()"
-    [label]="feedLabel()"
-  />
+  @if (!isPast()) {
+    <app-subscribe-link
+      class="events-list__subscribe"
+      [filters]="feedFilters()"
+      [label]="feedLabel()"
+    />
+  }
 
   @if (loading()) {
     <mat-progress-spinner mode="indeterminate" diameter="36" />
   } @else if (failed()) {
     <p class="events-list__empty">Events couldn't be loaded. Please try again in a moment.</p>
+  } @else if (isPast()) {
+    @if (groups().length === 0) {
+      @if (filtered()) {
+        <p class="events-list__empty">
+          No past events match these filters.
+          <button mat-button type="button" (click)="clearFilters()">Clear filters</button>
+        </p>
+      } @else {
+        <p class="events-list__empty">
+          No past events to show yet. <a routerLink="/events">See what's coming up</a>.
+        </p>
+      }
+    } @else {
+      @for (group of groups(); track group.key) {
+        <section class="events-list__day">
+          <h2 class="events-list__day-title">{{ group.dateLabel }}</h2>
+          @for (event of group.events; track event.id) {
+            <app-event-row [event]="event" [vocabularies]="vocabularies()" [showDate]="true" />
+          }
+        </section>
+      }
+      @if (moreFailed()) {
+        <p class="events-list__empty">More couldn't be loaded. Please try again.</p>
+      }
+      @if (pastHasMore()) {
+        <div class="events-list__more">
+          <button mat-stroked-button type="button" [disabled]="loadingMore()" (click)="showMore()">
+            Show more
+          </button>
+          @if (loadingMore()) {
+            <mat-progress-spinner mode="indeterminate" diameter="24" />
+          }
+        </div>
+      }
+    }
   } @else if (rawItemCount() === 0) {
     <p class="events-list__empty">
       Nothing's on the calendar yet. Check back soon. Know of something?

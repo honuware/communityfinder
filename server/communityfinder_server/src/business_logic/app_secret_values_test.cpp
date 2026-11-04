@@ -53,6 +53,12 @@ TEST(AppSecretValuesTest, RegistersTheSubmissionSettingDefaults) {
     EXPECT_EQ(d[std::string(Secrets::kEventSubmissionsPaused)], "false");
 }
 
+TEST(AppSecretValuesTest, RegistersThePastEventSettingDefaults) {
+    auto d = CollectAppDefaults();
+    EXPECT_EQ(d[std::string(Secrets::kArchivedEventsVisibleDays)], "365");
+    EXPECT_EQ(d[std::string(Secrets::kEventsShowPastByDefault)], "false");
+}
+
 TEST(AppSecretValuesTest, StringVariantMatchesStringViewVariant) {
     auto sv = CollectAppDefaults();
     std::map<std::string, std::string> s;

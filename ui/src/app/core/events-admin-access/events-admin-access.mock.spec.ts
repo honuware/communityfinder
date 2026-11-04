@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 import { CrudAccess } from '@honuware/ui/access';
 import { provideHonuwareAccessMock } from '@honuware/ui/testing';
 import { HONUWARE_MOCK_OPTIONS } from '../mock/honuware-mock';
+import { PastEventSettingsMockStore } from '../mock/past-event-settings-mock-store';
 import { dataResultsToRecords } from '../types/events.types';
 import { pacificWallClockToUs } from '../utils/events-date.utils';
 import { EVENTS_ADMIN_ACCESS } from './events-admin-access';
@@ -151,6 +152,47 @@ describe('EventsAdminMockAccess', () => {
       const settings = await firstValueFrom(access.getSubmissionSettings());
       expect(settings.max_pending_dates.value).toBe(10);
       expect(settings.max_submissions_per_day.value).toBe(5);
+    });
+  });
+
+  describe('the past-event settings', () => {
+    it('starts at the defaults and saves only what it is sent', async () => {
+      const { access } = setUp();
+      expect(await firstValueFrom(access.getPastEventSettings())).toEqual({
+        archived_events_visible_days: { value: 365, default: 365, min: 1, max: 730 },
+        events_show_past_by_default: { value: false, default: false },
+      });
+      const saved = await firstValueFrom(
+        access.savePastEventSettings({ archived_events_visible_days: 90 }),
+      );
+      expect(saved.archived_events_visible_days.value).toBe(90);
+      expect(saved.events_show_past_by_default.value).toBe(false);
+      // The public read sees it.
+      expect(TestBed.inject(PastEventSettingsMockStore).publicSettings()).toEqual({
+        archived_events_visible_days: 90,
+        events_show_past_by_default: false,
+      });
+    });
+
+    it('refuses an out-of-range window, and saves nothing', async () => {
+      const { access } = setUp();
+      for (const days of [0, 731, 1.5]) {
+        await expect(
+          firstValueFrom(
+            access.savePastEventSettings({
+              archived_events_visible_days: days,
+              events_show_past_by_default: true,
+            }),
+          ),
+        ).rejects.toMatchObject({
+          status: 400,
+          error_code: 'DAYS_OUT_OF_RANGE',
+          field: 'archived_events_visible_days',
+        });
+      }
+      const settings = await firstValueFrom(access.getPastEventSettings());
+      expect(settings.archived_events_visible_days.value).toBe(365);
+      expect(settings.events_show_past_by_default.value).toBe(false);
     });
   });
 });

@@ -519,10 +519,10 @@ describe('ManageEventsPage', () => {
       expect(banner?.querySelector('a')?.getAttribute('href')).toBe('/admin/events/settings');
     });
 
-    it('links to the submission limits page', async () => {
+    it('links to the event settings page', async () => {
       const { element } = await open();
       const link = element.querySelector('.manage-events__header a');
-      expect(link?.textContent).toContain('Submission limits');
+      expect(link?.textContent).toContain('Event settings');
       expect(link?.getAttribute('href')).toBe('/admin/events/settings');
     });
   });

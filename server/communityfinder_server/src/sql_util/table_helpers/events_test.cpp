@@ -1,5 +1,6 @@
 #include "events.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -107,6 +108,20 @@ TEST(EventsTest, GetEventNotFoundIsEmpty) {
     });
 }
 
+TEST(EventsTest, GetEventForUpdateReadsTheRowOrNothing) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GetEventForUpdateReadsTheRowOrNothing", [&](Transaction& transaction) {
+        Events events(testDb.GetDatabaseHelper());
+        int64_t id = events.AddEvent(transaction, MakeEvent("Locked", 1000));
+
+        KeyValueTable row = events.GetEventForUpdate(transaction, id);
+        ASSERT_FALSE(row.empty());
+        EXPECT_EQ(IdOf(row), StringFromInt(id));
+        EXPECT_EQ(row.at(std::string(DbSchema::kEventsTitle)), "Locked");
+        EXPECT_TRUE(events.GetEventForUpdate(transaction, 999999).empty());
+    });
+}
+
 TEST(EventsTest, GetEventBySourceAndExternalKeyMatchesBothParts) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction(
@@ -131,32 +146,34 @@ TEST(EventsTest, GetEventBySourceAndExternalKeyMatchesBothParts) {
     });
 }
 
-TEST(EventsTest, GetEventsInRangeIsHalfOpenAndFiltersByStatus) {
+// The public calendar's read (EV4: approved and archived; it was approved-only
+// GetEventsInRange before).
+TEST(EventsTest, GetEventsStartingBetweenOrdersByStartThenId) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction(
-        "GetEventsInRangeIsHalfOpenAndFiltersByStatus", [&](Transaction& transaction) {
+        "GetEventsStartingBetweenOrdersByStartThenId", [&](Transaction& transaction) {
         Events events(testDb.GetDatabaseHelper());
         const std::string approved(DbSchema::kEventsStatusApproved);
         int64_t atStart = events.AddEvent(transaction, WithStatus(MakeEvent("At from", 1000), approved));
         int64_t laterB = events.AddEvent(transaction, WithStatus(MakeEvent("Later B", 1500), approved));
-        int64_t laterA = events.AddEvent(transaction, WithStatus(MakeEvent("Later A", 1200), approved));
+        int64_t laterA = events.AddEvent(
+            transaction, WithStatus(MakeEvent("Later A", 1200), DbSchema::kEventsStatusArchived));
         // Same start as laterB: id breaks the tie.
         int64_t tied = events.AddEvent(transaction, WithStatus(MakeEvent("Tied", 1500), approved));
         events.AddEvent(transaction, WithStatus(MakeEvent("Before", 999), approved));
         events.AddEvent(transaction, WithStatus(MakeEvent("At to", 2000), approved));
         events.AddEvent(transaction, MakeEvent("Pending inside", 1300));
+        events.AddEvent(
+            transaction, WithStatus(MakeEvent("Rejected inside", 1300), DbSchema::kEventsStatusRejected));
 
-        KeyValueTableArray rows = events.GetEventsInRange(transaction, 1000, 2000, approved);
+        KeyValueTableArray rows = events.GetEventsStartingBetween(
+            transaction, 1000, 2000,
+            { DbSchema::kEventsStatusApproved, DbSchema::kEventsStatusArchived });
         ASSERT_EQ(rows.size(), 4u);
         EXPECT_EQ(IdOf(rows[0]), StringFromInt(atStart));
         EXPECT_EQ(IdOf(rows[1]), StringFromInt(laterA));
         EXPECT_EQ(IdOf(rows[2]), StringFromInt(laterB));
         EXPECT_EQ(IdOf(rows[3]), StringFromInt(tied));
-
-        KeyValueTableArray pending = events.GetEventsInRange(
-            transaction, 1000, 2000, DbSchema::kEventsStatusPending);
-        ASSERT_EQ(pending.size(), 1u);
-        EXPECT_EQ(pending[0].at(std::string(DbSchema::kEventsTitle)), "Pending inside");
     });
 }
 
@@ -362,6 +379,132 @@ TEST(EventsTest, GetEventsStartingBetweenIsHalfOpenAcrossTheGivenStatuses) {
         // A status that matches nothing still makes a valid array.
         EXPECT_TRUE(events.GetEventsStartingBetween(
             transaction, 1000, 2000, {"no \"such\" status"}).empty());
+    });
+}
+
+// --- EV4: the sweeps ----------------------------------------------------------
+
+KeyValueTable MakeTimedEvent(std::string_view title, int64_t startsAtUs,
+                             std::optional<int64_t> endsAtUs, std::string_view status) {
+    KeyValueTable values = WithStatus(MakeEvent(title, startsAtUs), status);
+    if (endsAtUs) values[std::string(DbSchema::kEventsEndsAtUs)] = StringFromInt(*endsAtUs);
+    return values;
+}
+
+std::vector<std::string> TitlesOf(const KeyValueTableArray& rows) {
+    std::vector<std::string> titles;
+    for (const KeyValueTable& row : rows) titles.push_back(row.at(std::string(DbSchema::kEventsTitle)));
+    return titles;
+}
+
+// "Ended" is the end time, or start + the default duration without one. Only
+// approved events, and only ones that also started before the cutoff.
+TEST(EventsTest, GetApprovedEndedBeforeUsesTheEndOrTheDefaultDuration) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction(
+        "GetApprovedEndedBeforeUsesTheEndOrTheDefaultDuration", [&](Transaction& transaction) {
+        Events events(testDb.GetDatabaseHelper());
+        const std::string_view approved = DbSchema::kEventsStatusApproved;
+        // Cutoff 10'000, default duration 500.
+        events.AddEvent(transaction, MakeTimedEvent("Ended at 9000", 8000, 9000, approved));
+        events.AddEvent(transaction, MakeTimedEvent("No end, so 9999", 9499, std::nullopt, approved));
+        events.AddEvent(transaction, MakeTimedEvent("No end, so 10000", 9500, std::nullopt, approved));
+        events.AddEvent(transaction, MakeTimedEvent("Ends at the cutoff", 7000, 10'000, approved));
+        events.AddEvent(transaction, MakeTimedEvent("Still going", 9000, 12'000, approved));
+        // An end before its start can't drag a future event in.
+        events.AddEvent(transaction, MakeTimedEvent("Bad end, future start", 11'000, 1000, approved));
+        events.AddEvent(transaction, MakeTimedEvent("Pending", 1000, 2000, DbSchema::kEventsStatusPending));
+        events.AddEvent(transaction, MakeTimedEvent("Rejected", 1000, 2000, DbSchema::kEventsStatusRejected));
+        events.AddEvent(transaction, MakeTimedEvent("Archived", 1000, 2000, DbSchema::kEventsStatusArchived));
+
+        EXPECT_EQ(TitlesOf(events.GetApprovedEndedBefore(transaction, 10'000, 500, 100)),
+                  (std::vector<std::string>{"Ended at 9000", "No end, so 9999"}));
+    });
+}
+
+TEST(EventsTest, GetApprovedEndedBeforeTakesTheOldestFirstUpToTheLimit) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction(
+        "GetApprovedEndedBeforeTakesTheOldestFirstUpToTheLimit", [&](Transaction& transaction) {
+        Events events(testDb.GetDatabaseHelper());
+        const std::string_view approved = DbSchema::kEventsStatusApproved;
+        events.AddEvent(transaction, MakeTimedEvent("Third", 3000, 3100, approved));
+        events.AddEvent(transaction, MakeTimedEvent("First", 1000, 1100, approved));
+        events.AddEvent(transaction, MakeTimedEvent("Second", 2000, 2100, approved));
+
+        EXPECT_EQ(TitlesOf(events.GetApprovedEndedBefore(transaction, 10'000, 500, 2)),
+                  (std::vector<std::string>{"First", "Second"}));
+    });
+}
+
+// --- EV4 §10: the past-events list --------------------------------------------
+
+// Started before the bound, ending at or after the earliest end (the end, or
+// start + the default duration), in the given statuses, newest start first.
+TEST(EventsTest, GetStartedBeforeEndingSinceIsTheWindowNewestFirst) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction(
+        "GetStartedBeforeEndingSinceIsTheWindowNewestFirst", [&](Transaction& transaction) {
+        Events events(testDb.GetDatabaseHelper());
+        const std::string_view approved = DbSchema::kEventsStatusApproved;
+        const std::string_view archived = DbSchema::kEventsStatusArchived;
+        // Started before 10'000, ending at or after 5000; default duration 500.
+        events.AddEvent(transaction, MakeTimedEvent("Ended at 5000", 4000, 5000, archived));
+        events.AddEvent(transaction, MakeTimedEvent("Ended at 4999", 4000, 4999, archived));
+        events.AddEvent(transaction, MakeTimedEvent("No end, so 5000", 4500, std::nullopt, archived));
+        events.AddEvent(transaction, MakeTimedEvent("No end, so 4999", 4499, std::nullopt, archived));
+        events.AddEvent(transaction, MakeTimedEvent("Going now", 9000, 12'000, approved));
+        events.AddEvent(transaction, MakeTimedEvent("Starts at the bound", 10'000, 10'500, approved));
+        events.AddEvent(transaction, MakeTimedEvent("Pending", 8000, 8100, DbSchema::kEventsStatusPending));
+        events.AddEvent(transaction, MakeTimedEvent("Rejected", 8000, 8100, DbSchema::kEventsStatusRejected));
+
+        EXPECT_EQ(TitlesOf(events.GetStartedBeforeEndingSince(
+                      transaction, 10'000, 5000, 500, {approved, archived})),
+                  (std::vector<std::string>{"Going now", "No end, so 5000", "Ended at 5000"}));
+        EXPECT_EQ(TitlesOf(events.GetStartedBeforeEndingSince(
+                      transaction, 10'000, 5000, 500, {approved})),
+                  (std::vector<std::string>{"Going now"}));
+        EXPECT_TRUE(events.GetStartedBeforeEndingSince(transaction, 10'000, 5000, 500, {}).empty());
+    });
+}
+
+// The same start breaks its tie by id, newest first too.
+TEST(EventsTest, GetStartedBeforeEndingSinceBreaksStartTiesByIdDescending) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction(
+        "GetStartedBeforeEndingSinceBreaksStartTiesByIdDescending", [&](Transaction& transaction) {
+        Events events(testDb.GetDatabaseHelper());
+        const std::string_view archived = DbSchema::kEventsStatusArchived;
+        events.AddEvent(transaction, MakeTimedEvent("Earlier id", 3000, 3100, archived));
+        events.AddEvent(transaction, MakeTimedEvent("Later id", 3000, 3100, archived));
+        events.AddEvent(transaction, MakeTimedEvent("Older", 2000, 2100, archived));
+
+        EXPECT_EQ(TitlesOf(events.GetStartedBeforeEndingSince(
+                      transaction, 10'000, 0, 500, {archived})),
+                  (std::vector<std::string>{"Later id", "Earlier id", "Older"}));
+    });
+}
+
+TEST(EventsTest, GetPendingStartedBeforeTakesTheOldestPendingUpToTheLimit) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction(
+        "GetPendingStartedBeforeTakesTheOldestPendingUpToTheLimit", [&](Transaction& transaction) {
+        Events events(testDb.GetDatabaseHelper());
+        const std::string_view pending = DbSchema::kEventsStatusPending;
+        events.AddEvent(transaction, MakeTimedEvent("Second", 2000, std::nullopt, pending));
+        events.AddEvent(transaction, MakeTimedEvent("First", 1000, std::nullopt, pending));
+        events.AddEvent(transaction, MakeTimedEvent("Third", 3000, std::nullopt, pending));
+        events.AddEvent(transaction, MakeTimedEvent("Starts at now", 5000, std::nullopt, pending));
+        events.AddEvent(transaction, MakeTimedEvent("Future", 6000, std::nullopt, pending));
+        events.AddEvent(transaction,
+                        MakeTimedEvent("Approved", 1000, std::nullopt, DbSchema::kEventsStatusApproved));
+        events.AddEvent(transaction,
+                        MakeTimedEvent("Rejected", 1000, std::nullopt, DbSchema::kEventsStatusRejected));
+
+        EXPECT_EQ(TitlesOf(events.GetPendingStartedBefore(transaction, 5000, 100)),
+                  (std::vector<std::string>{"First", "Second", "Third"}));
+        EXPECT_EQ(TitlesOf(events.GetPendingStartedBefore(transaction, 5000, 2)),
+                  (std::vector<std::string>{"First", "Second"}));
     });
 }
 

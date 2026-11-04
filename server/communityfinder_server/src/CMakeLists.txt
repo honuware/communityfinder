@@ -11,6 +11,7 @@ add_subdirectory(db_schema)
 add_subdirectory(sql_util/table_helpers)
 add_subdirectory(endpoints)
 add_subdirectory(database_helper)
+add_subdirectory(scheduler)
 add_subdirectory(test_helper)
 
 # The app library links the honuware components it uses PUBLIC, so every consumer

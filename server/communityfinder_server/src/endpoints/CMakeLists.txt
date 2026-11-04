@@ -60,6 +60,42 @@ target_sources(communityfinder_core PRIVATE
     get_guide_venues.cpp
 )
 
+# EV4 — the app's scheduled-job endpoints communityfinder_helper POSTs to: one
+# thin TU per job over business_logic/jobs, sharing honuware's
+# scheduled_job_handler (the run_scheduled_jobs gate and the one transaction).
+# The five cleanup/digest jobs are honuware's own endpoints (EV4 §9).
+target_sources(communityfinder_core PRIVATE
+    admin_archive_past_events.h
+    admin_archive_past_events.cpp
+    admin_expire_unreviewed_events.h
+    admin_expire_unreviewed_events.cpp
+)
+
+target_sources(communityfinder_test_cases PUBLIC
+    jobs_endpoint_test_support.h
+    jobs_endpoint_test_support.cpp
+    admin_archive_past_events_test.cpp
+    admin_expire_unreviewed_events_test.cpp
+    scheduled_job_routes_test.cpp
+)
+
+# EV4 §10 — past events: the past-events list, the public settings the events
+# pages read, and the admin settings beside the submission limits.
+target_sources(communityfinder_core PRIVATE
+    admin_past_event_settings.h
+    admin_past_event_settings.cpp
+    get_event_settings.h
+    get_event_settings.cpp
+    get_past_events.h
+    get_past_events.cpp
+)
+
+target_sources(communityfinder_test_cases PUBLIC
+    admin_past_event_settings_test.cpp
+    get_event_settings_test.cpp
+    get_past_events_test.cpp
+)
+
 target_sources(communityfinder_test_cases PUBLIC
     guide_endpoint_test_support.h
     guide_endpoint_test_support.cpp

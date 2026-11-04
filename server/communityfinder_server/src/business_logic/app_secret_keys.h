@@ -29,4 +29,13 @@ inline constexpr std::string_view kEventSubmissionMaxPerDay = "event_submission_
 // "true" closes the submit form for everyone; anything else leaves it open.
 inline constexpr std::string_view kEventSubmissionsPaused = "event_submissions_paused";
 
+// EV4 §10 — the past-events settings, changed on the same admin page
+// (/api/admin/past_event_settings). Read them only through
+// Events::LoadPastEventSettings, which reads a missing or bad value as the
+// default. How many days an event stays public after it ends (OQ8):
+inline constexpr std::string_view kArchivedEventsVisibleDays = "archived_events_visible_days";
+// "true" starts the calendar's "Show past events" switch on for a visitor who
+// hasn't chosen (OQ9); anything else starts it off.
+inline constexpr std::string_view kEventsShowPastByDefault = "events_show_past_by_default";
+
 }  // namespace Secrets

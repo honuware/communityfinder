@@ -4,6 +4,7 @@
 
 #include "commands/events_commands.h"
 #include "commands/guide_commands.h"
+#include "commands/jobs_commands.h"
 #include "commands/submission_commands.h"
 #include "commands/utility_commands.h"
 #include "console_colors.h"
@@ -106,6 +107,7 @@ void RegisterAllCommands(CommandRegistry& registry) {
     RegisterEventsCommands(registry);
     RegisterGuideCommands(registry);
     RegisterSubmissionCommands(registry);
+    RegisterJobsCommands(registry);
 }
 
 int ExecuteCommand(TestHelperContext& ctx, const std::string& commandName, const Args& args) {

@@ -2,11 +2,14 @@ import { inject, Injectable } from '@angular/core';
 import { forkJoin, map, Observable, of, switchMap, throwError } from 'rxjs';
 import { FilterPair, HONUWARE_CRUD_ACCESS } from '@honuware/ui/access';
 import { SubmissionProblem } from '../event-submissions-access/event-submissions-access';
+import { PastEventSettingsMockStore } from '../mock/past-event-settings-mock-store';
 import { SubmissionSettingsMockStore } from '../mock/submission-settings-mock-store';
 import { dataResultsToRecords } from '../types/events.types';
 import { nowUs } from '../utils/events-date.utils';
 import {
   EventsAdminAccess,
+  PastEventSettings,
+  PastEventSettingsUpdate,
   ReviewAction,
   ReviewDecision,
   ReviewEventResult,
@@ -20,13 +23,15 @@ import {
 // so the editor's pending queue behaves as it does live, and a submitted
 // event's reason and message land on its submission. The decision "email" is
 // sent (decision_emailed) once a submission's last pending date is decided,
-// once. The settings live in the shared SubmissionSettingsMockStore. (The
-// public events pages read their own demo dataset, so an offline approval
-// doesn't show up on them.)
+// once. The settings live in the shared SubmissionSettingsMockStore and
+// PastEventSettingsMockStore. (The public events pages read their own demo
+// dataset, so an offline approval doesn't show up on them; a past-events
+// window does.)
 @Injectable()
 export class EventsAdminMockAccess implements EventsAdminAccess {
   private crud = inject(HONUWARE_CRUD_ACCESS);
   private settingsStore = inject(SubmissionSettingsMockStore);
+  private pastSettingsStore = inject(PastEventSettingsMockStore);
 
   reviewEvent(
     eventId: number,
@@ -92,6 +97,15 @@ export class EventsAdminMockAccess implements EventsAdminAccess {
   saveSubmissionSettings(update: SubmissionSettingsUpdate): Observable<SubmissionSettings> {
     const refused = this.settingsStore.save(update);
     return refused ? throwError(() => refused) : of(this.settingsStore.settings());
+  }
+
+  getPastEventSettings(): Observable<PastEventSettings> {
+    return of(this.pastSettingsStore.settings());
+  }
+
+  savePastEventSettings(update: PastEventSettingsUpdate): Observable<PastEventSettings> {
+    const refused = this.pastSettingsStore.save(update);
+    return refused ? throwError(() => refused) : of(this.pastSettingsStore.settings());
   }
 
   private decide(eventId: string, status: string, decision: ReviewDecision): Observable<void> {

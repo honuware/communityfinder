@@ -1,0 +1,55 @@
+<mat-card appearance="outlined" class="past-event-settings">
+  @if (loading()) {
+    <mat-progress-spinner mode="indeterminate" diameter="36" />
+  } @else if (failed()) {
+    <p class="past-event-settings__error">The settings couldn't be loaded. Please try again.</p>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="save()">
+      @if (range(); as range) {
+        <div class="past-event-settings__days" data-field="archived_events_visible_days">
+          <mat-form-field appearance="outline">
+            <mat-label>Days an event stays on the site after it ends</mat-label>
+            <input
+              matInput
+              type="number"
+              formControlName="visibleDays"
+              [min]="range.min"
+              [max]="range.max"
+            />
+            <mat-hint
+              >Default {{ range.default }} · allowed {{ range.min }} to {{ range.max }}</mat-hint
+            >
+          </mat-form-field>
+          <p class="past-event-settings__hint">
+            Until then an event is in the past list and on the calendar, and its page loads. After
+            that the public can't find it; it's kept, and curators can still open it.
+          </p>
+          @if (fieldError()) {
+            <p class="past-event-settings__error">{{ fieldError() }}</p>
+          }
+        </div>
+      }
+      @if (formError()) {
+        <p class="past-event-settings__error">{{ formError() }}</p>
+      }
+      <div class="past-event-settings__actions">
+        <button mat-flat-button type="submit" [disabled]="!changed() || saving()">Save</button>
+        <button mat-button type="button" (click)="resetToDefault()">Reset to default</button>
+      </div>
+    </form>
+
+    <div class="past-event-settings__switch">
+      <mat-slide-toggle
+        [checked]="showByDefault()"
+        [disabled]="savingSwitch()"
+        (change)="saveSwitch($event)"
+      >
+        Calendar shows past events at first
+      </mat-slide-toggle>
+      <p class="past-event-settings__hint">
+        Visitors can switch past events on or off on the calendar, and their choice is remembered on
+        their device. This only sets where it starts.
+      </p>
+    </div>
+  }
+</mat-card>

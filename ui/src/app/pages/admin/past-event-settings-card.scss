@@ -1,0 +1,30 @@
+.past-event-settings {
+  display: block;
+  margin: 0 0 16px;
+  padding: 16px;
+}
+
+.past-event-settings__days mat-form-field {
+  width: 100%;
+  max-width: 420px;
+}
+
+.past-event-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.past-event-settings__switch {
+  margin-top: 24px;
+}
+
+.past-event-settings__hint {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.past-event-settings__error {
+  color: var(--mat-sys-error, #b3261e);
+}

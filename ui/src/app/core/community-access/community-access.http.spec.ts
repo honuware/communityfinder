@@ -95,6 +95,43 @@ describe('CommunityHttpAccess (events)', () => {
     });
   });
 
+  describe('getPastEvents', () => {
+    it('asks for the first page with no query', async () => {
+      const { access, http } = setUp();
+      const { url, method, withCredentials, result } = await answer(http, access.getPastEvents(), {
+        items: [WIRE_EVENT],
+        has_more: true,
+        since_us: 100,
+      });
+      expect(method).toBe('GET');
+      expect(url).toBe('/api/events/past');
+      expect(withCredentials).toBe(true);
+      expect(result.items[0].ends_at_us).toBeNull();
+      expect(result.has_more).toBe(true);
+      expect(result.since_us).toBe(100);
+    });
+
+    it('passes the paging and filters through', async () => {
+      const { access, http } = setUp();
+      const { url } = await answer(
+        http,
+        access.getPastEvents({ offset: 20, limit: 20, category: 'drag', venue_id: 7 }),
+        { items: [], has_more: false, since_us: 100 },
+      );
+      expect(url).toBe('/api/events/past?offset=20&limit=20&category=drag&venue_id=7');
+    });
+  });
+
+  it('reads the event settings', async () => {
+    const { access, http } = setUp();
+    const { url, result } = await answer(http, access.getEventSettings(), {
+      archived_events_visible_days: 90,
+      events_show_past_by_default: true,
+    });
+    expect(url).toBe('/api/events/settings');
+    expect(result).toEqual({ archived_events_visible_days: 90, events_show_past_by_default: true });
+  });
+
   it('reads one event', async () => {
     const { access, http } = setUp();
     const { url, result } = await answer(http, access.getEvent(42), WIRE_EVENT);

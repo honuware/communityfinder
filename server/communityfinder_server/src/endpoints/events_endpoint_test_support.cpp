@@ -107,9 +107,15 @@ int64_t AddEvent(Transaction& transaction, DatabaseHelper databaseHelper, const 
     }
     int64_t eventId = result.items[0].eventId;
     if (spec.status != DbSchema::kEventsStatusPending) {
-        Events::ReviewAction action = spec.status == DbSchema::kEventsStatusApproved
-            ? Events::ReviewAction::Approve : Events::ReviewAction::Reject;
+        // Archived comes only from approved (EV4's sweep), so approve first.
+        Events::ReviewAction action = spec.status == DbSchema::kEventsStatusRejected
+            ? Events::ReviewAction::Reject : Events::ReviewAction::Approve;
         EXPECT_TRUE(helper.ReviewEvent(transaction, eventId, action, 1, "").ok) << spec.status;
+    }
+    if (spec.status == DbSchema::kEventsStatusArchived) {
+        TableHelpers::Events(databaseHelper).UpdateEvent(transaction, eventId, {
+            { std::string(DbSchema::kEventsStatus), std::string(DbSchema::kEventsStatusArchived) },
+        });
     }
     return eventId;
 }

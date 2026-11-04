@@ -78,7 +78,9 @@ Json::Value GetUpcomingEvents(
 
     Json::Value result;
     tp->RunInTransaction([&](Transaction& transaction) {
-        Events::EventHelper helper(endpointAuthHelper.GetDatabaseHelper());
+        Events::EventHelper helper = Events::MakePublicEventHelper(
+            endpointAuthHelper.GetDatabaseHelper(), *endpointAuthHelper.GetSecretsHelper(),
+            transaction);
         Events::UpcomingEvents upcoming = helper.GetUpcomingPublic(transaction, query);
         result = Json::Value(Json::JsonObject{
             { "items", PublicEventsToJson(upcoming.events) },

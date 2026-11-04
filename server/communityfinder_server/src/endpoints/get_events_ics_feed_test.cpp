@@ -82,6 +82,32 @@ TEST(GetEventsICalFeedTest, ServesApprovedEventsAsACalendar) {
     Auth::ServerConfig::Shutdown();
 }
 
+// EV4 §3.2: the feed's day of look-back carries last night's event after the
+// archive sweep, so a subscriber's calendar doesn't lose the event they went to.
+// Older archived events fall outside the window as before.
+TEST(GetEventsICalFeedTest, KeepsLastNightsArchivedEvent) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("KeepsLastNightsArchivedEvent", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        int64_t nowUs = NowUs(transaction);
+        constexpr int64_t kUsPerHour = 3'600LL * 1'000'000LL;
+        int64_t lastNight = AddEvent(transaction, databaseHelper, world,
+                                     { "last-night", nowUs - 20 * kUsPerHour, "archived" });
+        int64_t lastWeek = AddEvent(transaction, databaseHelper, world,
+                                    { "last-week", nowUs - 7 * Events::kUsPerDay, "archived" });
+
+        crow::response resp = GetFeed(helper);
+        ASSERT_EQ(resp.code, 200) << resp.body;
+        EXPECT_TRUE(HasEvent(resp.body, lastNight));
+        EXPECT_FALSE(HasEvent(resp.body, lastWeek));
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
 // The same filters as /api/events/upcoming, so a "subscribe to this view" link
 // is the list's own query string.
 TEST(GetEventsICalFeedTest, FiltersIncludeAndExclude) {

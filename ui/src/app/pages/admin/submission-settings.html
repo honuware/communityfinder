@@ -3,8 +3,9 @@
     <mat-icon>arrow_back</mat-icon>
     Events
   </a>
-  <h1 class="submission-settings__title">Submission limits</h1>
+  <h1 class="submission-settings__title">Event settings</h1>
 
+  <h2 class="submission-settings__section">Submissions</h2>
   @if (loading()) {
     <mat-progress-spinner mode="indeterminate" diameter="36" />
   } @else if (failed()) {
@@ -69,4 +70,7 @@
       </form>
     </mat-card>
   }
+
+  <h2 class="submission-settings__section">Past events</h2>
+  <app-past-event-settings-card />
 </div>

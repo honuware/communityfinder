@@ -3,7 +3,7 @@ import { Meta, Title } from '@angular/platform-browser';
 import { NavigationStart, Router } from '@angular/router';
 import { filter } from 'rxjs';
 import { SiteConfigService } from '../services/site-config.service';
-import { PublicEvent } from '../types/events.types';
+import { isPublicEvent, PublicEvent } from '../types/events.types';
 import { buildEventJsonLd, JsonLd } from './event-json-ld';
 import { absoluteUrl, eventPagePath } from './event-links';
 import { formatEventShortDate, formatEventTime } from './events-date.utils';
@@ -91,7 +91,7 @@ export class PageMeta {
   // preview of an unapproved event gets no JSON-LD.
   setEventPage(event: PublicEvent, imageUrl?: string): void {
     const path = eventPagePath(event.id);
-    const isPublic = event.status === undefined || event.status === 'approved';
+    const isPublic = isPublicEvent(event);
     const when = `${formatEventShortDate(event.starts_at_us)}, ${formatEventTime(event.starts_at_us)}`;
     const where = event.venue_name || event.location_text;
     this.set({

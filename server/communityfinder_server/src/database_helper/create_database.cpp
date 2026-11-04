@@ -1,5 +1,6 @@
 #include "create_database.h"
 
+#include <iostream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -7,6 +8,7 @@
 #include "business_logic/app_database_config.h"
 #include "business_logic/app_secret_values.h"
 #include "business_logic/auth/person.h"
+#include "business_logic/auth/service_account.h"
 #include "business_logic/create_app_tables.h"
 #include "business_logic/create_framework_tables.h"
 #include "db_schema/config_secrets.h"
@@ -202,15 +204,21 @@ namespace {
 		PopulateRoleAssignments(transaction, databaseHelper, databaseInfo);
 		PopulateConfigSecrets(transaction, databaseHelper, databaseInfo);
 
-		// DEFERRED to Phase 12 (scheduler): the scheduler service account is
-		// provisioned by Auth::EnsureSchedulerServiceAccount, which currently hard-
-		// requires the `manage_subscriptions` permission (a knottyyoga coupling) and
-		// throws if it is absent. CommunityFinder's only app permission is
-		// `manage_events` (EV1), and
-		// communityfinder_helper (the scheduler exe) is Phase 12 — so the account is
-		// seeded then, once CF's permission model exists and honuware's
-		// EnsureSchedulerServiceAccount is parameterized on the required
-		// permission(s). Seeding it here would make --recreate_database throw.
+		// EV4 §2.2: the scheduler service account communityfinder_helper logs in
+		// as, its role holding only run_scheduled_jobs (seeded by honuware's
+		// PopulateFrameworkTables above). Unlike knottyyoga's seed, an unset password
+		// skips the account rather than failing (EV4 OQ2): a developer who never
+		// runs the helper needn't set it, and the helper's failed login then says
+		// plainly what's missing.
+		const std::string schedulerPasswordEnvVar(
+			Auth::kSchedulerServiceAccountPasswordEnvVar);
+		const char* schedulerPassword = Util::GetEnvWithFallback(
+			schedulerPasswordEnvVar.c_str(), schedulerPasswordEnvVar.c_str());
+		if (!ProvisionSchedulerAccount(
+				transaction, databaseHelper, schedulerPassword ? schedulerPassword : "")) {
+			std::cout << "Scheduler service account skipped: set "
+				<< schedulerPasswordEnvVar << " to create it.\n";
+		}
 	}
 
 }  // namespace

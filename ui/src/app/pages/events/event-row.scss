@@ -66,6 +66,20 @@
   }
 }
 
+// Over: a quieter card, so it reads as history next to what's coming.
+.event-row--past {
+  background: var(--mat-sys-surface-container-low);
+
+  .event-row__thumb {
+    filter: grayscale(0.7);
+    opacity: 0.7;
+  }
+
+  .event-row__when {
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
 .event-row__place,
 .event-row__chips {
   display: flex;

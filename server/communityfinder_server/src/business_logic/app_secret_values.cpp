@@ -39,6 +39,11 @@ inline constexpr std::string_view kWebsiteAddressLoginValue = "http://localhost:
 inline constexpr std::string_view kEventSubmissionMaxPendingDatesValue = "10";
 inline constexpr std::string_view kEventSubmissionMaxPerDayValue = "5";
 inline constexpr std::string_view kEventSubmissionsPausedValue = "false";
+// EV4 §10's past-events settings. They must match the defaults in
+// business_logic/events/past_event_settings.h
+// (PastEventSettingsTest.AppSecretDefaultsMatchTheCodeDefaults pins it).
+inline constexpr std::string_view kArchivedEventsVisibleDaysValue = "365";
+inline constexpr std::string_view kEventsShowPastByDefaultValue = "false";
 
 }  // namespace
 
@@ -56,6 +61,8 @@ void FillInAppSecretDefaults(
     addSecret(Secrets::kEventSubmissionMaxPendingDates, kEventSubmissionMaxPendingDatesValue);
     addSecret(Secrets::kEventSubmissionMaxPerDay, kEventSubmissionMaxPerDayValue);
     addSecret(Secrets::kEventSubmissionsPaused, kEventSubmissionsPausedValue);
+    addSecret(Secrets::kArchivedEventsVisibleDays, kArchivedEventsVisibleDaysValue);
+    addSecret(Secrets::kEventsShowPastByDefault, kEventsShowPastByDefaultValue);
 
     // NOTE: site_logo_url (Secrets::kSiteLogoUrl) is intentionally NOT registered
     // here — the framework owns it and already defaults it to "" (empty) in

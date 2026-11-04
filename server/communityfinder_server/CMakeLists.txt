@@ -72,8 +72,8 @@ endif()
 #                                scope); the app test exe links honuware_tests to
 #                                keep running them (test/CMakeLists.txt).
 # Both are declared through the app-superset DAG; honuware_validate_layering() at the
-# end enforces it. (database_helper / test_helper / scheduler executables are added
-# in later phases.)
+# end enforces it. The leaf executables (communityfinder_server below, and
+# communityfinder_database_helper / _test_helper / _helper under src/) sit outside it.
 honuware_add_component(NAME communityfinder_core)
 honuware_add_component(NAME communityfinder_test_cases)
 
@@ -128,7 +128,7 @@ include(FetchContent)
 FetchContent_Declare(
     honuware
     GIT_REPOSITORY https://github.com/honuware/server_components.git
-    GIT_TAG        04f88eeeef412d6fa7a2f97c9daab4b63f3177c1
+    GIT_TAG        40072333e164dd52d6c6c3cc8c54c5120f57e963
 )
 FetchContent_MakeAvailable(honuware)
 

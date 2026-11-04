@@ -3,6 +3,7 @@ import { EventVocabularies, vocabularyLabel } from '../../core/services/event-vo
 import { PublicEvent } from '../../core/types/events.types';
 import {
   formatEventDateLine,
+  formatMonthYear,
   pacificDayKey,
   tonightRangeUs,
   UsRange,
@@ -14,7 +15,15 @@ import {
 // The upcoming list fetches its window once and filters here, so toggling a
 // filter is instant (EV2's fetch-strategy pin, after knottyyoga's
 // CalendarService). The rules match the server's: an event's slug lists are
-// already the effective ones, and the neighborhood is the venue's.
+// already the effective ones, and the neighborhood is the venue's. The past
+// list (EV4 §10, /events?view=past) is paged, so the server filters it.
+
+// Which list the page shows. Upcoming has no ?view= of its own.
+export type EventsView = 'upcoming' | 'past';
+
+export function eventsViewFromParams(params: ParamMap): EventsView {
+  return params.get('view') === 'past' ? 'past' : 'upcoming';
+}
 
 export type WhenPreset = 'tonight' | 'weekend';
 
@@ -99,23 +108,38 @@ export function tagChips(
   ];
 }
 
-// One Pacific day of the list (knottyyoga's ScheduleDayGroup).
+// One Pacific day of the list (knottyyoga's ScheduleDayGroup), or one month of
+// the past list.
 export interface EventDayGroup {
-  // "2026-08-14"
+  // "2026-08-14", or "2026-08" for a month
   key: string;
-  // "Friday, Aug 14"
+  // "Friday, Aug 14", or "August 2026"
   dateLabel: string;
   events: PublicEvent[];
 }
 
 // Events (already in start order) grouped by the Pacific day they start on.
 export function groupEventsByDay(events: PublicEvent[]): EventDayGroup[] {
+  return groupConsecutive(events, pacificDayKey, formatEventDateLine);
+}
+
+// Past events (newest first) grouped by the Pacific month they started in,
+// labelled "August 2026": a year back, a day header alone would be ambiguous.
+export function groupEventsByMonth(events: PublicEvent[]): EventDayGroup[] {
+  return groupConsecutive(events, (us) => pacificDayKey(us).slice(0, 7), formatMonthYear);
+}
+
+function groupConsecutive(
+  events: PublicEvent[],
+  keyOf: (us: number) => string,
+  labelOf: (us: number) => string,
+): EventDayGroup[] {
   const groups: EventDayGroup[] = [];
   for (const event of events) {
-    const key = pacificDayKey(event.starts_at_us);
+    const key = keyOf(event.starts_at_us);
     let group = groups[groups.length - 1];
     if (!group || group.key !== key) {
-      group = { key, dateLabel: formatEventDateLine(event.starts_at_us), events: [] };
+      group = { key, dateLabel: labelOf(event.starts_at_us), events: [] };
       groups.push(group);
     }
     group.events.push(event);

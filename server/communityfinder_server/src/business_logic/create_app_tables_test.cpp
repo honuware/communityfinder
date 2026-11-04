@@ -1,5 +1,6 @@
 #include "business_logic/create_app_tables.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <set>
 #include <string>
@@ -8,6 +9,9 @@
 
 #include <gtest/gtest.h>
 
+#include "business_logic/app_service_account_config.h"
+#include "business_logic/auth/person.h"
+#include "business_logic/auth/service_account.h"
 #include "business_logic/create_framework_tables.h"
 #include "db_schema/admin_column_data_info.h"
 #include "db_schema/admin_nested_tables.h"
@@ -29,6 +33,7 @@
 #include "db_schema/neighborhoods.h"
 #include "db_schema/organization_scene_tag_assignments.h"
 #include "db_schema/organizations.h"
+#include "db_schema/permissions.h"
 #include "db_schema/photos.h"
 #include "db_schema/place_scene_tag_assignments.h"
 #include "db_schema/places.h"
@@ -603,6 +608,122 @@ TEST(CreateAppTablesTest, EnablesPhotosForOrganizationsPlacesAndGuidePages) {
         }
         EXPECT_EQ(photoTables.count(std::string(DbSchema::kVenueProfilesTable)), 0u);
         EXPECT_EQ(photoTables.count(std::string(DbSchema::kServiceListingsTable)), 0u);
+    });
+}
+
+// --- EV4: scheduled jobs ------------------------------------------------------
+
+// The permission names a role holds, sorted.
+std::vector<std::string> PermissionsOfRole(
+    Transaction& transaction, std::string_view roleName) {
+    std::vector<std::string> names;
+    for (const auto& row : transaction.RunSqlStatementReturningStringTable(
+             "SELECT p.name FROM role_permissions rp "
+             "JOIN roles r ON r.id = rp.role_id "
+             "JOIN permissions p ON p.id = rp.permission_id "
+             "WHERE r.name = $1 ORDER BY p.name",
+             std::string(roleName))) {
+        names.push_back(row.at(0));
+    }
+    return names;
+}
+
+std::string SchedulerAccountCount(Transaction& transaction) {
+    return transaction.RunSqlStatementReturningOneValue(
+        "SELECT count(*) FROM people WHERE email = $1",
+        std::string(App::kSchedulerServiceAccountEmail));
+}
+
+// EV4 §2.1: run_scheduled_jobs exists and Administrator holds it, so an admin
+// can run a job by hand. It gates endpoints, not tables, so it opens nothing in
+// the generic CRUD editor. Since §9 honuware's seed provides it; this checks the
+// app's seed neither drops nor duplicates it.
+TEST(CreateAppTablesTest, GrantsRunScheduledJobsToTheAdministratorRole) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("RunScheduledJobs", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        EXPECT_EQ(transaction.RunSqlStatementReturningOneValue(
+                      "SELECT is_pricing_eligible FROM permissions WHERE name = $1",
+                      std::string(DbSchema::kPermissionRunScheduledJobs)),
+                  "f");
+        const std::vector<std::string> adminPermissions =
+            PermissionsOfRole(transaction, DbSchema::kRoleNameAdmin);
+        EXPECT_EQ(std::count(adminPermissions.begin(), adminPermissions.end(),
+                             std::string(DbSchema::kPermissionRunScheduledJobs)),
+                  1);
+        EXPECT_EQ(transaction.RunSqlStatementReturningOneValue(
+                      "SELECT count(*) FROM admin_table_permissions atp "
+                      "JOIN permissions p ON p.id = atp.permission_id "
+                      "WHERE p.name = $1",
+                      std::string(DbSchema::kPermissionRunScheduledJobs)),
+                  "0");
+    });
+}
+
+// EV4 §2.2: with a password, the account is created verified, and its scheduler
+// role holds run_scheduled_jobs and nothing else.
+TEST(CreateAppTablesTest, ProvisionsTheSchedulerAccountWhenThePasswordIsSet) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("ProvisionScheduler", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        EXPECT_TRUE(ProvisionSchedulerAccount(
+            transaction, testDb.GetDatabaseHelper(), "scheduler-test-password"));
+
+        Auth::PersonHelper personHelper(testDb.GetDatabaseHelper());
+        EXPECT_TRUE(personHelper.IsPerson(
+            transaction, App::kSchedulerServiceAccountEmail));
+        EXPECT_TRUE(personHelper.VerifyPassword(
+            transaction, App::kSchedulerServiceAccountEmail,
+            "scheduler-test-password"));
+        EXPECT_EQ(PermissionsOfRole(transaction, Auth::kSchedulerRoleName),
+                  std::vector<std::string>{
+                      std::string(DbSchema::kPermissionRunScheduledJobs)});
+        EXPECT_EQ(transaction.RunSqlStatementReturningOneValue(
+                      "SELECT r.name FROM role_assignments ra "
+                      "JOIN roles r ON r.id = ra.role_id "
+                      "JOIN people p ON p.id = ra.person_id WHERE p.email = $1",
+                      std::string(App::kSchedulerServiceAccountEmail)),
+                  std::string(Auth::kSchedulerRoleName));
+    });
+}
+
+// EV4 OQ2: no password, no account, and nothing written.
+TEST(CreateAppTablesTest, SkipsTheSchedulerAccountWhenThePasswordIsUnset) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("SkipScheduler", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        EXPECT_FALSE(ProvisionSchedulerAccount(
+            transaction, testDb.GetDatabaseHelper(), ""));
+
+        EXPECT_EQ(SchedulerAccountCount(transaction), "0");
+        EXPECT_EQ(transaction.RunSqlStatementReturningOneValue(
+                      "SELECT count(*) FROM roles WHERE name = $1",
+                      std::string(Auth::kSchedulerRoleName)),
+                  "0");
+    });
+}
+
+// Re-running the seed step leaves the first account, and its password, alone.
+TEST(CreateAppTablesTest, ProvisioningTheSchedulerAccountTwiceIsANoOp) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("ProvisionSchedulerTwice", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        EXPECT_TRUE(ProvisionSchedulerAccount(
+            transaction, testDb.GetDatabaseHelper(), "first-password"));
+        EXPECT_TRUE(ProvisionSchedulerAccount(
+            transaction, testDb.GetDatabaseHelper(), "second-password"));
+
+        EXPECT_EQ(SchedulerAccountCount(transaction), "1");
+        Auth::PersonHelper personHelper(testDb.GetDatabaseHelper());
+        EXPECT_TRUE(personHelper.VerifyPassword(
+            transaction, App::kSchedulerServiceAccountEmail, "first-password"));
+        EXPECT_EQ(PermissionsOfRole(transaction, Auth::kSchedulerRoleName),
+                  std::vector<std::string>{
+                      std::string(DbSchema::kPermissionRunScheduledJobs)});
     });
 }
 

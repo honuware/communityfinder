@@ -4,8 +4,10 @@ import { pacificWallClockToUs } from '../../core/utils/events-date.utils';
 import { EMPTY_VOCABULARIES } from '../../core/services/event-vocabularies.service';
 import {
   EMPTY_LIST_FILTERS,
+  eventsViewFromParams,
   filterEvents,
   groupEventsByDay,
+  groupEventsByMonth,
   hasListFilters,
   listFiltersFromParams,
   listFiltersToQueryParams,
@@ -90,6 +92,28 @@ describe('events-view', () => {
       ['2026-08-16', 'Sunday, Aug 16', [5]],
       ['2026-08-17', 'Monday, Aug 17', [6]],
     ]);
+  });
+
+  it('groups past events by Pacific month, newest first, a midnight start under its own month', () => {
+    const past = [
+      event(9, pacificWallClockToUs(2026, 8, 1, 0, 30)),
+      event(8, pacificWallClockToUs(2026, 7, 31, 23)),
+      event(7, pacificWallClockToUs(2026, 7, 4, 12)),
+      event(6, pacificWallClockToUs(2025, 12, 31, 21)),
+    ];
+    expect(
+      groupEventsByMonth(past).map((group) => [group.key, group.dateLabel, ids(group.events)]),
+    ).toEqual([
+      ['2026-08', 'August 2026', [9]],
+      ['2026-07', 'July 2026', [8, 7]],
+      ['2025-12', 'December 2025', [6]],
+    ]);
+  });
+
+  it('reads the view from the URL: past, or upcoming for anything else', () => {
+    expect(eventsViewFromParams(convertToParamMap({ view: 'past' }))).toBe('past');
+    expect(eventsViewFromParams(convertToParamMap({}))).toBe('upcoming');
+    expect(eventsViewFromParams(convertToParamMap({ view: 'someday' }))).toBe('upcoming');
   });
 
   it('labels the chips from the vocabularies, falling back to the slug', () => {

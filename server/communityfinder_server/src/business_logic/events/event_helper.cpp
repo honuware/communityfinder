@@ -4,6 +4,7 @@
 #include <map>
 #include <set>
 
+#include "business_logic/events/event_ical.h"
 #include "db_schema/categories.h"
 #include "db_schema/event_category_assignments.h"
 #include "db_schema/event_scene_tag_assignments.h"
@@ -71,6 +72,40 @@ std::set<int64_t> IdSet(const KeyValueTableArray& rows, std::string_view idColum
 bool Contains(const std::vector<std::string>& values, const std::string& value) {
     return std::find(values.begin(), values.end(), value) != values.end();
 }
+
+int64_t RowEndUs(const KeyValueTable& row) {
+    return EventEndUs(std::stoll(Column(row, DbSchema::kEventsStartsAtUs)),
+                      OptionalIdColumn(row, DbSchema::kEventsEndsAtUs));
+}
+
+// The filters a row can answer by itself, applied before the batch reads.
+bool MatchesRowFilters(const KeyValueTable& row, const EventFilters& filters) {
+    if (filters.venueId > 0 && OptionalIdColumn(row, DbSchema::kEventsVenueId) != filters.venueId) {
+        return false;
+    }
+    return filters.seriesId <= 0
+        || OptionalIdColumn(row, DbSchema::kEventsSeriesId) == filters.seriesId;
+}
+
+bool HasEffectiveFilters(const EventFilters& filters) {
+    return !filters.neighborhoodSlug.empty() || !filters.categorySlug.empty()
+        || !filters.sceneTagSlug.empty();
+}
+
+// The rest, which match the resolved, effective values.
+bool MatchesEffectiveFilters(const PublicEvent& event, const EventFilters& filters) {
+    if (!filters.neighborhoodSlug.empty() && event.neighborhoodSlug != filters.neighborhoodSlug) {
+        return false;
+    }
+    if (!filters.categorySlug.empty() && !Contains(event.categorySlugs, filters.categorySlug)) {
+        return false;
+    }
+    return filters.sceneTagSlug.empty() || Contains(event.sceneTagSlugs, filters.sceneTagSlug);
+}
+
+// The past-events list assembles its candidates this many at a time, so an
+// early page doesn't resolve the whole window.
+constexpr size_t kPastEventsAssembleBatch = 100;
 
 // Where a venue is, as the public shapes show it.
 struct Place {
@@ -162,8 +197,36 @@ void ReplaceAssignments(Transaction& transaction, AssignmentHelper& helper, int6
 
 }  // namespace
 
-UpcomingWindow ClampUpcomingWindow(int64_t nowUs, int64_t fromUs, int64_t toUs) {
-    const int64_t earliestUs = nowUs - kUpcomingLookBackDays * kUsPerDay;
+const std::vector<std::string_view>& PublicEventStatuses() {
+    static const std::vector<std::string_view> statuses = {
+        DbSchema::kEventsStatusApproved, DbSchema::kEventsStatusArchived };
+    return statuses;
+}
+
+bool IsPublicEventStatus(std::string_view status) {
+    return std::find(PublicEventStatuses().begin(), PublicEventStatuses().end(), status)
+        != PublicEventStatuses().end();
+}
+
+int64_t EventEndUs(int64_t startsAtUs, std::optional<int64_t> endsAtUs) {
+    return endsAtUs.value_or(startsAtUs + kICalDefaultDurationUs);
+}
+
+int64_t PastEventCutoffUs(int64_t nowUs, int64_t pastEventVisibleDays) {
+    return nowUs - pastEventVisibleDays * kUsPerDay;
+}
+
+bool IsPublicEvent(std::string_view status, int64_t startsAtUs,
+                   std::optional<int64_t> endsAtUs, int64_t nowUs,
+                   int64_t pastEventVisibleDays) {
+    return IsPublicEventStatus(status)
+        && EventEndUs(startsAtUs, endsAtUs) >= PastEventCutoffUs(nowUs, pastEventVisibleDays);
+}
+
+UpcomingWindow ClampUpcomingWindow(int64_t nowUs, int64_t fromUs, int64_t toUs,
+                                   int64_t pastEventVisibleDays) {
+    const int64_t earliestUs =
+        nowUs - std::max(kUpcomingLookBackDays, pastEventVisibleDays) * kUsPerDay;
     UpcomingWindow window;
     window.fromUs = fromUs > 0 ? std::max(fromUs, earliestUs) : nowUs;
     window.toUs = toUs > 0 ? toUs : window.fromUs + kUpcomingDefaultWindowDays * kUsPerDay;
@@ -194,8 +257,9 @@ std::string FormatVenueAddress(std::string_view street, std::string_view city,
     return line;
 }
 
-EventHelper::EventHelper(DatabaseHelper databaseHelper)
+EventHelper::EventHelper(DatabaseHelper databaseHelper, int64_t pastEventVisibleDays)
     : databaseHelper_(databaseHelper),
+      pastEventVisibleDays_(pastEventVisibleDays),
       categories_(databaseHelper),
       sceneTags_(databaseHelper),
       neighborhoods_(databaseHelper),
@@ -207,6 +271,12 @@ EventHelper::EventHelper(DatabaseHelper databaseHelper)
       eventSceneTags_(databaseHelper),
       seriesCategories_(databaseHelper),
       seriesSceneTags_(databaseHelper) {
+}
+
+EventHelper MakePublicEventHelper(
+    DatabaseHelper databaseHelper, Secrets::SecretsHelper& secrets, Transaction& transaction) {
+    return EventHelper(
+        databaseHelper, LoadPastEventSettings(secrets, transaction).archivedEventsVisibleDays);
 }
 
 int64_t EventHelper::NowUs(Transaction& transaction) const {
@@ -433,40 +503,78 @@ ReviewResult EventHelper::ReviewEvent(
 UpcomingEvents EventHelper::GetUpcomingPublic(
     Transaction& transaction, const UpcomingQuery& query) {
     UpcomingEvents result;
-    result.window = ClampUpcomingWindow(NowUs(transaction), query.fromUs, query.toUs);
+    const int64_t nowUs = NowUs(transaction);
+    result.window = ClampUpcomingWindow(nowUs, query.fromUs, query.toUs, pastEventVisibleDays_);
     if (result.window.toUs <= result.window.fromUs) {
         return result;
     }
 
-    // The single-column filters first, so the batch reads in
-    // AssemblePublicEvents only cover events that can still be returned.
+    // The single-column checks first, so the batch reads in
+    // AssemblePublicEvents only cover events that can still be returned. A
+    // window reaching into the past can start before the cutoff, and anything
+    // that ended before it is hidden.
+    const int64_t cutoffUs = PastEventCutoffUs(nowUs, pastEventVisibleDays_);
     KeyValueTableArray candidates;
-    for (KeyValueTable& row : events_.GetEventsInRange(
+    for (KeyValueTable& row : events_.GetEventsStartingBetween(
              transaction, result.window.fromUs, result.window.toUs,
-             DbSchema::kEventsStatusApproved)) {
-        if (query.venueId > 0
-            && OptionalIdColumn(row, DbSchema::kEventsVenueId) != query.venueId) {
-            continue;
+             PublicEventStatuses())) {
+        if (RowEndUs(row) >= cutoffUs && MatchesRowFilters(row, query)) {
+            candidates.push_back(std::move(row));
         }
-        if (query.seriesId > 0
-            && OptionalIdColumn(row, DbSchema::kEventsSeriesId) != query.seriesId) {
-            continue;
-        }
-        candidates.push_back(std::move(row));
     }
 
-    // The rest match the resolved, effective values.
     for (PublicEvent& event : AssemblePublicEvents(transaction, candidates)) {
-        if (!query.neighborhoodSlug.empty() && event.neighborhoodSlug != query.neighborhoodSlug) {
-            continue;
+        if (MatchesEffectiveFilters(event, query)) {
+            result.events.push_back(std::move(event));
         }
-        if (!query.categorySlug.empty() && !Contains(event.categorySlugs, query.categorySlug)) {
-            continue;
+    }
+    return result;
+}
+
+PastEvents EventHelper::GetPastPublic(Transaction& transaction, const PastQuery& query) {
+    PastEvents result;
+    const int64_t nowUs = NowUs(transaction);
+    result.sinceUs = PastEventCutoffUs(nowUs, pastEventVisibleDays_);
+    const size_t limit = static_cast<size_t>(std::clamp<int64_t>(
+        query.limit > 0 ? query.limit : kPastEventsDefaultPageSize, 1, kPastEventsMaxPageSize));
+    const int64_t offset = std::max<int64_t>(query.offset, 0);
+
+    KeyValueTableArray candidates;
+    for (KeyValueTable& row : events_.GetStartedBeforeEndingSince(
+             transaction, nowUs, result.sinceUs, kICalDefaultDurationUs,
+             PublicEventStatuses())) {
+        if (MatchesRowFilters(row, query)) {
+            candidates.push_back(std::move(row));
         }
-        if (!query.sceneTagSlug.empty() && !Contains(event.sceneTagSlugs, query.sceneTagSlug)) {
-            continue;
+    }
+
+    // Without the effective filters every candidate matches, so the page can
+    // start at the offset; with them, the skipped matches have to be found.
+    size_t next = 0;
+    int64_t toSkip = offset;
+    if (!HasEffectiveFilters(query)) {
+        next = static_cast<size_t>(std::min<int64_t>(offset, static_cast<int64_t>(candidates.size())));
+        toSkip = 0;
+    }
+    while (next < candidates.size()) {
+        const size_t end = std::min(candidates.size(), next + kPastEventsAssembleBatch);
+        KeyValueTableArray batch(candidates.begin() + static_cast<std::ptrdiff_t>(next),
+                                 candidates.begin() + static_cast<std::ptrdiff_t>(end));
+        next = end;
+        for (PublicEvent& event : AssemblePublicEvents(transaction, batch)) {
+            if (!MatchesEffectiveFilters(event, query)) {
+                continue;
+            }
+            if (toSkip > 0) {
+                --toSkip;
+                continue;
+            }
+            if (result.events.size() == limit) {
+                result.hasMore = true;
+                return result;
+            }
+            result.events.push_back(std::move(event));
         }
-        result.events.push_back(std::move(event));
     }
     return result;
 }
@@ -517,6 +625,8 @@ std::optional<EventDetail> EventHelper::GetEventDetail(Transaction& transaction,
     detail.status = Column(row, DbSchema::kEventsStatus);
     detail.reviewNotes = Column(row, DbSchema::kEventsReviewNotes);
     detail.event = std::move(AssemblePublicEvents(transaction, { row }).front());
+    detail.isPublic = IsPublicEvent(detail.status, detail.event.startsAtUs, detail.event.endsAtUs,
+                                    NowUs(transaction), pastEventVisibleDays_);
     return detail;
 }
 

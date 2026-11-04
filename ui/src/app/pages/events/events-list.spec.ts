@@ -138,4 +138,117 @@ describe('EventsListPage', () => {
     const { element } = await open('/events');
     expect(element.textContent).toContain("Events couldn't be loaded.");
   });
+
+  // EV4 §10. From NOW the mock's past events are Trivia Night (Aug 9), Bear
+  // Happy Hour (Aug 6), the farewell brunch (May 4) and the coat drive
+  // (Jan 24); the ball over a year ago is past the window.
+  describe('the past list', () => {
+    const PAST_TITLES = [
+      'Trivia Night',
+      'Bear Happy Hour',
+      'Drag Brunch Club: Farewell Brunch',
+      'Winter Coat Drive',
+    ];
+
+    it('lists what already happened, newest first, by month, muted', async () => {
+      const upcoming = vi.spyOn(TestBed.inject(COMMUNITY_ACCESS), 'getUpcomingEvents');
+      const { element } = await open('/events?view=past');
+      expect(element.querySelector('.events-list__title')?.textContent?.trim()).toBe('Past events');
+      const months = Array.from(element.querySelectorAll('.events-list__day-title')).map(
+        (heading) => heading.textContent?.trim(),
+      );
+      expect(months).toEqual(['August 2026', 'May 2026', 'January 2026']);
+      expect(titles(element)).toEqual(PAST_TITLES);
+      expect(element.querySelectorAll('.event-row--past').length).toBe(4);
+      // Each row names its day, since the headers are months.
+      expect(element.querySelector('.event-row__when')?.textContent).toContain('Aug 9');
+      // The presets and the feed are for what's coming.
+      expect(button(element, 'Tonight')).toBeUndefined();
+      expect(element.querySelector('app-subscribe-link')).toBeNull();
+      expect(upcoming).not.toHaveBeenCalled();
+      const document = TestBed.inject(DOCUMENT);
+      expect(document.title).toBe('Past events · CommunityFinder');
+      expect(document.head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+        `${document.location.origin}/events?view=past`,
+      );
+    });
+
+    it('is a link away from the upcoming list, filters and all, and back', async () => {
+      const { harness, element } = await open('/events?scene=bear&when=tonight');
+      const toPast = element.querySelector('.events-list__other-view')!;
+      expect(toPast.textContent).toContain('Past events');
+      expect(toPast.getAttribute('href')).toBe('/events?view=past&scene=bear');
+      // The upcoming rows aren't muted.
+      await harness.navigateByUrl('/events');
+      const upcoming = harness.routeNativeElement as HTMLElement;
+      expect(titles(upcoming).length).toBe(14);
+      expect(upcoming.querySelectorAll('.event-row--past').length).toBe(0);
+
+      await harness.navigateByUrl('/events?view=past&scene=bear');
+      const back = (harness.routeNativeElement as HTMLElement).querySelector(
+        '.events-list__other-view',
+      )!;
+      expect(back.textContent).toContain('Upcoming');
+      expect(back.getAttribute('href')).toBe('/events?scene=bear');
+    });
+
+    it('filters on the server, and keeps to the past list as the filters change', async () => {
+      const fetch = vi.spyOn(TestBed.inject(COMMUNITY_ACCESS), 'getPastEvents');
+      const { harness, element } = await open('/events?view=past&scene=bear');
+      expect(fetch).toHaveBeenCalledWith({
+        offset: 0,
+        limit: 20,
+        category: '',
+        scene: 'bear',
+        neighborhood: '',
+      });
+      expect(titles(element)).toEqual(['Bear Happy Hour']);
+      const document = TestBed.inject(DOCUMENT);
+      expect(document.title).toBe('Past Bears events · CommunityFinder');
+      expect(document.head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+        `${document.location.origin}/events?view=past&scene=bear`,
+      );
+
+      button(element, 'Clear filters').click();
+      await harness.fixture.whenStable();
+      expect(TestBed.inject(Router).url).toBe('/events?view=past');
+      harness.detectChanges();
+      expect(titles(harness.routeNativeElement as HTMLElement)).toEqual(PAST_TITLES);
+
+      await harness.navigateByUrl('/events?view=past&category=protest');
+      expect((harness.routeNativeElement as HTMLElement).textContent).toContain(
+        'No past events match these filters.',
+      );
+    });
+
+    it('fetches a page at a time, the next on "Show more"', async () => {
+      const access = TestBed.inject(COMMUNITY_ACCESS);
+      const real = access.getPastEvents.bind(access);
+      const fetch = vi
+        .spyOn(access, 'getPastEvents')
+        .mockImplementation((query) => real({ ...query, limit: 3 }));
+      const { harness, element } = await open('/events?view=past');
+      expect(titles(element)).toEqual(PAST_TITLES.slice(0, 3));
+
+      button(element, 'Show more').click();
+      harness.detectChanges();
+      expect(fetch).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 3 }));
+      expect(titles(element)).toEqual(PAST_TITLES);
+      expect(button(element, 'Show more')).toBeUndefined();
+    });
+
+    it('says so when there is nothing, or it could not be loaded', async () => {
+      const fetch = vi
+        .spyOn(TestBed.inject(COMMUNITY_ACCESS), 'getPastEvents')
+        .mockReturnValue(of({ items: [], has_more: false, since_us: 0 }));
+      const { harness, element } = await open('/events?view=past');
+      expect(element.textContent).toContain('No past events to show yet.');
+
+      fetch.mockReturnValue(throwError(() => new Error('offline')));
+      await harness.navigateByUrl('/events?view=past&category=bar');
+      expect((harness.routeNativeElement as HTMLElement).textContent).toContain(
+        "Events couldn't be loaded.",
+      );
+    });
+  });
 });

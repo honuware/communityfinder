@@ -37,7 +37,8 @@ const std::vector<std::string_view>& AppTableCreationOrder();
 //     display templates, and the nested (child) tables,
 //   - the app permissions, each granted to the framework Administrator role:
 //     `manage_events`, mapped to every events-domain table, and
-//     `manage_guide`, mapped to every guide table plus venues,
+//     `manage_guide`, mapped to every guide table plus venues
+//     (`run_scheduled_jobs`, which gates the job endpoints, is honuware's),
 //   - photo support for venues, events, organizations, places, and guide pages,
 //   - the public `allowed_tables` entries — the vocabularies and venues are
 //     read anonymously through the framework's generic table reads (EV1 OQ1).
@@ -47,3 +48,14 @@ const std::vector<std::string_view>& AppTableCreationOrder();
 void PopulateAppTables(
     Transaction& transaction, DatabaseHelper databaseHelper,
     DbSchema::DatabaseInfo databaseInfo);
+
+// EV4 §2.2: the scheduler service account (App::kSchedulerServiceAccountEmail),
+// whose `scheduler` role holds only `run_scheduled_jobs`. The caller passes
+// SCHEDULER_SERVICE_ACCOUNT_PASSWORD's value; an empty one skips the account,
+// writing nothing, and returns false so the caller can say so (EV4 OQ2: a
+// developer who never runs communityfinder_helper needn't set it). Idempotent:
+// an existing account is left alone. Runs after PopulateFrameworkTables, which
+// seeds the permission it links.
+bool ProvisionSchedulerAccount(
+    Transaction& transaction, DatabaseHelper databaseHelper,
+    std::string_view password);

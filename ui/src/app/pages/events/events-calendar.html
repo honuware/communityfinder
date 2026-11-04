@@ -18,18 +18,29 @@
     <button mat-icon-button type="button" (click)="nextMonth()" aria-label="Next month">
       <mat-icon>chevron_right</mat-icon>
     </button>
-    @if (canGoBack()) {
+    @if (!isCurrentMonth()) {
       <button mat-button type="button" (click)="thisMonth()">This month</button>
     }
     @if (loading()) {
       <mat-progress-spinner mode="indeterminate" diameter="24" />
     }
+    <mat-slide-toggle
+      class="calendar__show-past"
+      [checked]="showPast()"
+      (change)="setShowPast($event.checked)"
+    >
+      Show past events
+    </mat-slide-toggle>
   </header>
 
   @if (failed()) {
     <p class="calendar__message">Events couldn't be loaded. Please try again in a moment.</p>
   } @else if (!loading() && events().length === 0) {
     <p class="calendar__message">Nothing's on the calendar this month yet.</p>
+  } @else if (!loading() && shownEvents().length === 0) {
+    <p class="calendar__message">
+      Nothing else is on the calendar this month. Turn on "Show past events" to see what's been.
+    </p>
   }
 
   <div class="calendar__grid">
@@ -50,7 +61,11 @@
             <span class="calendar__day-digit">{{ day.day }}</span>
           </div>
           @for (event of dayEvents(day.key); track event.id) {
-            <a class="calendar__event" [routerLink]="eventPath(event)">
+            <a
+              class="calendar__event"
+              [class.calendar__event--past]="hasEnded(event)"
+              [routerLink]="eventPath(event)"
+            >
               <span class="calendar__event-time">{{ eventTime(event) }}</span>
               {{ event.title }}
             </a>

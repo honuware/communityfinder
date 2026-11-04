@@ -3,9 +3,12 @@ import {
   categoriesFromRows,
   dataResultsToRecords,
   neighborhoodsFromRows,
+  buildPastEventsQueryString,
   normalizeEvent,
   normalizeEventSeriesDetail,
   normalizeEventSeriesList,
+  normalizeEventSettings,
+  normalizePastEvents,
   normalizeUpcomingEvents,
   sceneTagsFromRows,
   venueChoicesFromRows,
@@ -83,6 +86,36 @@ describe('events.types', () => {
     expect(upcoming.from_us).toBe(100);
     expect(upcoming.to_us).toBe(200);
     expect(normalizeUpcomingEvents({}).items).toEqual([]);
+  });
+
+  it('unwraps a page of past events, whether there are more, and where the window starts', () => {
+    const past = normalizePastEvents({ items: [WIRE_EVENT], has_more: true, since_us: 100 });
+    expect(past.items.map((event) => event.id)).toEqual([42]);
+    expect(past.has_more).toBe(true);
+    expect(past.since_us).toBe(100);
+    expect(normalizePastEvents({})).toEqual({ items: [], has_more: false, since_us: 0 });
+  });
+
+  it('reads the event settings, a missing or unusable one as its default', () => {
+    expect(
+      normalizeEventSettings({
+        archived_events_visible_days: 90,
+        events_show_past_by_default: true,
+      }),
+    ).toEqual({ archived_events_visible_days: 90, events_show_past_by_default: true });
+    expect(normalizeEventSettings({})).toEqual({
+      archived_events_visible_days: 365,
+      events_show_past_by_default: false,
+    });
+    for (const days of [0, -5, 1.5, 'a year']) {
+      expect(normalizeEventSettings({ archived_events_visible_days: days })).toEqual(
+        expect.objectContaining({ archived_events_visible_days: 365 }),
+      );
+    }
+    // Only a real true turns it on.
+    expect(normalizeEventSettings({ events_show_past_by_default: 'true' })).toEqual(
+      expect.objectContaining({ events_show_past_by_default: false }),
+    );
   });
 
   it('unwraps the series list and a series page', () => {
@@ -213,6 +246,26 @@ describe('events.types', () => {
 
     it('encodes what needs encoding', () => {
       expect(buildEventsQueryString({ category: 'a&b c' })).toBe('?category=a%26b%20c');
+    });
+  });
+
+  describe('buildPastEventsQueryString', () => {
+    it('writes the paging, then the filters; the first page has no offset', () => {
+      expect(buildPastEventsQueryString({})).toBe('');
+      expect(buildPastEventsQueryString({ offset: 0, limit: 20 })).toBe('?limit=20');
+      expect(
+        buildPastEventsQueryString({
+          series_id: 3,
+          scene: 'bear',
+          offset: 40,
+          limit: 20,
+          category: 'drag',
+          neighborhood: 'capitol-hill',
+          venue_id: 7,
+        }),
+      ).toBe(
+        '?offset=40&limit=20&category=drag&scene=bear&neighborhood=capitol-hill&venue_id=7&series_id=3',
+      );
     });
   });
 });

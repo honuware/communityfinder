@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "business_logic/app_ical_config.h"
+#include "business_logic/app_secret_keys.h"
 #include "business_logic/auth/server_config.h"
 #include "business_logic/events/event_helper.h"
 #include "business_logic/events/event_ical.h"
@@ -13,7 +14,8 @@
 #include "util/secrets/secrets_helper_test_util.h"
 #include "util/types.h"
 
-// EV2 §1.3 — GET /api/events/<int>/ical: one approved event as a download.
+// EV2 §1.3 — GET /api/events/<int>/ical: one public (approved, or since EV4
+// archived) event as a download.
 namespace Endpoints {
 namespace {
 
@@ -68,11 +70,52 @@ TEST(GetEventICalTest, DownloadsOneApprovedEvent) {
     Auth::ServerConfig::Shutdown();
 }
 
-TEST(GetEventICalTest, AnythingButApprovedIsNotFound) {
+// EV4 OQ3: archived is public, so a past event's link still downloads.
+TEST(GetEventICalTest, AnArchivedEventStillDownloads) {
     Auth::ServerConfig::Shutdown();
     Auth::ServerConfig::InitializeTestMode();
     TestDatabaseUtil testDb;
-    testDb.RunInTransaction("AnythingButApprovedIsNotFound", [&](Transaction& transaction) {
+    testDb.RunInTransaction("AnArchivedEventStillDownloads", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        int64_t lastWeek = NowUs(transaction) - 7 * Events::kUsPerDay;
+        int64_t archived = AddEvent(transaction, databaseHelper, world, { "archived", lastWeek, "archived" });
+
+        crow::response resp = GetICal(helper, archived);
+        ASSERT_EQ(resp.code, 200) << resp.body;
+        EXPECT_NE(resp.body.find("SUMMARY:Event archived\r\n"), std::string::npos);
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// EV4 §10: the download follows the page. Past the window, it's not found.
+TEST(GetEventICalTest, AnEventPastTheWindowIsNotFound) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("AnEventPastTheWindowIsNotFound", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        helper.GetSecretsHelper()->AddSecret(transaction, Secrets::kArchivedEventsVisibleDays, "30");
+        const int64_t nowUs = NowUs(transaction);
+        int64_t inside = AddEvent(transaction, databaseHelper, world,
+                                  { "inside", nowUs - 29 * Events::kUsPerDay, "archived" });
+        int64_t outside = AddEvent(transaction, databaseHelper, world,
+                                   { "outside", nowUs - 31 * Events::kUsPerDay, "archived" });
+
+        EXPECT_EQ(GetICal(helper, inside).code, 200);
+        EXPECT_EQ(GetICal(helper, outside).code, 404);
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+TEST(GetEventICalTest, PendingAndRejectedAreNotFound) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("PendingAndRejectedAreNotFound", [&](Transaction& transaction) {
         EndpointTestHelper helper(transaction, testDb);
         DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
         World world = MakeWorld(transaction, databaseHelper);

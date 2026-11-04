@@ -463,7 +463,8 @@ export function buildEventsMockData(now: number): EventsMockData {
     }),
   );
 
-  // Never shown: one already over, one not yet reviewed.
+  // Not in the list: one already over (archived by EV4's sweep, but its page
+  // still loads), one not yet reviewed (never shown).
   events.push(
     makeEvent({
       id: 116,
@@ -472,6 +473,7 @@ export function buildEventsMockData(now: number): EventsMockData {
       durationHours: 2,
       venue: LANTERN_ROOM,
       categorySlugs: ['bar'],
+      status: 'archived',
     }),
     makeEvent({
       id: 117,
@@ -481,6 +483,53 @@ export function buildEventsMockData(now: number): EventsMockData {
       venue: DRIFTWOOD_HALL,
       categorySlugs: ['music'],
       status: 'pending',
+    }),
+  );
+
+  // The past list (EV4 §10): last week's Bear Happy Hour, the ended brunch
+  // series' last date, one from the winter, and one over a year ago, which the
+  // default 365-day window hides.
+  events.push(
+    makeEvent({
+      id: 118,
+      title: 'Bear Happy Hour',
+      startsAtUs: at(daysUntil(4) - 7, 18),
+      durationHours: 3,
+      venue: LANTERN_ROOM,
+      costText: 'No cover',
+      series: bearHappyHour,
+      status: 'archived',
+    }),
+    makeEvent({
+      id: 119,
+      title: 'Drag Brunch Club: Farewell Brunch',
+      startsAtUs: at(-100, 11),
+      durationHours: 3,
+      venue: DRIFTWOOD_HALL,
+      costText: '$30',
+      series: dragBrunchClub,
+      status: 'archived',
+    }),
+    makeEvent({
+      id: 120,
+      title: 'Winter Coat Drive',
+      startsAtUs: at(-200, 10),
+      durationHours: 6,
+      venue: COLUMBIA_CITY_SOCIAL,
+      description: 'Coats, gloves and hats for the shelters on Rainier.',
+      costText: 'Free',
+      categorySlugs: ['volunteer', 'community'],
+      status: 'archived',
+    }),
+    makeEvent({
+      id: 121,
+      title: 'New Year’s Eve Ball',
+      startsAtUs: at(-400, 21),
+      durationHours: 5,
+      venue: EASTSIDE_COMMONS,
+      costText: '$40',
+      categorySlugs: ['nightlife'],
+      status: 'archived',
     }),
   );
 

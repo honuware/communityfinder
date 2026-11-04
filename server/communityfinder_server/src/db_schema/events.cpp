@@ -139,8 +139,10 @@ namespace DbSchema {
 	}
 
 	void CreateEventsIndexes(Transaction& transaction) {
-		// The upcoming query (GetEventsInRange / GetUpcomingPublic): approved
-		// events in a start-time window.
+		// The upcoming query (GetEventsStartingBetween / GetUpcomingPublic):
+		// approved and archived events in a start-time window. Also EV4's two
+		// sweeps (GetApprovedEndedBefore / GetPendingStartedBefore): one status,
+		// started before a time.
 		transaction.RunSqlStatement(
 			"CREATE INDEX IF NOT EXISTS events_status_starts_at_idx "
 			"ON events (status, starts_at_us)");

@@ -6,9 +6,11 @@
 
 #include <gtest/gtest.h>
 
+#include "business_logic/app_secret_keys.h"
 #include "business_logic/auth/server_config.h"
 #include "business_logic/events/event_helper.h"
 #include "endpoints/events_endpoint_test_support.h"
+#include "util/secrets/secrets_helper_test_util.h"
 #include "util/types.h"
 
 // EV1 §5.1 — GET /api/events/upcoming over HTTP, signed out throughout.
@@ -50,6 +52,41 @@ TEST(GetUpcomingEventsTest, ApprovedEventsInTheDefaultWindowOnly) {
         // The window served: now → +42 days.
         EXPECT_EQ(body["to_us"].Get<int64_t>() - body["from_us"].Get<int64_t>(),
                   Events::kUpcomingDefaultWindowDays * Events::kUsPerDay);
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// EV4 §10: the calendar's past months. `from_us` reaches back as far as the
+// past-events window, no further, and an event over for longer is hidden.
+TEST(GetUpcomingEventsTest, FromReachesBackToThePastEventsWindow) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("FromReachesBackToThePastEventsWindow", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        helper.GetSecretsHelper()->AddSecret(transaction, Secrets::kArchivedEventsVisibleDays, "30");
+        const int64_t nowUs = NowUs(transaction);
+        int64_t twentyDaysAgo = AddEvent(transaction, databaseHelper, world,
+                                         { "twenty-days-ago", nowUs - 20 * Events::kUsPerDay, "archived" });
+        AddEvent(transaction, databaseHelper, world,
+                 { "forty-days-ago", nowUs - 40 * Events::kUsPerDay, "archived" });
+        AddEvent(transaction, databaseHelper, world,
+                 { "pending-last-week", nowUs - 7 * Events::kUsPerDay, "pending" });
+        int64_t tomorrow = AddEvent(transaction, databaseHelper, world,
+                                    { "tomorrow", nowUs + Events::kUsPerDay });
+
+        Json::Value body = GetUpcoming(
+            helper, "from_us=" + StringFromInt(nowUs - 60 * Events::kUsPerDay) +
+                    "&to_us=" + StringFromInt(nowUs + 2 * Events::kUsPerDay));
+        EXPECT_EQ(IdsOf(body["items"].GetArray()), (std::vector<int64_t>{ twentyDaysAgo, tomorrow }));
+        // Clamped to the window (the server's now is a little later).
+        EXPECT_GE(body["from_us"].Get<int64_t>(), nowUs - 30 * Events::kUsPerDay);
+        EXPECT_LT(body["from_us"].Get<int64_t>(), nowUs - 29 * Events::kUsPerDay);
+
+        // The default window still starts at now.
+        EXPECT_EQ(IdSet(GetUpcoming(helper)), std::set<int64_t>{ tomorrow });
     });
     Auth::ServerConfig::Shutdown();
 }

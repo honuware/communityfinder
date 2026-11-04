@@ -6,6 +6,8 @@
 #include <string_view>
 #include <vector>
 
+#include "business_logic/app_service_account_config.h"
+#include "business_logic/auth/service_account.h"
 #include "db_schema/admin_column_data_info.h"
 #include "db_schema/admin_column_friendly_names.h"
 #include "db_schema/admin_nested_tables.h"
@@ -888,6 +890,8 @@ void PopulateAppPermissions(
         "places, service listings, guide pages, their scene tags and links, and "
         "venues' facts; and preview unpublished guide pages.",
         kManageGuideTables);
+    // EV4's run_scheduled_jobs, which gates the job endpoints, is honuware's:
+    // PopulateFrameworkTables seeds it and grants it to Administrator (§9).
 }
 
 // Tables whose rows can carry photos through the framework pipeline
@@ -984,4 +988,16 @@ void PopulateAppTables(
     PopulateAppPermissions(transaction, databaseHelper);
     PopulatePhotoSupportTables(transaction, databaseHelper);
     PopulateAllowedTables(transaction, databaseHelper);
+}
+
+bool ProvisionSchedulerAccount(
+    Transaction& transaction, DatabaseHelper databaseHelper,
+    std::string_view password) {
+    if (password.empty()) return false;
+    // Every job endpoint, the app's and honuware's, checks run_scheduled_jobs,
+    // which the role always holds, so the app names nothing more.
+    Auth::EnsureSchedulerServiceAccount(
+        transaction, databaseHelper, App::kSchedulerServiceAccountEmail,
+        password, {});
+    return true;
 }

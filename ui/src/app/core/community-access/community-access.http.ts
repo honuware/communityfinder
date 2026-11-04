@@ -5,16 +5,22 @@ import { DataResults, HONUWARE_API_BASE } from '@honuware/ui/access';
 import { CommunityAccess, HealthInfo, SiteInfo } from './community-access';
 import {
   buildEventsQueryString,
+  buildPastEventsQueryString,
   categoriesFromRows,
   Category,
   EventSeries,
   EventSeriesDetail,
+  EventSettings,
   Neighborhood,
   neighborhoodsFromRows,
   normalizeEvent,
   normalizeEventSeriesDetail,
   normalizeEventSeriesList,
+  normalizeEventSettings,
+  normalizePastEvents,
   normalizeUpcomingEvents,
+  PastEvents,
+  PastEventsQuery,
   PublicEvent,
   SceneTag,
   sceneTagsFromRows,
@@ -49,6 +55,20 @@ export class CommunityHttpAccess implements CommunityAccess {
         withCredentials: true,
       })
       .pipe(map(normalizeUpcomingEvents));
+  }
+
+  getPastEvents(query: PastEventsQuery = {}): Observable<PastEvents> {
+    return this.http
+      .get<unknown>(`${this.apiBase}/events/past${buildPastEventsQueryString(query)}`, {
+        withCredentials: true,
+      })
+      .pipe(map(normalizePastEvents));
+  }
+
+  getEventSettings(): Observable<EventSettings> {
+    return this.http
+      .get<unknown>(`${this.apiBase}/events/settings`, { withCredentials: true })
+      .pipe(map(normalizeEventSettings));
   }
 
   getEvent(id: number): Observable<PublicEvent> {
