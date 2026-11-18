@@ -9,6 +9,12 @@
 
 namespace TableHelpers {
 
+// CM3 — the owner of the photo a row shows, on every GetPhotoOwners row (here
+// and Series::GetPhotoOwners): a table name and a row id, both "" when no
+// candidate has a photo.
+inline constexpr std::string_view kPhotoOwnerTable = "photo_table";
+inline constexpr std::string_view kPhotoOwnerId = "photo_id";
+
 // EV1 Slice 3 — CRUD for events, one row per dated occurrence. Single-table
 // reads only: venue, series and category/scene-tag resolution is EventHelper's
 // job (business_logic), batched through the other helpers.
@@ -91,6 +97,13 @@ public:
     // oldest first, at most `limit`.
     KeyValueTableArray GetPendingStartedBefore(
         Transaction& transaction, int64_t nowUs, int64_t limit) const;
+
+    // READ — CM3's photo picker: whose photo each event shows (its own, else its
+    // series', else its venue's), in one query against honuware's
+    // table_item_photos. Each row has `id`, kPhotoOwnerTable and kPhotoOwnerId,
+    // ordered by id. Unknown ids are skipped; empty input, empty result.
+    KeyValueTableArray GetPhotoOwners(
+        Transaction& transaction, const std::vector<int64_t>& eventIds) const;
 
     // UPDATE — bumps updated_us. A value of "NULL" clears a nullable column.
     void UpdateEvent(Transaction& transaction, int64_t id, const KeyValueTable& updates);

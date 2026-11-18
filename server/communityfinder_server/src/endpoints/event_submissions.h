@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
 #include <crow.h>
 
@@ -17,9 +18,11 @@ namespace Endpoints {
 
 // POST /api/event_submissions. Body:
 //   {"title", "dates": [{"starts_at_us", "ends_at_us"?}], "venue_id"?,
-//    "location_text"?, "description"?, "url"?, "cost_text"?,
+//    "location_text"?, "description"?, "url"?, "cost_text"?, "video_url"?,
 //    "category_slugs"?: [], "scene_tag_slugs"?: [], "regular_thing"?,
 //    "relationship"?, "submitter_note"?, "agreed": true, "website"?}
+// `video_url` (CM3) is a YouTube or Vimeo link; anything else is a 400 on that
+// field (BAD_VIDEO_URL / VIDEO_HOST_NOT_SUPPORTED).
 // `website` is the honeypot: when it is filled in, the answer looks like
 // success (submission_id 0) and nothing is written. An unconfirmed email is a
 // 403 (EMAIL_NOT_VERIFIED); paused submissions are a 503 (SUBMISSIONS_PAUSED)
@@ -58,5 +61,18 @@ Json::Value PostWithdrawEventSubmission(
     const crow::request& req,
     crow::response& resp,
     int64_t submissionId);
+
+// POST /api/event_submissions/<int>/photo/<jpeg|png> — CM3 §4.4: the body's
+// image becomes the flyer on each of the submission's pending dates, private
+// until a curator approves the date. Someone else's submission (or none) is a
+// 404; nothing pending, another image type, a file over the site's upload
+// limit or bytes that aren't an image are 400s with `error_code`
+// (SubmissionHelper::AttachFlyer). Responds {"submission_id", "event_ids"}.
+Json::Value PostEventSubmissionPhoto(
+    EndpointAuthHelper& endpointAuthHelper,
+    const crow::request& req,
+    crow::response& resp,
+    int64_t submissionId,
+    std::string_view imageType);
 
 }  // namespace Endpoints

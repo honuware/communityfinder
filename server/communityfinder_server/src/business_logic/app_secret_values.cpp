@@ -44,6 +44,10 @@ inline constexpr std::string_view kEventSubmissionsPausedValue = "false";
 // (PastEventSettingsTest.AppSecretDefaultsMatchTheCodeDefaults pins it).
 inline constexpr std::string_view kArchivedEventsVisibleDaysValue = "365";
 inline constexpr std::string_view kEventsShowPastByDefaultValue = "false";
+// CM3's gallery cap. It must match the default in
+// business_logic/events/gallery_settings.h
+// (GallerySettingsTest.AppSecretDefaultMatchesTheCodeDefault pins it).
+inline constexpr std::string_view kEventGalleryMaxPhotosValue = "12";
 
 }  // namespace
 
@@ -63,6 +67,7 @@ void FillInAppSecretDefaults(
     addSecret(Secrets::kEventSubmissionsPaused, kEventSubmissionsPausedValue);
     addSecret(Secrets::kArchivedEventsVisibleDays, kArchivedEventsVisibleDaysValue);
     addSecret(Secrets::kEventsShowPastByDefault, kEventsShowPastByDefaultValue);
+    addSecret(Secrets::kEventGalleryMaxPhotos, kEventGalleryMaxPhotosValue);
 
     // NOTE: site_logo_url (Secrets::kSiteLogoUrl) is intentionally NOT registered
     // here — the framework owns it and already defaults it to "" (empty) in

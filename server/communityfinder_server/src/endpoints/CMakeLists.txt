@@ -96,6 +96,20 @@ target_sources(communityfinder_test_cases PUBLIC
     get_past_events_test.cpp
 )
 
+# CM3 — event photos and video: the curator's gallery-row add (consent stamp
+# and cap) and the cap's admin setting. The flyer route rides event_submissions.
+target_sources(communityfinder_core PRIVATE
+    admin_event_gallery_photos.h
+    admin_event_gallery_photos.cpp
+    admin_event_gallery_settings.h
+    admin_event_gallery_settings.cpp
+)
+
+target_sources(communityfinder_test_cases PUBLIC
+    admin_event_gallery_photos_test.cpp
+    admin_event_gallery_settings_test.cpp
+)
+
 target_sources(communityfinder_test_cases PUBLIC
     guide_endpoint_test_support.h
     guide_endpoint_test_support.cpp

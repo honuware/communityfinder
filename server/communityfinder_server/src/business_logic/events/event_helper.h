@@ -6,7 +6,9 @@
 #include <string_view>
 #include <vector>
 
+#include "business_logic/events/event_gallery_helper.h"
 #include "business_logic/events/past_event_settings.h"
+#include "business_logic/events/video_link.h"
 #include "sql_util/database_access/database_helper.h"
 #include "sql_util/table_helpers/categories.h"
 #include "sql_util/table_helpers/event_category_assignments.h"
@@ -171,6 +173,13 @@ struct PastQuery : EventFilters {
     int64_t limit = kPastEventsDefaultPageSize;  // clamped to 1..kPastEventsMaxPageSize
 };
 
+// CM3 — the row whose photo something shows, in honuware's photo pipeline:
+// the client builds the address from the table and id (PhotoUrlBuilder).
+struct PhotoRef {
+    std::string table;
+    int64_t id = 0;
+};
+
 // A public (approved or archived) event as the public sees it. Deliberately has
 // no review fields: a public shape cannot leak what it never carries.
 struct PublicEvent {
@@ -194,6 +203,11 @@ struct PublicEvent {
     std::string seriesSlug;
     std::string seriesTitle;
     std::string origin;
+    // CM3 (OQ2): the event's own photo, else its series', else its venue's;
+    // nullopt when none of them has one.
+    std::optional<PhotoRef> photo;
+    // CM3: the event's own video, else its series'.
+    std::optional<VideoLink> video;
 };
 
 // GetUpcomingPublic's answer: the window actually served (after the clamp), so
@@ -220,6 +234,9 @@ struct EventDetail {
     std::string reviewNotes;
     // IsPublicEvent, with the helper's past-events window.
     bool isPublic = false;
+    // CM3 (OQ7): the event's own gallery, else its series'. Only the pictures
+    // already uploaded.
+    std::vector<GalleryPhoto> gallery;
 };
 
 // A series as the public sees it: the durable label plus its OWN category and
@@ -239,12 +256,17 @@ struct PublicSeries {
     std::optional<int64_t> lastVerifiedAtUs;
     std::vector<std::string> categorySlugs;
     std::vector<std::string> sceneTagSlugs;
+    // CM3: the series' own photo, else its venue's.
+    std::optional<PhotoRef> photo;
+    std::optional<VideoLink> video;
 };
 
-// A series page: the series plus its approved instances in the default window.
+// A series page: the series plus its approved instances in the default window,
+// and its gallery (CM3 OQ7).
 struct SeriesDetail {
     PublicSeries series;
     UpcomingEvents upcoming;
+    std::vector<GalleryPhoto> gallery;
 };
 
 // The clamp itself, separate so tests can pin it without a DB. `from` reaches
@@ -340,11 +362,13 @@ private:
     TableHelpers::EventSceneTagAssignments eventSceneTags_;
     TableHelpers::SeriesCategoryAssignments seriesCategories_;
     TableHelpers::SeriesSceneTagAssignments seriesSceneTags_;
+    EventGalleryHelper gallery_;
 
     int64_t NowUs(Transaction& transaction) const;
 
     // Event / series rows → public shapes, resolving venues, neighborhoods,
-    // series and slugs in batch queries (a fixed number, however many rows).
+    // series, slugs and photos in batch queries (a fixed number, however many
+    // rows).
     std::vector<PublicEvent> AssemblePublicEvents(
         Transaction& transaction, const KeyValueTableArray& rows);
     std::vector<PublicSeries> AssemblePublicSeries(

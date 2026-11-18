@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "db_schema/categories.h"
+#include "db_schema/event_gallery_photos.h"
 #include "db_schema/event_sources.h"
 #include "db_schema/events.h"
 #include "db_schema/freshness.h"
@@ -14,6 +15,7 @@
 #include "db_schema/scene_tags.h"
 #include "db_schema/series.h"
 #include "db_schema/venues.h"
+#include "sql_util/table_helpers/photo_test_support.h"
 #include "test/src/util/database_test_helper.h"
 #include "util/types.h"
 
@@ -1227,6 +1229,197 @@ TEST(EventHelperTest, SeriesDetailCarriesOnlyItsApprovedUpcomingInstances) {
         EXPECT_TRUE(closed->upcoming.events.empty());
 
         EXPECT_FALSE(helper.GetSeriesDetail(transaction, "no-such-series").has_value());
+    });
+}
+
+// ---- CM3: photos, video and galleries ----
+
+std::optional<PhotoRef> PhotoOf(const std::vector<PublicEvent>& events, int64_t id) {
+    const PublicEvent* event = FindEvent(events, id);
+    EXPECT_NE(event, nullptr) << id;
+    return event ? event->photo : std::nullopt;
+}
+
+void ExpectPhoto(const std::optional<PhotoRef>& photo, std::string_view table, int64_t id) {
+    ASSERT_TRUE(photo.has_value()) << table << " " << id;
+    EXPECT_EQ(photo->table, table);
+    EXPECT_EQ(photo->id, id);
+}
+
+std::vector<std::string> AltTexts(const std::vector<GalleryPhoto>& gallery) {
+    std::vector<std::string> altTexts;
+    for (const GalleryPhoto& photo : gallery) {
+        altTexts.push_back(photo.altText);
+    }
+    return altTexts;
+}
+
+// An uploaded gallery picture on one parent (exactly one of the ids is set).
+void AddGalleryPicture(Transaction& transaction, DatabaseHelper databaseHelper, int64_t eventId,
+                       int64_t seriesId, std::string_view altText, bool upload = true) {
+    NewGalleryPhoto photo;
+    photo.eventId = eventId;
+    photo.seriesId = seriesId;
+    photo.altText = std::string(altText);
+    photo.consentConfirmed = true;
+    AddGalleryPhotoResult added =
+        EventGalleryHelper(databaseHelper).AddGalleryPhoto(transaction, photo, kReviewerPersonId, 12);
+    ASSERT_TRUE(added.ok) << added.errorCode;
+    if (upload) {
+        TableHelpers::PhotoTest::AttachTestPhoto(
+            transaction, databaseHelper, DbSchema::kEventGalleryPhotosTable, added.id);
+    }
+}
+
+// OQ2: an event shows its own photo, else its series', else its venue's.
+TEST(EventHelperTest, ListsCarryTheEventsOwnPhotoElseItsSeriesElseItsVenues) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("ListsCarryTheEventsOwnPhotoElseItsSeriesElseItsVenues", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        const int64_t startsAtUs = NowUs(transaction) + kUsPerDay;
+        IngestItem own = Item(world.cuffSite, "own", startsAtUs);
+        own.seriesSlug = "t4t";
+        IngestItem fromSeries = Item(world.cuffSite, "from-series", startsAtUs + kUsPerHour);
+        fromSeries.seriesSlug = "t4t";
+        IngestItem fromVenue = Item(world.cuffSite, "from-venue", startsAtUs + 2 * kUsPerHour);
+        IngestItem none = Item(world.feed, "none", startsAtUs + 3 * kUsPerHour);
+        IngestResult ingested = helper.IngestEvents(transaction, { own, fromSeries, fromVenue, none });
+        ASSERT_TRUE(ingested.ok) << ingested.errorCode;
+        for (const IngestItemResult& item : ingested.items) {
+            Approve(transaction, helper, item.eventId);
+        }
+        const int64_t ownId = ingested.items[0].eventId;
+        TableHelpers::PhotoTest::AttachTestPhoto(transaction, databaseHelper, DbSchema::kEventsTable, ownId);
+        TableHelpers::PhotoTest::AttachTestPhoto(transaction, databaseHelper, DbSchema::kSeriesTable, world.t4t);
+        TableHelpers::PhotoTest::AttachTestPhoto(transaction, databaseHelper, DbSchema::kVenuesTable, world.theCuff);
+
+        std::vector<PublicEvent> events = helper.GetUpcomingPublic(transaction, {}).events;
+        ExpectPhoto(PhotoOf(events, ownId), DbSchema::kEventsTable, ownId);
+        ExpectPhoto(PhotoOf(events, ingested.items[1].eventId), DbSchema::kSeriesTable, world.t4t);
+        ExpectPhoto(PhotoOf(events, ingested.items[2].eventId), DbSchema::kVenuesTable, world.theCuff);
+        EXPECT_FALSE(PhotoOf(events, ingested.items[3].eventId).has_value());
+
+        // The detail read resolves it the same way.
+        std::optional<EventDetail> detail = helper.GetEventDetail(transaction, ingested.items[1].eventId);
+        ASSERT_TRUE(detail.has_value());
+        ExpectPhoto(detail->event.photo, DbSchema::kSeriesTable, world.t4t);
+    });
+}
+
+// A series shows its own photo, else its venue's.
+TEST(EventHelperTest, SeriesCarryTheirOwnPhotoElseTheirVenues) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("SeriesCarryTheirOwnPhotoElseTheirVenues", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        int64_t atTheCuff = TableHelpers::Series(databaseHelper).AddSeries(transaction, {
+            { std::string(DbSchema::kSeriesTitle), "Leather Night" },
+            { std::string(DbSchema::kSeriesSlug), "leather-night" },
+            { std::string(DbSchema::kSeriesVenueId), StringFromInt(world.theCuff) },
+        });
+        TableHelpers::PhotoTest::AttachTestPhoto(transaction, databaseHelper, DbSchema::kSeriesTable, world.t4t);
+        TableHelpers::PhotoTest::AttachTestPhoto(transaction, databaseHelper, DbSchema::kVenuesTable, world.theCuff);
+
+        std::vector<PublicSeries> active = helper.GetActiveSeries(transaction);
+        ASSERT_EQ(active.size(), 2u);
+        const PublicSeries& leather = active[0];  // "Leather…" sorts before "T4T"
+        ASSERT_EQ(leather.id, atTheCuff);
+        ExpectPhoto(leather.photo, DbSchema::kVenuesTable, world.theCuff);
+        ExpectPhoto(active[1].photo, DbSchema::kSeriesTable, world.t4t);
+
+        std::optional<SeriesDetail> detail = helper.GetSeriesDetail(transaction, "t4t");
+        ASSERT_TRUE(detail.has_value());
+        ExpectPhoto(detail->series.photo, DbSchema::kSeriesTable, world.t4t);
+    });
+}
+
+// An event plays its own video, else its series'.
+TEST(EventHelperTest, VideoIsTheEventsOwnElseItsSeries) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("VideoIsTheEventsOwnElseItsSeries", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        TableHelpers::Series(databaseHelper).UpdateSeries(transaction, world.t4t, {
+            { std::string(DbSchema::kSeriesVideoUrl), "https://vimeo.com/76979871" } });
+        const int64_t startsAtUs = NowUs(transaction) + kUsPerDay;
+        IngestItem own = Item(world.cuffSite, "own", startsAtUs);
+        own.seriesSlug = "t4t";
+        IngestItem fromSeries = Item(world.cuffSite, "from-series", startsAtUs + kUsPerHour);
+        fromSeries.seriesSlug = "t4t";
+        IngestItem none = Item(world.feed, "none", startsAtUs + 2 * kUsPerHour);
+        IngestResult ingested = helper.IngestEvents(transaction, { own, fromSeries, none });
+        ASSERT_TRUE(ingested.ok) << ingested.errorCode;
+        for (const IngestItemResult& item : ingested.items) {
+            Approve(transaction, helper, item.eventId);
+        }
+        TableHelpers::Events(databaseHelper).UpdateEvent(transaction, ingested.items[0].eventId, {
+            { std::string(DbSchema::kEventsVideoUrl), "https://www.youtube.com/watch?v=dQw4w9WgXcQ" } });
+
+        std::vector<PublicEvent> events = helper.GetUpcomingPublic(transaction, {}).events;
+        const PublicEvent* ownEvent = FindEvent(events, ingested.items[0].eventId);
+        ASSERT_NE(ownEvent, nullptr);
+        ASSERT_TRUE(ownEvent->video.has_value());
+        EXPECT_EQ(ownEvent->video->provider, kVideoProviderYoutube);
+        EXPECT_EQ(ownEvent->video->id, "dQw4w9WgXcQ");
+        const PublicEvent* seriesEvent = FindEvent(events, ingested.items[1].eventId);
+        ASSERT_NE(seriesEvent, nullptr);
+        ASSERT_TRUE(seriesEvent->video.has_value());
+        EXPECT_EQ(seriesEvent->video->provider, kVideoProviderVimeo);
+        EXPECT_EQ(seriesEvent->video->id, "76979871");
+        const PublicEvent* noneEvent = FindEvent(events, ingested.items[2].eventId);
+        ASSERT_NE(noneEvent, nullptr);
+        EXPECT_FALSE(noneEvent->video.has_value());
+
+        std::optional<SeriesDetail> detail = helper.GetSeriesDetail(transaction, "t4t");
+        ASSERT_TRUE(detail.has_value());
+        ASSERT_TRUE(detail->series.video.has_value());
+        EXPECT_EQ(detail->series.video->id, "76979871");
+    });
+}
+
+// OQ7: an event shows its own gallery, else its series'; a series page shows
+// its own. Rows still waiting for their picture don't count.
+TEST(EventHelperTest, DetailGalleryIsTheEventsOwnElseItsSeries) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("DetailGalleryIsTheEventsOwnElseItsSeries", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        const int64_t startsAtUs = NowUs(transaction) + kUsPerDay;
+        IngestItem own = Item(world.cuffSite, "own", startsAtUs);
+        own.seriesSlug = "t4t";
+        IngestItem fromSeries = Item(world.cuffSite, "from-series", startsAtUs + kUsPerHour);
+        fromSeries.seriesSlug = "t4t";
+        IngestItem waiting = Item(world.cuffSite, "waiting", startsAtUs + 2 * kUsPerHour);
+        waiting.seriesSlug = "t4t";
+        IngestItem none = Item(world.feed, "none", startsAtUs + 3 * kUsPerHour);
+        IngestResult ingested = helper.IngestEvents(transaction, { own, fromSeries, waiting, none });
+        ASSERT_TRUE(ingested.ok) << ingested.errorCode;
+        const int64_t ownId = ingested.items[0].eventId;
+        AddGalleryPicture(transaction, databaseHelper, ownId, 0, "own first");
+        AddGalleryPicture(transaction, databaseHelper, ownId, 0, "own second");
+        AddGalleryPicture(transaction, databaseHelper, 0, world.t4t, "series");
+        AddGalleryPicture(transaction, databaseHelper, ingested.items[2].eventId, 0, "not yet", false);
+
+        auto galleryOf = [&](int64_t eventId) {
+            std::optional<EventDetail> detail = helper.GetEventDetail(transaction, eventId);
+            EXPECT_TRUE(detail.has_value()) << eventId;
+            return detail ? AltTexts(detail->gallery) : std::vector<std::string>();
+        };
+        // Pending: the gallery rides along for a curator's preview; the
+        // endpoint shows the page (and so the gallery) only when it's public.
+        EXPECT_EQ(galleryOf(ownId), (std::vector<std::string>{ "own first", "own second" }));
+        EXPECT_EQ(galleryOf(ingested.items[1].eventId), std::vector<std::string>{ "series" });
+        EXPECT_EQ(galleryOf(ingested.items[2].eventId), std::vector<std::string>{ "series" });
+        EXPECT_TRUE(galleryOf(ingested.items[3].eventId).empty());
+
+        std::optional<SeriesDetail> seriesDetail = helper.GetSeriesDetail(transaction, "t4t");
+        ASSERT_TRUE(seriesDetail.has_value());
+        EXPECT_EQ(AltTexts(seriesDetail->gallery), std::vector<std::string>{ "series" });
     });
 }
 

@@ -35,6 +35,7 @@ public:
         ReadString("description", request.description);
         ReadString("url", request.url);
         ReadString("cost_text", request.costText);
+        ReadString("video_url", request.videoUrl);
         ReadStrings("category_slugs", request.categorySlugs);
         ReadStrings("scene_tag_slugs", request.sceneTagSlugs);
         ReadBool("regular_thing", request.regularThing);
@@ -243,6 +244,14 @@ public:
                         return PostWithdrawEventSubmission(helper, req, resp, submissionId);
                     });
                 });
+        CROW_ROUTE(webApp->GetApp(), "/api/event_submissions/<int>/photo/<string>")
+            .methods(crow::HTTPMethod::Post)(
+                [=](const crow::request& req, crow::response& resp, int64_t submissionId,
+                    const std::string& imageType) {
+                    Handle(webApp, req, resp, [&](EndpointAuthHelper& helper) {
+                        return PostEventSubmissionPhoto(helper, req, resp, submissionId, imageType);
+                    });
+                });
     }
 } g_setupRouting;
 
@@ -421,6 +430,49 @@ Json::Value PostWithdrawEventSubmission(
         result = Json::Value(Json::JsonObject{
             { "submission_id", Json::Value(submissionId) },
             { "withdrawn_event_ids", IdArray(withdrawn.withdrawnEventIds) },
+        });
+        resp.code = 200;
+    });
+
+    return result;
+}
+
+Json::Value PostEventSubmissionPhoto(
+    EndpointAuthHelper& endpointAuthHelper,
+    const crow::request& req,
+    crow::response& resp,
+    int64_t submissionId,
+    std::string_view imageType) {
+    auto tp = endpointAuthHelper.GetTransactionProvider();
+    if (!tp) {
+        resp = ErrorResponse::InternalError("Database unavailable");
+        return {};
+    }
+
+    Json::Value result;
+    tp->RunInTransaction([&](Transaction& transaction) {
+        Auth::Session& session = endpointAuthHelper.GetSession();
+        if (!session.IsLoggedIn()) {
+            resp = ErrorResponse::NotAuthenticated("Sign in to add a flyer");
+            return;
+        }
+
+        Events::SubmissionHelper helper(endpointAuthHelper.GetDatabaseHelper());
+        Events::FlyerResult flyer = helper.AttachFlyer(
+            transaction, endpointAuthHelper.GetSecretsHelper(), submissionId, session.GetPersonId(),
+            imageType, std::vector<char>(req.body.begin(), req.body.end()));
+        if (!flyer.ok) {
+            if (flyer.errorCode == Events::kSubmissionErrorNotYours) {
+                resp = ErrorResponse::NotFound("Submission not found");
+            } else {
+                resp = ErrorWithCode(ErrorCodes::kValidationError, flyer.errorMessage, flyer.errorCode);
+            }
+            return;
+        }
+
+        result = Json::Value(Json::JsonObject{
+            { "submission_id", Json::Value(submissionId) },
+            { "event_ids", IdArray(flyer.eventIds) },
         });
         resp.code = 200;
     });

@@ -84,6 +84,9 @@ Json::Value GetEventDetail(
             return;
         }
         result = PublicEventToJson(detail->event);
+        // CM3: only here, not on the lists, and only once the event is visible
+        // (or to a curator's preview).
+        result["gallery"] = GalleryToJson(detail->gallery);
         if (reviewer) {
             result["status"] = detail->status;
             result["review_notes"] = detail->reviewNotes;

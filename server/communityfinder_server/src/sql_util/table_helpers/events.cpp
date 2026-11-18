@@ -4,6 +4,8 @@
 
 #include "bigint_array_literal.h"
 #include "db_schema/events.h"
+#include "db_schema/series.h"
+#include "db_schema/venues.h"
 #include "sql_util/database_access/database_crud_helpers.h"
 #include "util/types.h"
 
@@ -67,6 +69,22 @@ constexpr std::string_view kSqlGetStartedBeforeEndingSince =
 constexpr std::string_view kSqlGetStartedBefore =
     "SELECT * FROM events WHERE status = $1 AND starts_at_us < $2 "
     "ORDER BY starts_at_us ASC, id ASC LIMIT $3";
+
+// $1 an array literal; $2–$4 the candidate tables, in the order they're tried.
+// The first candidate with a table_item_photos row wins; none leaves the two
+// owner columns NULL.
+constexpr std::string_view kSqlGetPhotoOwners =
+    "SELECT e.id, owner.photo_table, owner.photo_id FROM events e "
+    "LEFT JOIN LATERAL ("
+    "SELECT candidate.photo_table, candidate.photo_id FROM (VALUES "
+    "(1, $2::text, e.id), (2, $3::text, e.series_id), (3, $4::text, e.venue_id)"
+    ") AS candidate(rank, photo_table, photo_id) "
+    "WHERE candidate.photo_id IS NOT NULL AND EXISTS ("
+    "SELECT 1 FROM table_item_photos p "
+    "WHERE p.table_name = candidate.photo_table AND p.table_item_id = candidate.photo_id) "
+    "ORDER BY candidate.rank LIMIT 1"
+    ") owner ON TRUE "
+    "WHERE e.id = ANY($1::bigint[]) ORDER BY e.id ASC";
 
 // "{"a","b"}": each element double-quoted, with \ and " escaped, so the one
 // bound parameter is a valid text[] whatever the strings hold.
@@ -191,6 +209,16 @@ KeyValueTableArray Events::GetPendingStartedBefore(
     return transaction.RunSqlStatementReturningKeyValueTableArray(
         std::string(kSqlGetStartedBefore), DbSchema::kEventsStatusPending,
         StringFromInt(nowUs), StringFromInt(limit));
+}
+
+KeyValueTableArray Events::GetPhotoOwners(
+    Transaction& transaction, const std::vector<int64_t>& eventIds) const {
+    if (eventIds.empty()) {
+        return {};
+    }
+    return transaction.RunSqlStatementReturningKeyValueTableArray(
+        std::string(kSqlGetPhotoOwners), BigintArrayLiteral(eventIds),
+        DbSchema::kEventsTable, DbSchema::kSeriesTable, DbSchema::kVenuesTable);
 }
 
 void Events::UpdateEvent(Transaction& transaction, int64_t id, const KeyValueTable& updates) {

@@ -6,6 +6,7 @@
 #include "event_submissions.h"
 #include "series.h"
 #include "venues.h"
+#include "video_links.h"
 
 namespace DbSchema {
 
@@ -52,6 +53,15 @@ namespace DbSchema {
 			kEventsCostText,
 			DB_TYPE_STRING,
 			"''");
+		databaseInfo.AddColumnNotNullableWithDefault(
+			kEventsTable,
+			kEventsVideoUrl,
+			DB_TYPE_STRING,
+			"''");
+		databaseInfo.AddCheckConstraint(
+			kEventsTable,
+			kEventsVideoUrlCheck,
+			VideoUrlCheckExpression(kEventsVideoUrl));
 		databaseInfo.AddColumnForeignKeyRefNullable(
 			kEventSourcesTable,
 			kEventSourcesId,

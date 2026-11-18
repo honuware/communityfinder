@@ -6,6 +6,8 @@ target_sources(communityfinder_core PRIVATE
     categories.cpp
     event_category_assignments.h
     event_category_assignments.cpp
+    event_gallery_photos.h
+    event_gallery_photos.cpp
     event_scene_tag_assignments.h
     event_scene_tag_assignments.cpp
     event_sources.h
@@ -51,6 +53,7 @@ target_sources(communityfinder_core PRIVATE
     venue_profiles.cpp
     venues.h
     venues.cpp
+    video_links.h
 )
 
 target_sources(communityfinder_test_cases PUBLIC

@@ -5,11 +5,13 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include "business_logic/auth/person.h"
+#include "business_logic/images/image_helper.h"
 #include "db_schema/admin_alerts.h"
 #include "db_schema/categories.h"
 #include "db_schema/event_submissions.h"
@@ -18,8 +20,10 @@
 #include "db_schema/scene_tags.h"
 #include "db_schema/venues.h"
 #include "sql_util/table_helpers/admin_alerts.h"
+#include "sql_util/table_helpers/photo_test_support.h"
 #include "test/src/util/database_test_helper.h"
 #include "util/mail/mail_helper_test_util.h"
+#include "util/secrets/secret_keys.h"
 #include "util/types.h"
 
 // EV3 §3.1 — SubmissionHelper: the submit door, "My submissions", withdrawal,
@@ -741,6 +745,127 @@ TEST(SubmissionHelperTest, OnlyTheOwnerCanWithdraw) {
         EXPECT_EQ(helper.Withdraw(transaction, 999999, otherId).errorCode, kSubmissionErrorNotYours);
         EXPECT_EQ(Column(EventRow(transaction, db, submitted.eventIds[0]), DbSchema::kEventsStatus),
                   DbSchema::kEventsStatusPending);
+    });
+}
+
+// --- CM3: the video link and the flyer ---
+
+TEST(SubmissionHelperTest, AVideoLinkIsStoredCanonicalOnEachDate) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("AVideoLinkIsStoredCanonicalOnEachDate", [&](Transaction& transaction) {
+        DatabaseHelper db = testDb.GetDatabaseHelper();
+        MakeWorld(transaction, db);
+        Secrets::SecretsHelperPtr secrets = Secrets::MakeSecretsHelper(db);
+        int64_t personId = AddVerifiedPerson(transaction, db, "submitter@example.com");
+        SubmissionHelper helper(db);
+        SubmissionRequest request = MakeRequest(NowUs(transaction), 2);
+        request.videoUrl = " https://youtu.be/dQw4w9WgXcQ?t=42 ";
+        SubmitResult submitted = helper.Submit(transaction, *secrets, request, personId);
+        ASSERT_TRUE(submitted.ok) << submitted.errorCode;
+        for (int64_t eventId : submitted.eventIds) {
+            EXPECT_EQ(Column(EventRow(transaction, db, eventId), DbSchema::kEventsVideoUrl),
+                      "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+        }
+
+        // None given, none stored.
+        SubmitResult plain = helper.Submit(transaction, *secrets, MakeRequest(NowUs(transaction)), personId);
+        ASSERT_TRUE(plain.ok) << plain.errorCode;
+        EXPECT_EQ(Column(EventRow(transaction, db, plain.eventIds[0]), DbSchema::kEventsVideoUrl), "");
+    });
+}
+
+TEST(SubmissionHelperTest, ABadVideoLinkNamesTheField) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("ABadVideoLinkNamesTheField", [&](Transaction& transaction) {
+        DatabaseHelper db = testDb.GetDatabaseHelper();
+        MakeWorld(transaction, db);
+        Secrets::SecretsHelperPtr secrets = Secrets::MakeSecretsHelper(db);
+        int64_t personId = AddVerifiedPerson(transaction, db, "submitter@example.com");
+        SubmissionHelper helper(db);
+        for (const auto& [link, errorCode] : {
+                 std::pair<std::string_view, std::string_view>{ "https://www.youtube.com/playlist?list=PL1", kVideoErrorBadUrl },
+                 std::pair<std::string_view, std::string_view>{ "https://www.tiktok.com/@someone/video/1", kVideoErrorHostNotSupported } }) {
+            SubmissionRequest request = MakeRequest(NowUs(transaction));
+            request.videoUrl = std::string(link);
+            SubmitResult result = helper.Submit(transaction, *secrets, request, personId);
+            EXPECT_FALSE(result.ok) << link;
+            EXPECT_EQ(result.errorCode, errorCode) << link;
+            EXPECT_EQ(result.errorField, "video_url") << link;
+            EXPECT_FALSE(result.errorMessage.empty()) << link;
+        }
+        // Nothing was written.
+        EXPECT_TRUE(helper.GetMySubmissions(transaction, personId).empty());
+    });
+}
+
+TEST(SubmissionHelperTest, AFlyerGoesOnEveryPendingDate) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("AFlyerGoesOnEveryPendingDate", [&](Transaction& transaction) {
+        DatabaseHelper db = testDb.GetDatabaseHelper();
+        MakeWorld(transaction, db);
+        TableHelpers::PhotoTest::EnsurePhotoSupport(transaction, db, DbSchema::kEventsTable);
+        Secrets::SecretsHelperPtr secrets = Secrets::MakeSecretsHelper(db);
+        int64_t personId = AddVerifiedPerson(transaction, db, "submitter@example.com");
+        SubmissionHelper helper(db);
+        SubmitResult submitted = helper.Submit(transaction, *secrets, MakeRequest(NowUs(transaction), 3), personId);
+        ASSERT_TRUE(submitted.ok);
+        // A decided date keeps what it has.
+        ASSERT_TRUE(helper.ReviewDate(transaction, submitted.eventIds[0], ReviewAction::Approve,
+                                      kCuratorId, "", {}).review.ok);
+
+        FlyerResult flyer = helper.AttachFlyer(transaction, secrets, submitted.submissionId, personId,
+                                               "jpeg", TableHelpers::PhotoTest::MakeTestJpeg(64, 48));
+        ASSERT_TRUE(flyer.ok) << flyer.errorCode << ": " << flyer.errorMessage;
+        EXPECT_EQ(flyer.eventIds, (std::vector<int64_t>{ submitted.eventIds[1], submitted.eventIds[2] }));
+        Images::ImageHelper images(db);
+        EXPECT_FALSE(images.HasPhoto(transaction, DbSchema::kEventsTable, submitted.eventIds[0]));
+        EXPECT_TRUE(images.HasPhoto(transaction, DbSchema::kEventsTable, submitted.eventIds[1]));
+        EXPECT_TRUE(images.HasPhoto(transaction, DbSchema::kEventsTable, submitted.eventIds[2]));
+
+        // A second flyer replaces the first.
+        ASSERT_TRUE(helper.AttachFlyer(transaction, secrets, submitted.submissionId, personId,
+                                       "jpeg", TableHelpers::PhotoTest::MakeTestJpeg(32, 24)).ok);
+        EXPECT_EQ(images.GetPhotoDimensions(transaction, DbSchema::kEventsTable, submitted.eventIds[1]).width, 32);
+    });
+}
+
+TEST(SubmissionHelperTest, AFlyerIsRefusedWithoutWritingAnything) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("AFlyerIsRefusedWithoutWritingAnything", [&](Transaction& transaction) {
+        DatabaseHelper db = testDb.GetDatabaseHelper();
+        MakeWorld(transaction, db);
+        TableHelpers::PhotoTest::EnsurePhotoSupport(transaction, db, DbSchema::kEventsTable);
+        Secrets::SecretsHelperPtr secrets = Secrets::MakeSecretsHelper(db);
+        int64_t personId = AddVerifiedPerson(transaction, db, "submitter@example.com");
+        int64_t otherId = AddVerifiedPerson(transaction, db, "other@example.com");
+        SubmissionHelper helper(db);
+        SubmitResult submitted = helper.Submit(transaction, *secrets, MakeRequest(NowUs(transaction)), personId);
+        ASSERT_TRUE(submitted.ok);
+        const std::vector<char> jpeg = TableHelpers::PhotoTest::MakeTestJpeg(64, 48);
+        auto attach = [&](int64_t submissionId, int64_t who, std::string_view type,
+                          const std::vector<char>& bytes) {
+            return helper.AttachFlyer(transaction, secrets, submissionId, who, type, bytes).errorCode;
+        };
+
+        EXPECT_EQ(attach(submitted.submissionId, otherId, "jpeg", jpeg), kSubmissionErrorNotYours);
+        EXPECT_EQ(attach(999999, personId, "jpeg", jpeg), kSubmissionErrorNotYours);
+        // Never a vector from a stranger, even a real one.
+        const std::string svg = R"(<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"/>)";
+        EXPECT_EQ(attach(submitted.submissionId, personId, "svg", std::vector<char>(svg.begin(), svg.end())),
+                  kSubmissionErrorBadImageType);
+        EXPECT_EQ(attach(submitted.submissionId, personId, "gif", jpeg), kSubmissionErrorBadImageType);
+        EXPECT_EQ(attach(submitted.submissionId, personId, "jpeg", {}), kSubmissionErrorBadImage);
+        const std::string junk = "not an image at all";
+        EXPECT_EQ(attach(submitted.submissionId, personId, "jpeg", std::vector<char>(junk.begin(), junk.end())),
+                  kSubmissionErrorBadImage);
+        secrets->AddSecret(transaction, Secrets::kImageMaxUploadBytes, StringFromInt(static_cast<int64_t>(jpeg.size()) - 1));
+        EXPECT_EQ(attach(submitted.submissionId, personId, "jpeg", jpeg), kSubmissionErrorImageTooLarge);
+        EXPECT_FALSE(Images::ImageHelper(db).HasPhoto(transaction, DbSchema::kEventsTable, submitted.eventIds[0]));
+
+        // Once nothing is pending, there's nowhere for it to go.
+        ASSERT_TRUE(helper.Withdraw(transaction, submitted.submissionId, personId).ok);
+        secrets->AddSecret(transaction, Secrets::kImageMaxUploadBytes, "10000000");
+        EXPECT_EQ(attach(submitted.submissionId, personId, "jpeg", jpeg), kSubmissionErrorNothingPending);
     });
 }
 

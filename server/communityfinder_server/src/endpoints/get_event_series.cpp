@@ -106,6 +106,7 @@ Json::Value GetEventSeriesDetail(
         result = Json::Value(Json::JsonObject{
             { "series", PublicSeriesToJson(detail->series) },
             { "upcoming", PublicEventsToJson(detail->upcoming.events) },
+            { "gallery", GalleryToJson(detail->gallery) },
         });
         resp.code = 200;
     });

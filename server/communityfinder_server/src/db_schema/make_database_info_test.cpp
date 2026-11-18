@@ -10,6 +10,7 @@
 
 #include "categories.h"
 #include "event_category_assignments.h"
+#include "event_gallery_photos.h"
 #include "event_scene_tag_assignments.h"
 #include "event_sources.h"
 #include "event_submissions.h"
@@ -204,6 +205,7 @@ TEST(MakeDatabaseInfoTest, AppTablesFollowTheFrameworkTables) {
           kEventSourcesTable, kSeriesTable, kEventSubmissionsTable, kEventsTable,
           kEventCategoryAssignmentsTable, kEventSceneTagAssignmentsTable,
           kSeriesCategoryAssignmentsTable, kSeriesSceneTagAssignmentsTable,
+          kEventGalleryPhotosTable,
           kVenueProfilesTable, kOrganizationsTable, kPlacesTable,
           kServiceListingsTable, kGuidePagesTable,
           kVenueProfileSceneTagAssignmentsTable,
@@ -302,8 +304,8 @@ TEST(MakeDatabaseInfoTest, SeriesCarryTheFreshnessColumnsAndAUniqueSlug) {
     EXPECT_EQ(ColumnNames(databaseInfo, kSeriesTable),
               (std::vector<std::string>{
                   "id", "title", "slug", "description", "cadence_text", "url",
-                  "venue_id", "status", "last_verified_at_us", "volatility_tier",
-                  "created_us", "updated_us"}));
+                  "video_url", "venue_id", "status", "last_verified_at_us",
+                  "volatility_tier", "created_us", "updated_us"}));
 
     EXPECT_TRUE(IsUniqueOnItsOwn(databaseInfo, kSeriesTable, kSeriesSlug));
     EXPECT_FALSE(Column(databaseInfo, kSeriesTable, kSeriesSlug).IsNullable());
@@ -351,8 +353,9 @@ TEST(MakeDatabaseInfoTest, EventsCarryTheReviewWorkflowNotTheFreshnessColumns) {
     EXPECT_EQ(ColumnNames(databaseInfo, kEventsTable),
               (std::vector<std::string>{
                   "id", "title", "description", "starts_at_us", "ends_at_us",
-                  "venue_id", "location_text", "url", "cost_text", "source_id",
-                  "series_id", "external_key", "submission_id", "origin", "status",
+                  "venue_id", "location_text", "url", "cost_text", "video_url",
+                  "source_id", "series_id", "external_key", "submission_id", "origin",
+                  "status",
                   "created_by_person_id", "reviewed_by_person_id", "reviewed_us",
                   "review_notes", "created_us", "updated_us"}));
 
@@ -462,6 +465,77 @@ TEST(MakeDatabaseInfoTest, AssignmentTablesAllowEachPairOnce) {
     };
     for (const Assignment& assignment : kAssignments) {
         ExpectAssignmentTable(databaseInfo, assignment);
+    }
+}
+
+// CM3: a gallery photo hangs off exactly one of an event or a series, through a
+// real FK to each, and can't exist without its consent record. The consent
+// person is a plain id, like events' person columns.
+TEST(MakeDatabaseInfoTest, GalleryPhotosHaveExactlyOneParentAndAConsentRecord) {
+    DatabaseInfo databaseInfo = MakeDatabaseInfo("test_db");
+
+    EXPECT_EQ(ColumnNames(databaseInfo, kEventGalleryPhotosTable),
+              (std::vector<std::string>{
+                  "id", "event_id", "series_id", "sort_order", "alt_text", "caption",
+                  "credit", "consent_confirmed_by_person_id", "consent_confirmed_us",
+                  "created_us", "updated_us"}));
+
+    EXPECT_EQ(CheckExpression(databaseInfo, kEventGalleryPhotosTable,
+                              kEventGalleryPhotosExactlyOneParentCheck),
+              "num_nonnulls(event_id, series_id) = 1");
+    EXPECT_EQ(ReferencedColumn(databaseInfo, kEventGalleryPhotosTable,
+                               kEventGalleryPhotosEventId),
+              "events.id");
+    EXPECT_EQ(ReferencedColumn(databaseInfo, kEventGalleryPhotosTable,
+                               kEventGalleryPhotosSeriesId),
+              "series.id");
+    EXPECT_EQ(ReferencedColumn(databaseInfo, kEventGalleryPhotosTable,
+                               kEventGalleryPhotosConsentConfirmedByPersonId),
+              "");
+
+    EXPECT_EQ(CheckExpression(databaseInfo, kEventGalleryPhotosTable,
+                              kEventGalleryPhotosAltTextCheck),
+              "btrim(alt_text) <> '' AND char_length(alt_text) <= 300");
+    EXPECT_EQ(CheckExpression(databaseInfo, kEventGalleryPhotosTable,
+                              kEventGalleryPhotosCaptionCheck),
+              "char_length(caption) <= 300");
+    EXPECT_EQ(CheckExpression(databaseInfo, kEventGalleryPhotosTable,
+                              kEventGalleryPhotosCreditCheck),
+              "char_length(credit) <= 120");
+
+    // Required, with nothing to fall back on.
+    for (std::string_view column :
+         {kEventGalleryPhotosAltText, kEventGalleryPhotosConsentConfirmedByPersonId,
+          kEventGalleryPhotosConsentConfirmedUs}) {
+        EXPECT_FALSE(Column(databaseInfo, kEventGalleryPhotosTable, column).IsNullable())
+            << column;
+        EXPECT_EQ(DefaultValue(databaseInfo, kEventGalleryPhotosTable, column), "") << column;
+    }
+    EXPECT_EQ(DefaultValue(databaseInfo, kEventGalleryPhotosTable, kEventGalleryPhotosCaption),
+              "''");
+    EXPECT_EQ(DefaultValue(databaseInfo, kEventGalleryPhotosTable, kEventGalleryPhotosCredit),
+              "''");
+    EXPECT_EQ(DefaultValue(databaseInfo, kEventGalleryPhotosTable,
+                           kEventGalleryPhotosSortOrder),
+              "0");
+}
+
+// CM3: events and series hold a canonical video link or nothing, under one CHECK.
+TEST(MakeDatabaseInfoTest, VideoUrlsAreCanonicalOrBlank) {
+    DatabaseInfo databaseInfo = MakeDatabaseInfo("test_db");
+
+    const std::pair<std::string_view, std::string_view> kVideoColumns[] = {
+        {kEventsTable, kEventsVideoUrlCheck},
+        {kSeriesTable, kSeriesVideoUrlCheck},
+    };
+    for (const auto& [table, check] : kVideoColumns) {
+        EXPECT_EQ(CheckExpression(databaseInfo, table, check),
+                  "video_url = '' OR "
+                  "video_url ~ '^https://www\\.youtube\\.com/watch\\?v=[A-Za-z0-9_-]{11}$' OR "
+                  "video_url ~ '^https://vimeo\\.com/[0-9]{1,12}$'")
+            << table;
+        EXPECT_FALSE(Column(databaseInfo, table, "video_url").IsNullable()) << table;
+        EXPECT_EQ(DefaultValue(databaseInfo, table, "video_url"), "''") << table;
     }
 }
 

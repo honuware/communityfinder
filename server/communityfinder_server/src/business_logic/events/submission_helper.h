@@ -60,6 +60,16 @@ inline constexpr std::string_view kSubmissionErrorNotFound = "SUBMISSION_NOT_FOU
 // A reason outside the six a curator picks from, or a reason on an approval.
 inline constexpr std::string_view kSubmissionErrorBadReason = "BAD_REASON";
 
+// The flyer (CM3 §4.4). Only photos: a JPEG or PNG, never a vector, from a
+// stranger.
+inline constexpr std::string_view kSubmissionErrorBadImageType = "BAD_IMAGE_TYPE";
+inline constexpr std::string_view kSubmissionErrorImageTooLarge = "IMAGE_TOO_LARGE";
+// Bytes that don't decode as the type they claim.
+inline constexpr std::string_view kSubmissionErrorBadImage = "BAD_IMAGE";
+// The image types a flyer may be, as honuware's upload names them.
+inline constexpr std::string_view kFlyerImageTypeJpeg = "jpeg";
+inline constexpr std::string_view kFlyerImageTypePng = "png";
+
 // The limits the form is held to (EV3 "Validation"). Lengths count characters
 // (UTF-8 code points), after trimming the single-line fields.
 inline constexpr size_t kSubmissionTitleMinLength = 3;
@@ -104,6 +114,10 @@ struct SubmissionRequest {
     std::string description;
     std::string url;
     std::string costText;
+    // CM3 §3.4 (OQ1): a YouTube or Vimeo link, checked with ParseVideoLink
+    // (BAD_VIDEO_URL / VIDEO_HOST_NOT_SUPPORTED on field "video_url") and stored
+    // in its canonical form on each date.
+    std::string videoUrl;
     std::vector<std::string> categorySlugs;
     std::vector<std::string> sceneTagSlugs;
     bool regularThing = false;
@@ -175,6 +189,15 @@ struct WithdrawResult {
     std::vector<int64_t> withdrawnEventIds;
 };
 
+struct FlyerResult {
+    bool ok = false;
+    std::string errorCode;
+    // Plain words for the submitter.
+    std::string errorMessage;
+    // The pending dates that now show the flyer.
+    std::vector<int64_t> eventIds;
+};
+
 // What a curator adds when deciding a submitted date or a whole submission.
 struct SubmissionDecision {
     // One of the six curator reasons, only with a rejection; empty = leave the
@@ -241,6 +264,21 @@ public:
     // `withdrawn` unless a curator already gave one, and the decision email
     // is marked sent: withdrawing sends none, now or later.
     WithdrawResult Withdraw(Transaction& transaction, int64_t submissionId, int64_t personId);
+
+    // CM3 §4.4 (OQ1) — the submitter's one flyer: the image becomes the photo
+    // of every date still pending, replacing one already there; decided dates
+    // keep theirs. It stays private until a curator approves the date (the H15
+    // rule, Events::IsPhotoRowPublic). NOT_YOURS (another person's, or no such
+    // submission), NOTHING_PENDING, BAD_IMAGE_TYPE ("jpeg" and "png" only),
+    // IMAGE_TOO_LARGE (over the site's image_max_upload_bytes), BAD_IMAGE.
+    // Writes nothing on failure.
+    FlyerResult AttachFlyer(
+        Transaction& transaction,
+        const Secrets::SecretsHelperPtr& secrets,
+        int64_t submissionId,
+        int64_t personId,
+        std::string_view imageType,
+        const std::vector<char>& imageBytes);
 
     // EventHelper::ReviewEvent, plus — for a submitted date — the decision's
     // reason and message stored on its submission, and the notice when this

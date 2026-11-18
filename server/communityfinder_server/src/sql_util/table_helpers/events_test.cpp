@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -11,12 +12,15 @@
 #include "db_schema/event_submissions.h"
 #include "db_schema/events.h"
 #include "db_schema/series.h"
+#include "db_schema/venues.h"
 #include "event_sources.h"
 #include "event_submissions.h"
+#include "photo_test_support.h"
 #include "series.h"
 #include "sql_util/database_access/database_crud_helpers.h"
 #include "test/src/util/database_test_helper.h"
 #include "util/types.h"
+#include "venues.h"
 
 namespace TableHelpers {
 namespace {
@@ -566,6 +570,114 @@ TEST(EventsTest, DuplicateSourceAndExternalKeyThrows) {
             events.AddEvent(transaction,
                             MakeIngestedEvent("Night again", 2000, sourceId, "uid-1")),
             std::exception);
+    });
+}
+
+// --- CM3: photos and video -------------------------------------------------
+
+// The photo picker's row for an event: {table, id}, both "" for none.
+std::pair<std::string, std::string> OwnerOf(const KeyValueTableArray& rows, int64_t eventId) {
+    for (const KeyValueTable& row : rows) {
+        if (row.at(std::string(DbSchema::kEventsId)) == StringFromInt(eventId)) {
+            return { row.at(std::string(kPhotoOwnerTable)), row.at(std::string(kPhotoOwnerId)) };
+        }
+    }
+    return { "missing", "missing" };
+}
+
+// Each of the four outcomes, in one mixed list: the event's own photo beats its
+// series', which beats its venue's; with none of the three, no owner.
+TEST(EventsTest, GetPhotoOwnersPicksOwnThenSeriesThenVenue) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GetPhotoOwnersPicksOwnThenSeriesThenVenue", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        Events events(databaseHelper);
+        int64_t venueId = Venues(databaseHelper).AddVenue(transaction, {
+            { std::string(DbSchema::kVenuesName), "Sample Hall" } });
+        int64_t seriesId = Series(databaseHelper).AddSeries(transaction, {
+            { std::string(DbSchema::kSeriesTitle), "Sample Night" },
+            { std::string(DbSchema::kSeriesSlug), "sample-night" },
+        });
+        PhotoTest::AttachTestPhoto(transaction, databaseHelper, DbSchema::kVenuesTable, venueId);
+        PhotoTest::AttachTestPhoto(transaction, databaseHelper, DbSchema::kSeriesTable, seriesId);
+
+        auto addEvent = [&](std::string_view title, bool inSeries, bool atVenue) {
+            KeyValueTable values = MakeEvent(title, 1000);
+            if (inSeries) values[std::string(DbSchema::kEventsSeriesId)] = StringFromInt(seriesId);
+            if (atVenue) values[std::string(DbSchema::kEventsVenueId)] = StringFromInt(venueId);
+            return events.AddEvent(transaction, values);
+        };
+        int64_t own = addEvent("own photo", true, true);
+        PhotoTest::AttachTestPhoto(transaction, databaseHelper, DbSchema::kEventsTable, own);
+        int64_t fromSeries = addEvent("series photo", true, true);
+        int64_t fromVenue = addEvent("venue photo", false, true);
+        int64_t none = addEvent("no photo", false, false);
+
+        KeyValueTableArray rows =
+            events.GetPhotoOwners(transaction, { own, fromSeries, fromVenue, none, none + 1000 });
+        // The unknown id is skipped.
+        EXPECT_EQ(rows.size(), 4u);
+        EXPECT_EQ(OwnerOf(rows, own),
+                  std::make_pair(std::string(DbSchema::kEventsTable), StringFromInt(own)));
+        EXPECT_EQ(OwnerOf(rows, fromSeries),
+                  std::make_pair(std::string(DbSchema::kSeriesTable), StringFromInt(seriesId)));
+        EXPECT_EQ(OwnerOf(rows, fromVenue),
+                  std::make_pair(std::string(DbSchema::kVenuesTable), StringFromInt(venueId)));
+        EXPECT_EQ(OwnerOf(rows, none), std::make_pair(std::string(), std::string()));
+        EXPECT_TRUE(events.GetPhotoOwners(transaction, {}).empty());
+    });
+}
+
+// A series or venue WITHOUT a photo is skipped, not picked.
+TEST(EventsTest, GetPhotoOwnersSkipsASeriesWithoutAPhoto) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GetPhotoOwnersSkipsASeriesWithoutAPhoto", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        Events events(databaseHelper);
+        int64_t venueId = Venues(databaseHelper).AddVenue(transaction, {
+            { std::string(DbSchema::kVenuesName), "Sample Hall" } });
+        int64_t seriesId = Series(databaseHelper).AddSeries(transaction, {
+            { std::string(DbSchema::kSeriesTitle), "Sample Night" },
+            { std::string(DbSchema::kSeriesSlug), "sample-night" },
+        });
+        PhotoTest::AttachTestPhoto(transaction, databaseHelper, DbSchema::kVenuesTable, venueId);
+        KeyValueTable values = MakeEvent("in a photo-less series", 1000);
+        values[std::string(DbSchema::kEventsSeriesId)] = StringFromInt(seriesId);
+        values[std::string(DbSchema::kEventsVenueId)] = StringFromInt(venueId);
+        int64_t eventId = events.AddEvent(transaction, values);
+
+        EXPECT_EQ(OwnerOf(events.GetPhotoOwners(transaction, { eventId }), eventId),
+                  std::make_pair(std::string(DbSchema::kVenuesTable), StringFromInt(venueId)));
+    });
+}
+
+TEST(EventsTest, VideoUrlDefaultsToNoneAndTakesACanonicalLink) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("VideoUrlDefaultsToNoneAndTakesACanonicalLink", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        Events events(databaseHelper);
+        int64_t eventId = events.AddEvent(transaction, MakeEvent("Night", 1000));
+        EXPECT_EQ(events.GetEvent(transaction, eventId).at(std::string(DbSchema::kEventsVideoUrl)), "");
+
+        for (std::string_view link :
+             { "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "https://vimeo.com/76979871", "" }) {
+            events.UpdateEvent(transaction, eventId,
+                               { { std::string(DbSchema::kEventsVideoUrl), std::string(link) } });
+            EXPECT_EQ(events.GetEvent(transaction, eventId).at(std::string(DbSchema::kEventsVideoUrl)), link);
+        }
+    });
+}
+
+// events_video_url_check: a pasted, non-canonical link is refused — the editor
+// converts it before saving.
+TEST(EventsTest, NonCanonicalVideoUrlThrows) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("NonCanonicalVideoUrlThrows", [&](Transaction& transaction) {
+        Events events(testDb.GetDatabaseHelper());
+        KeyValueTable values = MakeEvent("Night", 1000);
+        values[std::string(DbSchema::kEventsVideoUrl)] = "https://youtu.be/dQw4w9WgXcQ";
+        // The CHECK violation aborts the transaction — last statement.
+        EXPECT_THROW(events.AddEvent(transaction, values), std::exception);
     });
 }
 

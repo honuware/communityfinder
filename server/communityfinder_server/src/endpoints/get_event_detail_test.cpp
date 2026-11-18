@@ -1,13 +1,20 @@
 #include "get_event_detail.h"
 
 #include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
 #include "business_logic/app_secret_keys.h"
 #include "business_logic/auth/server_config.h"
+#include "business_logic/events/event_gallery_helper.h"
 #include "business_logic/events/event_helper.h"
+#include "db_schema/event_gallery_photos.h"
+#include "db_schema/events.h"
+#include "db_schema/series.h"
 #include "endpoints/events_endpoint_test_support.h"
+#include "sql_util/table_helpers/events.h"
+#include "sql_util/table_helpers/photo_test_support.h"
 #include "util/secrets/secrets_helper_test_util.h"
 #include "util/types.h"
 
@@ -137,6 +144,89 @@ TEST(GetEventDetailTest, AnEventPastTheWindowIsNotFoundButACuratorStillSeesIt) {
         crow::response resp = GetDetail(helper, outside);
         ASSERT_EQ(resp.code, 200) << resp.body;
         EXPECT_EQ(Json::Value::FromText(resp.body)["status"].Get<std::string>(), "archived");
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// CM3 — the page's photo (resolved by the server), its video ({provider, id}
+// only) and its gallery in order.
+TEST(GetEventDetailTest, CarriesThePhotoVideoAndGallery) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("CarriesThePhotoVideoAndGallery", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        int64_t tomorrow = NowUs(transaction) + Events::kUsPerDay;
+        EventSpec inSeries{ "in-series", tomorrow };
+        inSeries.seriesSlug = "t4t";
+        int64_t eventId = AddEvent(transaction, databaseHelper, world, inSeries);
+        int64_t bare = AddEvent(transaction, databaseHelper, world, { "bare", tomorrow });
+        TableHelpers::PhotoTest::AttachTestPhoto(transaction, databaseHelper, DbSchema::kSeriesTable, world.t4t);
+        TableHelpers::Events(databaseHelper).UpdateEvent(transaction, eventId, {
+            { std::string(DbSchema::kEventsVideoUrl), "https://www.youtube.com/watch?v=dQw4w9WgXcQ" } });
+        Events::EventGalleryHelper gallery(databaseHelper);
+        std::vector<int64_t> galleryIds;
+        for (std::string_view altText : { "The stage", "The bar" }) {
+            Events::NewGalleryPhoto photo;
+            photo.eventId = eventId;
+            photo.altText = std::string(altText);
+            photo.consentConfirmed = true;
+            galleryIds.push_back(gallery.AddGalleryPhoto(transaction, photo, 1, 12).id);
+            TableHelpers::PhotoTest::AttachTestPhoto(
+                transaction, databaseHelper, DbSchema::kEventGalleryPhotosTable, galleryIds.back());
+        }
+
+        crow::response resp = GetDetail(helper, eventId);
+        ASSERT_EQ(resp.code, 200) << resp.body;
+        Json::Value body = Json::Value::FromText(resp.body);
+        EXPECT_EQ(body["photo"]["table"].Get<std::string>(), DbSchema::kSeriesTable);
+        EXPECT_EQ(body["photo"]["id"].Get<int64_t>(), world.t4t);
+        EXPECT_EQ(body["video"]["provider"].Get<std::string>(), "youtube");
+        EXPECT_EQ(body["video"]["id"].Get<std::string>(), "dQw4w9WgXcQ");
+        const Json::JsonArray& photos = body["gallery"].GetArray();
+        EXPECT_EQ(IdsOf(photos), galleryIds);
+        ASSERT_EQ(photos.size(), 2u);
+        EXPECT_EQ(photos[0]["alt_text"].Get<std::string>(), "The stage");
+
+        crow::response bareResp = GetDetail(helper, bare);
+        ASSERT_EQ(bareResp.code, 200) << bareResp.body;
+        Json::Value bareBody = Json::Value::FromText(bareResp.body);
+        EXPECT_TRUE(bareBody["photo"].IsNull());
+        EXPECT_TRUE(bareBody["video"].IsNull());
+        EXPECT_TRUE(bareBody["gallery"].GetArray().empty());
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// CM3 — a pending event's gallery is no more public than its page; a curator's
+// preview shows it.
+TEST(GetEventDetailTest, APendingEventsGalleryShowsOnlyToACurator) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("APendingEventsGalleryShowsOnlyToACurator", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        int64_t pending = AddEvent(transaction, databaseHelper, world,
+                                   { "pending", NowUs(transaction) + Events::kUsPerDay, "pending" });
+        Events::NewGalleryPhoto photo;
+        photo.eventId = pending;
+        photo.altText = "The stage";
+        photo.consentConfirmed = true;
+        int64_t galleryId = Events::EventGalleryHelper(databaseHelper).AddGalleryPhoto(transaction, photo, 1, 12).id;
+        TableHelpers::PhotoTest::AttachTestPhoto(
+            transaction, databaseHelper, DbSchema::kEventGalleryPhotosTable, galleryId);
+
+        EXPECT_EQ(GetDetail(helper, pending).code, 404);
+
+        SignIn(transaction, testDb, helper, "curator@example.com", true);
+        crow::response resp = GetDetail(helper, pending);
+        ASSERT_EQ(resp.code, 200) << resp.body;
+        EXPECT_EQ(IdsOf(Json::Value::FromText(resp.body)["gallery"].GetArray()),
+                  std::vector<int64_t>{ galleryId });
     });
     Auth::ServerConfig::Shutdown();
 }

@@ -38,6 +38,13 @@ public:
     // stay listed. A closed series keeps its page; it just leaves the index.
     KeyValueTableArray GetActiveSeries(Transaction& transaction) const;
 
+    // READ — CM3's photo picker for series pages and the index: whose photo
+    // each series shows (its own, else its venue's), in one query. Each row has
+    // `id`, kPhotoOwnerTable and kPhotoOwnerId (events.h), ordered by id.
+    // Unknown ids are skipped; empty input, empty result.
+    KeyValueTableArray GetPhotoOwners(
+        Transaction& transaction, const std::vector<int64_t>& seriesIds) const;
+
     // UPDATE — bumps updated_us. A value of "NULL" clears a nullable column.
     void UpdateSeries(Transaction& transaction, int64_t id, const KeyValueTable& updates);
 

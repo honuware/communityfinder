@@ -4,6 +4,7 @@
 
 #include "freshness.h"
 #include "venues.h"
+#include "video_links.h"
 
 namespace DbSchema {
 
@@ -39,6 +40,15 @@ namespace DbSchema {
 			kSeriesUrl,
 			DB_TYPE_STRING,
 			"''");
+		databaseInfo.AddColumnNotNullableWithDefault(
+			kSeriesTable,
+			kSeriesVideoUrl,
+			DB_TYPE_STRING,
+			"''");
+		databaseInfo.AddCheckConstraint(
+			kSeriesTable,
+			kSeriesVideoUrlCheck,
+			VideoUrlCheckExpression(kSeriesVideoUrl));
 		databaseInfo.AddColumnForeignKeyRefNullable(
 			kVenuesTable,
 			kVenuesId,

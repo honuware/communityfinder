@@ -59,6 +59,11 @@ TEST(AppSecretValuesTest, RegistersThePastEventSettingDefaults) {
     EXPECT_EQ(d[std::string(Secrets::kEventsShowPastByDefault)], "false");
 }
 
+TEST(AppSecretValuesTest, RegistersTheGalleryCapDefault) {
+    auto d = CollectAppDefaults();
+    EXPECT_EQ(d[std::string(Secrets::kEventGalleryMaxPhotos)], "12");
+}
+
 TEST(AppSecretValuesTest, StringVariantMatchesStringViewVariant) {
     auto sv = CollectAppDefaults();
     std::map<std::string, std::string> s;

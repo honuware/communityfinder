@@ -3,6 +3,7 @@
 #include "bigint_array_literal.h"
 #include "db_schema/freshness.h"
 #include "db_schema/series.h"
+#include "db_schema/venues.h"
 #include "sql_util/database_access/database_crud_helpers.h"
 #include "util/types.h"
 
@@ -18,6 +19,20 @@ constexpr std::string_view kSqlGetByIds =
 constexpr std::string_view kSqlGetActive =
     "SELECT * FROM series WHERE status <> $1 AND status <> $2 "
     "ORDER BY title ASC, id ASC";
+
+// Events::GetPhotoOwners' query with two candidates: $2 the series, $3 its venue.
+constexpr std::string_view kSqlGetPhotoOwners =
+    "SELECT s.id, owner.photo_table, owner.photo_id FROM series s "
+    "LEFT JOIN LATERAL ("
+    "SELECT candidate.photo_table, candidate.photo_id FROM (VALUES "
+    "(1, $2::text, s.id), (2, $3::text, s.venue_id)"
+    ") AS candidate(rank, photo_table, photo_id) "
+    "WHERE candidate.photo_id IS NOT NULL AND EXISTS ("
+    "SELECT 1 FROM table_item_photos p "
+    "WHERE p.table_name = candidate.photo_table AND p.table_item_id = candidate.photo_id) "
+    "ORDER BY candidate.rank LIMIT 1"
+    ") owner ON TRUE "
+    "WHERE s.id = ANY($1::bigint[]) ORDER BY s.id ASC";
 
 }  // namespace
 
@@ -66,6 +81,16 @@ KeyValueTableArray Series::GetActiveSeries(Transaction& transaction) const {
         std::string(kSqlGetActive),
         DbSchema::kFreshnessStatusClosed,
         DbSchema::kFreshnessStatusMoved);
+}
+
+KeyValueTableArray Series::GetPhotoOwners(
+    Transaction& transaction, const std::vector<int64_t>& seriesIds) const {
+    if (seriesIds.empty()) {
+        return {};
+    }
+    return transaction.RunSqlStatementReturningKeyValueTableArray(
+        std::string(kSqlGetPhotoOwners), BigintArrayLiteral(seriesIds),
+        DbSchema::kSeriesTable, DbSchema::kVenuesTable);
 }
 
 void Series::UpdateSeries(Transaction& transaction, int64_t id, const KeyValueTable& updates) {

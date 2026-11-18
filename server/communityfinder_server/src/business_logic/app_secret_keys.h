@@ -38,4 +38,10 @@ inline constexpr std::string_view kArchivedEventsVisibleDays = "archived_events_
 // hasn't chosen (OQ9); anything else starts it off.
 inline constexpr std::string_view kEventsShowPastByDefault = "events_show_past_by_default";
 
+// CM3 OQ5 — the most photos one event's or series' gallery may hold, changed
+// on the same admin page (/api/admin/event_gallery_settings). Read it only
+// through Events::LoadGallerySettings, which reads a missing or bad value as
+// the default.
+inline constexpr std::string_view kEventGalleryMaxPhotos = "event_gallery_max_photos";
+
 }  // namespace Secrets

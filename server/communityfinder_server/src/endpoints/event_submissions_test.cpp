@@ -1,21 +1,27 @@
 #include "event_submissions.h"
 
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include "business_logic/auth/server_config.h"
 #include "business_logic/events/submission_helper.h"
+#include "business_logic/events/video_link.h"
+#include "business_logic/images/image_helper.h"
 #include "db_schema/event_submissions.h"
 #include "db_schema/events.h"
 #include "endpoints/events_endpoint_test_support.h"
 #include "sql_util/table_helpers/event_submissions.h"
 #include "sql_util/table_helpers/events.h"
+#include "sql_util/table_helpers/photo_test_support.h"
 #include "util/secrets/secrets_helper_test_util.h"
 #include "util/types.h"
 
-// EV3 §4.1 — the submitter's endpoints: submit, mine, withdraw.
+// EV3 §4.1 — the submitter's endpoints: submit, mine, withdraw; and CM3's
+// video link and flyer.
 namespace Endpoints {
 namespace {
 
@@ -435,6 +441,102 @@ TEST(EventSubmissionsEndpointTest, TheStatusRouteAnswersSignedOut) {
         EXPECT_FALSE(accepting());
         SetPaused(transaction, helper, false);
         EXPECT_TRUE(accepting());
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// CM3 §4.4 — a video link rides the submit, stored in its canonical form; a
+// link we can't embed is a 400 that names the field.
+TEST(EventSubmissionsEndpointTest, AVideoLinkIsStoredCanonicalAndABadOneNamesTheField) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("AVideoLinkIsStoredCanonicalAndABadOneNamesTheField", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        SignIn(transaction, testDb, helper, "submitter@example.com", false);
+        const int64_t nowUs = NowUs(transaction);
+
+        Json::JsonObject form = Form(nowUs);
+        form["video_url"] = Json::Value("youtu.be/dQw4w9WgXcQ");
+        crow::response resp = Submit(helper, form);
+        ASSERT_EQ(resp.code, 200) << resp.body;
+        const int64_t eventId = Json::Value::FromText(resp.body)["event_ids"].GetArray()[0].Get<int64_t>();
+        EXPECT_EQ(TableHelpers::Events(databaseHelper).GetEvent(transaction, eventId)
+                      .at(std::string(DbSchema::kEventsVideoUrl)),
+                  "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+
+        for (const auto& [link, errorCode] : {
+                 std::pair<std::string, std::string_view>{ "https://vimeo.com/showcase/123", Events::kVideoErrorBadUrl },
+                 std::pair<std::string, std::string_view>{ "https://www.dailymotion.com/video/x7", Events::kVideoErrorHostNotSupported } }) {
+            Json::JsonObject bad = Form(nowUs + kUsPerHour);
+            bad["video_url"] = Json::Value(link);
+            crow::response refused = Submit(helper, bad);
+            ASSERT_EQ(refused.code, 400) << link << ": " << refused.body;
+            EXPECT_EQ(ErrorCodeOf(refused), errorCode) << link;
+            EXPECT_EQ(FieldOf(refused), "video_url") << link;
+        }
+        Json::JsonObject notText = Form(nowUs + kUsPerHour);
+        notText["video_url"] = Json::Value(int64_t{ 5 });
+        crow::response wrongType = Submit(helper, notText);
+        ASSERT_EQ(wrongType.code, 400) << wrongType.body;
+        EXPECT_EQ(FieldOf(wrongType), "video_url");
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+crow::response Flyer(EndpointTestHelper& helper, int64_t submissionId, std::string_view imageType,
+                     std::string_view bytes) {
+    return Request(helper, crow::HTTPMethod::Post,
+                   "/api/event_submissions/" + StringFromInt(submissionId) + "/photo/" + std::string(imageType),
+                   std::string(bytes));
+}
+
+// CM3 §4.4 — the submitter's one flyer goes on each date still waiting. Only
+// they can add it (someone else's submission is a 404, as for withdraw), and
+// only as a JPEG or PNG.
+TEST(EventSubmissionsEndpointTest, TheFlyerGoesOnYourWaitingDates) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("TheFlyerGoesOnYourWaitingDates", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        TableHelpers::PhotoTest::EnsurePhotoSupport(transaction, databaseHelper, DbSchema::kEventsTable);
+        const std::vector<char> jpegBytes = TableHelpers::PhotoTest::MakeTestJpeg(64, 48);
+        const std::string jpeg(jpegBytes.begin(), jpegBytes.end());
+        EXPECT_EQ(Flyer(helper, 1, "jpeg", jpeg).code, 401);
+
+        SignIn(transaction, testDb, helper, "submitter@example.com", false);
+        crow::response submitted = Submit(helper, Form(NowUs(transaction), 2));
+        ASSERT_EQ(submitted.code, 200) << submitted.body;
+        const Json::Value submittedBody = Json::Value::FromText(submitted.body);
+        const int64_t submissionId = submittedBody["submission_id"].Get<int64_t>();
+
+        SignIn(transaction, testDb, helper, "other@example.com", false);
+        crow::response notYours = Flyer(helper, submissionId, "jpeg", jpeg);
+        EXPECT_EQ(notYours.code, 404) << notYours.body;
+
+        SwitchTo(transaction, testDb, helper, "submitter@example.com");
+        crow::response svg = Flyer(helper, submissionId, "svg", TableHelpers::PhotoTest::kTestSvg);
+        ASSERT_EQ(svg.code, 400) << svg.body;
+        EXPECT_EQ(ErrorCodeOf(svg), Events::kSubmissionErrorBadImageType);
+
+        crow::response resp = Flyer(helper, submissionId, "jpeg", jpeg);
+        ASSERT_EQ(resp.code, 200) << resp.body;
+        const Json::Value body = Json::Value::FromText(resp.body);
+        EXPECT_EQ(body["submission_id"].Get<int64_t>(), submissionId);
+        EXPECT_EQ(body["event_ids"].GetArray().size(), 2u);
+        Images::ImageHelper images(databaseHelper);
+        for (const Json::Value& eventId : submittedBody["event_ids"].GetArray()) {
+            EXPECT_TRUE(images.HasPhoto(transaction, DbSchema::kEventsTable, eventId.Get<int64_t>()));
+        }
+
+        // Once nothing is waiting, there's nowhere for it to go.
+        ASSERT_EQ(Withdraw(helper, submissionId).code, 200);
+        crow::response late = Flyer(helper, submissionId, "jpeg", jpeg);
+        ASSERT_EQ(late.code, 400) << late.body;
+        EXPECT_EQ(ErrorCodeOf(late), Events::kSubmissionErrorNothingPending);
     });
     Auth::ServerConfig::Shutdown();
 }

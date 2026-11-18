@@ -61,6 +61,29 @@ IdToSlugs SlugsByOwner(const KeyValueTableArray& rows, std::string_view ownerCol
     return slugs;
 }
 
+// CM3: id → the photo it shows, from a GetPhotoOwners read. Rows without one
+// are left out.
+std::map<int64_t, PhotoRef> PhotosById(const KeyValueTableArray& rows, std::string_view idColumn) {
+    std::map<int64_t, PhotoRef> photos;
+    for (const KeyValueTable& row : rows) {
+        std::string table = Column(row, TableHelpers::kPhotoOwnerTable);
+        if (table.empty()) {
+            continue;
+        }
+        photos[std::stoll(Column(row, idColumn))] =
+            PhotoRef{ std::move(table), std::stoll(Column(row, TableHelpers::kPhotoOwnerId)) };
+    }
+    return photos;
+}
+
+std::optional<PhotoRef> FindPhoto(const std::map<int64_t, PhotoRef>& photos, int64_t id) {
+    auto it = photos.find(id);
+    if (it == photos.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
 std::set<int64_t> IdSet(const KeyValueTableArray& rows, std::string_view idColumn) {
     std::set<int64_t> ids;
     for (const KeyValueTable& row : rows) {
@@ -270,7 +293,8 @@ EventHelper::EventHelper(DatabaseHelper databaseHelper, int64_t pastEventVisible
       eventCategories_(databaseHelper),
       eventSceneTags_(databaseHelper),
       seriesCategories_(databaseHelper),
-      seriesSceneTags_(databaseHelper) {
+      seriesSceneTags_(databaseHelper),
+      gallery_(databaseHelper) {
 }
 
 EventHelper MakePublicEventHelper(
@@ -627,6 +651,10 @@ std::optional<EventDetail> EventHelper::GetEventDetail(Transaction& transaction,
     detail.event = std::move(AssemblePublicEvents(transaction, { row }).front());
     detail.isPublic = IsPublicEvent(detail.status, detail.event.startsAtUs, detail.event.endsAtUs,
                                     NowUs(transaction), pastEventVisibleDays_);
+    detail.gallery = gallery_.GetEventGallery(transaction, eventId);
+    if (detail.gallery.empty() && detail.event.seriesId) {
+        detail.gallery = gallery_.GetSeriesGallery(transaction, *detail.event.seriesId);
+    }
     return detail;
 }
 
@@ -645,6 +673,7 @@ std::optional<SeriesDetail> EventHelper::GetSeriesDetail(
     UpcomingQuery instances;
     instances.seriesId = detail.series.id;
     detail.upcoming = GetUpcomingPublic(transaction, instances);
+    detail.gallery = gallery_.GetSeriesGallery(transaction, detail.series.id);
     return detail;
 }
 
@@ -669,6 +698,8 @@ std::vector<PublicSeries> EventHelper::AssemblePublicSeries(
         seriesSceneTags_.GetForSeriesIds(transaction, seriesIds),
         DbSchema::kSeriesSceneTagAssignmentsSeriesId,
         TableHelpers::kSeriesSceneTagAssignmentsSceneTagSlug);
+    const std::map<int64_t, PhotoRef> photos =
+        PhotosById(series_.GetPhotoOwners(transaction, seriesIds), DbSchema::kSeriesId);
 
     std::vector<PublicSeries> result;
     result.reserve(rows.size());
@@ -694,6 +725,8 @@ std::vector<PublicSeries> EventHelper::AssemblePublicSeries(
         if (categoryIt != categories.end()) series.categorySlugs = categoryIt->second;
         auto sceneTagIt = sceneTags.find(series.id);
         if (sceneTagIt != sceneTags.end()) series.sceneTagSlugs = sceneTagIt->second;
+        series.photo = FindPhoto(photos, series.id);
+        series.video = StoredVideoLink(Column(row, DbSchema::kSeriesVideoUrl));
         result.push_back(std::move(series));
     }
     return result;
@@ -737,6 +770,8 @@ std::vector<PublicEvent> EventHelper::AssemblePublicEvents(
         seriesSceneTags_.GetForSeriesIds(transaction, seriesIds),
         DbSchema::kSeriesSceneTagAssignmentsSeriesId,
         TableHelpers::kSeriesSceneTagAssignmentsSceneTagSlug);
+    const std::map<int64_t, PhotoRef> photos =
+        PhotosById(events_.GetPhotoOwners(transaction, eventIds), DbSchema::kEventsId);
 
     // The inheritance pin, per axis: the event's own set when it has one,
     // otherwise its series'.
@@ -775,15 +810,20 @@ std::vector<PublicEvent> EventHelper::AssemblePublicEvents(
                 event.neighborhoodSlug = placeIt->second.neighborhoodSlug;
             }
         }
+        event.video = StoredVideoLink(Column(row, DbSchema::kEventsVideoUrl));
         if (event.seriesId) {
             auto seriesIt = seriesById.find(*event.seriesId);
             if (seriesIt != seriesById.end()) {
                 event.seriesSlug = Column(seriesIt->second, DbSchema::kSeriesSlug);
                 event.seriesTitle = Column(seriesIt->second, DbSchema::kSeriesTitle);
+                if (!event.video) {
+                    event.video = StoredVideoLink(Column(seriesIt->second, DbSchema::kSeriesVideoUrl));
+                }
             }
         }
         event.categorySlugs = effective(ownCategories, seriesCategories, event.id, event.seriesId);
         event.sceneTagSlugs = effective(ownSceneTags, seriesSceneTags, event.id, event.seriesId);
+        event.photo = FindPhoto(photos, event.id);
         events.push_back(std::move(event));
     }
     return events;

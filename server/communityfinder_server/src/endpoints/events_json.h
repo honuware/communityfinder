@@ -17,9 +17,16 @@ namespace Endpoints {
 //     "1999", would reach the client as a number.
 // Ids and times come out as numbers; a missing end, venue, series or
 // verification time is the empty string, which the client maps to null.
+//
+// CM3 adds `photo` ({"table", "id"}) and `video` ({"provider", "id"}) to events
+// and series, each a real null when there is none.
 Json::Value PublicEventToJson(const Events::PublicEvent& event);
 Json::Value PublicEventsToJson(const std::vector<Events::PublicEvent>& events);
 Json::Value PublicSeriesToJson(const Events::PublicSeries& series);
 Json::Value PublicSeriesListToJson(const std::vector<Events::PublicSeries>& seriesList);
+
+// CM3: a gallery as [{"id", "alt_text", "caption", "credit"}], in order. The
+// texts stay strings whatever they hold.
+Json::Value GalleryToJson(const std::vector<Events::GalleryPhoto>& gallery);
 
 }  // namespace Endpoints

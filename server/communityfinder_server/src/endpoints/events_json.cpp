@@ -43,6 +43,29 @@ Json::Value SlugArray(const std::vector<std::string>& slugs) {
     return Json::Value(array);
 }
 
+// CM3: {"table": …, "id": N}, or null.
+Json::Value PhotoJson(const std::optional<Events::PhotoRef>& photo) {
+    if (!photo) {
+        return Json::Value(nullptr);
+    }
+    return Json::Value(Json::JsonObject{
+        { "table", Json::Value(photo->table) },
+        { "id", Json::Value(photo->id) },
+    });
+}
+
+// CM3: {"provider": …, "id": "…"}, or null. Only the id: the client builds the
+// player's address from it, never from a stored link.
+Json::Value VideoJson(const std::optional<Events::VideoLink>& video) {
+    if (!video) {
+        return Json::Value(nullptr);
+    }
+    return Json::Value(Json::JsonObject{
+        { "provider", Json::Value(video->provider) },
+        { "id", Json::Value(video->id) },
+    });
+}
+
 }  // namespace
 
 Json::Value PublicEventToJson(const Events::PublicEvent& event) {
@@ -50,6 +73,8 @@ Json::Value PublicEventToJson(const Events::PublicEvent& event) {
         ToJsonObject(Events::PublicEventToKeyValueTable(event), kEventTextKeys);
     object["category_slugs"] = SlugArray(event.categorySlugs);
     object["scene_tag_slugs"] = SlugArray(event.sceneTagSlugs);
+    object["photo"] = PhotoJson(event.photo);
+    object["video"] = VideoJson(event.video);
     return Json::Value(object);
 }
 
@@ -67,6 +92,8 @@ Json::Value PublicSeriesToJson(const Events::PublicSeries& series) {
         ToJsonObject(Events::PublicSeriesToKeyValueTable(series), kSeriesTextKeys);
     object["category_slugs"] = SlugArray(series.categorySlugs);
     object["scene_tag_slugs"] = SlugArray(series.sceneTagSlugs);
+    object["photo"] = PhotoJson(series.photo);
+    object["video"] = VideoJson(series.video);
     return Json::Value(object);
 }
 
@@ -75,6 +102,20 @@ Json::Value PublicSeriesListToJson(const std::vector<Events::PublicSeries>& seri
     array.reserve(seriesList.size());
     for (const Events::PublicSeries& series : seriesList) {
         array.push_back(PublicSeriesToJson(series));
+    }
+    return Json::Value(array);
+}
+
+Json::Value GalleryToJson(const std::vector<Events::GalleryPhoto>& gallery) {
+    Json::JsonArray array;
+    array.reserve(gallery.size());
+    for (const Events::GalleryPhoto& photo : gallery) {
+        array.push_back(Json::Value(Json::JsonObject{
+            { "id", Json::Value(photo.id) },
+            { "alt_text", Json::Value(photo.altText) },
+            { "caption", Json::Value(photo.caption) },
+            { "credit", Json::Value(photo.credit) },
+        }));
     }
     return Json::Value(array);
 }

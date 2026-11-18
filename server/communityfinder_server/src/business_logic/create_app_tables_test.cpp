@@ -21,6 +21,7 @@
 #include "db_schema/allowed_tables.h"
 #include "db_schema/categories.h"
 #include "db_schema/event_category_assignments.h"
+#include "db_schema/event_gallery_photos.h"
 #include "db_schema/event_scene_tag_assignments.h"
 #include "db_schema/event_sources.h"
 #include "db_schema/event_submissions.h"
@@ -69,8 +70,8 @@ void SeedAsRecreateDatabaseDoes(Transaction& transaction, TestDatabaseUtil& test
     PopulateAppTables(transaction, testDb.GetDatabaseHelper(), testDb.GetDatabaseInfo());
 }
 
-// EV1's eleven tables plus EV3's submissions — the twelve manage_events reaches
-// in the admin editor.
+// EV1's eleven tables, EV3's submissions, and CM3's gallery — the thirteen
+// manage_events reaches in the admin editor.
 const std::set<std::string> kEventsDomainTables = {
     std::string(DbSchema::kCategoriesTable),
     std::string(DbSchema::kSceneTagsTable),
@@ -84,6 +85,7 @@ const std::set<std::string> kEventsDomainTables = {
     std::string(DbSchema::kEventSceneTagAssignmentsTable),
     std::string(DbSchema::kSeriesCategoryAssignmentsTable),
     std::string(DbSchema::kSeriesSceneTagAssignmentsTable),
+    std::string(DbSchema::kEventGalleryPhotosTable),
 };
 
 // The tables whose rows are only ever edited from a parent's row.
@@ -359,6 +361,8 @@ TEST(CreateAppTablesTest, NestsTheAssignmentTablesUnderTheirParents) {
         for (std::string_view table : kAssignmentTables) {
             EXPECT_EQ(nested.count(std::string(table)), 1u) << table;
         }
+        // CM3: a gallery photo opens under its event or series.
+        EXPECT_EQ(nested.count(std::string(DbSchema::kEventGalleryPhotosTable)), 1u);
         // The parents themselves are not nested. Nor is a submission: the FK
         // runs from its events to it, so nothing could nest it.
         EXPECT_EQ(nested.count(std::string(DbSchema::kEventsTable)), 0u);
@@ -368,8 +372,9 @@ TEST(CreateAppTablesTest, NestsTheAssignmentTablesUnderTheirParents) {
 }
 
 // EV1 §2.6: manage_events exists, the Administrator role holds it, and it opens
-// exactly the twelve events-domain tables (EV3 added submissions) in the generic
-// CRUD editor — so a future curator role can work without being a full admin.
+// exactly the thirteen events-domain tables (EV3 added submissions, CM3 the
+// gallery) in the generic CRUD editor — so a future curator role can work
+// without being a full admin. The same grants let it upload those rows' photos.
 TEST(CreateAppTablesTest, GrantsManageEventsToTheAdministratorRole) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction("ManageEvents", [&](Transaction& transaction) {
@@ -415,6 +420,35 @@ TEST(CreateAppTablesTest, EnablesPhotosForVenuesAndEvents) {
     });
 }
 
+// CM3: a series' photo stands in for an instance without one (OQ2), and each
+// gallery row carries its one photo.
+TEST(CreateAppTablesTest, EnablesPhotosForSeriesAndGalleryPhotos) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GalleryPhotoSupport", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        const std::set<std::string> photoTables = NamesIn(transaction,
+            DbSchema::kPhotoSupportTables, DbSchema::kPhotoSupportTablesTableName);
+        EXPECT_EQ(photoTables.count(std::string(DbSchema::kSeriesTable)), 1u);
+        EXPECT_EQ(photoTables.count(std::string(DbSchema::kEventGalleryPhotosTable)), 1u);
+
+        // The consent record is the server's to stamp, so the editor shows it
+        // read-only, and the video link explains the shapes it takes.
+        for (std::string_view column :
+             {DbSchema::kEventGalleryPhotosConsentConfirmedByPersonId,
+              DbSchema::kEventGalleryPhotosConsentConfirmedUs}) {
+            EXPECT_EQ(ColumnDataInfo(transaction, DbSchema::kAdminColumnDataInfoReadonly,
+                                     DbSchema::kEventGalleryPhotosTable, column),
+                      "true")
+                << column;
+        }
+        EXPECT_NE(ColumnDataInfo(transaction, DbSchema::kAdminColumnDataInfoHint,
+                                 DbSchema::kEventsTable, DbSchema::kEventsVideoUrl)
+                      .find("youtube.com/watch?v="),
+                  std::string::npos);
+    });
+}
+
 // The generic table reads serve allowed_tables to anyone. Pending and rejected
 // events, review notes, source scan notes, and who submitted what (GD1 §6.9)
 // must never be among them; the public sees approved events only, through the
@@ -428,7 +462,8 @@ TEST(CreateAppTablesTest, KeepsTheEventPipelineOffThePublicList) {
             transaction, DbSchema::kAllowedTablesTable, DbSchema::kAllowedTablesName);
         for (std::string_view table :
              {DbSchema::kEventSourcesTable, DbSchema::kSeriesTable,
-              DbSchema::kEventSubmissionsTable, DbSchema::kEventsTable}) {
+              DbSchema::kEventSubmissionsTable, DbSchema::kEventsTable,
+              DbSchema::kEventGalleryPhotosTable}) {
             EXPECT_EQ(allowed.count(std::string(table)), 0u) << table;
         }
         for (std::string_view table : kAssignmentTables) {

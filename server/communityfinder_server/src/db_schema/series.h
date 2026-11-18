@@ -22,6 +22,9 @@ namespace DbSchema {
 	// generates occurrences from it.
 	inline constexpr std::string_view kSeriesCadenceText = "cadence_text";
 	inline constexpr std::string_view kSeriesUrl = "url";
+	// CM3 — the series' embedded video, which an instance without its own
+	// shows (db_schema/video_links.h). '' = none.
+	inline constexpr std::string_view kSeriesVideoUrl = "video_url";
 	// NULL = the series moves around.
 	inline constexpr std::string_view kSeriesVenueId = "venue_id";
 	inline constexpr std::string_view kSeriesStatus = "status";
@@ -34,6 +37,7 @@ namespace DbSchema {
 
 	inline constexpr std::string_view kSeriesStatusCheck = "series_status_check";
 	inline constexpr std::string_view kSeriesVolatilityTierCheck = "series_volatility_tier_check";
+	inline constexpr std::string_view kSeriesVideoUrlCheck = "series_video_url_check";
 
 	void MakeSeriesTable(DatabaseInfo databaseInfo);
 

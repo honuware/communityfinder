@@ -6,8 +6,12 @@
 
 #include "db_schema/freshness.h"
 #include "db_schema/series.h"
+#include "db_schema/venues.h"
+#include "events.h"
+#include "photo_test_support.h"
 #include "test/src/util/database_test_helper.h"
 #include "util/types.h"
+#include "venues.h"
 
 namespace TableHelpers {
 namespace {
@@ -128,6 +132,63 @@ TEST(SeriesTest, DuplicateSlugThrows) {
         // The unique violation aborts the transaction — last statement.
         EXPECT_THROW(series.AddSeries(transaction, MakeSeries("T4T again", "t4t")),
                      std::exception);
+    });
+}
+
+// CM3: a series shows its own photo, else its venue's, else none.
+TEST(SeriesTest, GetPhotoOwnersPicksOwnThenVenue) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GetPhotoOwnersPicksOwnThenVenue", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        Series series(databaseHelper);
+        int64_t venueId = Venues(databaseHelper).AddVenue(transaction, {
+            { std::string(DbSchema::kVenuesName), "Sample Hall" } });
+        PhotoTest::AttachTestPhoto(transaction, databaseHelper, DbSchema::kVenuesTable, venueId);
+        auto addAtVenue = [&](std::string_view slug) {
+            KeyValueTable values = MakeSeries(slug, slug);
+            values[std::string(DbSchema::kSeriesVenueId)] = StringFromInt(venueId);
+            return series.AddSeries(transaction, values);
+        };
+        int64_t own = addAtVenue("own");
+        PhotoTest::AttachTestPhoto(transaction, databaseHelper, DbSchema::kSeriesTable, own);
+        int64_t fromVenue = addAtVenue("from-venue");
+        int64_t none = series.AddSeries(transaction, MakeSeries("None", "none"));
+
+        KeyValueTableArray rows = series.GetPhotoOwners(transaction, { none, fromVenue, own });
+        ASSERT_EQ(rows.size(), 3u);
+        // Ordered by id.
+        EXPECT_EQ(rows[0].at(std::string(DbSchema::kSeriesId)), StringFromInt(own));
+        EXPECT_EQ(rows[0].at(std::string(kPhotoOwnerTable)), DbSchema::kSeriesTable);
+        EXPECT_EQ(rows[0].at(std::string(kPhotoOwnerId)), StringFromInt(own));
+        EXPECT_EQ(rows[1].at(std::string(kPhotoOwnerTable)), DbSchema::kVenuesTable);
+        EXPECT_EQ(rows[1].at(std::string(kPhotoOwnerId)), StringFromInt(venueId));
+        EXPECT_EQ(rows[2].at(std::string(kPhotoOwnerTable)), "");
+        EXPECT_EQ(rows[2].at(std::string(kPhotoOwnerId)), "");
+        EXPECT_TRUE(series.GetPhotoOwners(transaction, {}).empty());
+    });
+}
+
+// series_video_url_check: '' or a canonical link only.
+TEST(SeriesTest, VideoUrlTakesACanonicalLink) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("VideoUrlTakesACanonicalLink", [&](Transaction& transaction) {
+        Series series(testDb.GetDatabaseHelper());
+        KeyValueTable values = MakeSeries("T4T", "t4t");
+        values[std::string(DbSchema::kSeriesVideoUrl)] = "https://vimeo.com/76979871";
+        int64_t id = series.AddSeries(transaction, values);
+        EXPECT_EQ(series.GetSeries(transaction, id).at(std::string(DbSchema::kSeriesVideoUrl)),
+                  "https://vimeo.com/76979871");
+    });
+}
+
+TEST(SeriesTest, NonCanonicalVideoUrlThrows) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("NonCanonicalVideoUrlThrows", [&](Transaction& transaction) {
+        Series series(testDb.GetDatabaseHelper());
+        KeyValueTable values = MakeSeries("T4T", "t4t");
+        values[std::string(DbSchema::kSeriesVideoUrl)] = "<iframe src=\"https://vimeo.com/1\">";
+        // The CHECK violation aborts the transaction — last statement.
+        EXPECT_THROW(series.AddSeries(transaction, values), std::exception);
     });
 }
 

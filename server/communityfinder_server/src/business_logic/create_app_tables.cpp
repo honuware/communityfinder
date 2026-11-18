@@ -18,6 +18,7 @@
 #include "db_schema/allowed_tables.h"
 #include "db_schema/categories.h"
 #include "db_schema/event_category_assignments.h"
+#include "db_schema/event_gallery_photos.h"
 #include "db_schema/event_scene_tag_assignments.h"
 #include "db_schema/event_sources.h"
 #include "db_schema/event_submissions.h"
@@ -231,6 +232,11 @@ void PopulateAdminMetadata(
             "Stable kebab-case identifier used in URLs and filters. Renaming it "
             "breaks links and needs a cross-stream ping; edit the display name "
             "instead.";
+        // CM3: the column only takes the canonical shapes (db_schema/video_links.h).
+        constexpr std::string_view kVideoUrlHint =
+            "A YouTube or Vimeo video, written as https://www.youtube.com/watch?v=… "
+            "or https://vimeo.com/…; leave empty for none. Other forms are refused "
+            "here; the events editor converts a pasted link for you.";
         constexpr std::string_view kSortOrderHint =
             "Lower numbers list first (seeded in steps of 10)";
 
@@ -294,6 +300,7 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesDescription, "Description", "What the series is", "text", "false");
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesCadenceText, "Cadence", "How it recurs, in words, e.g. 2nd Saturdays. Display only; it does not create events.", "text", "false");
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesUrl, "Website", "The series' own page", "text", "false");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesVideoUrl, "Video", kVideoUrlHint, "text", "false");
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesVenueId, "Venue", "Where it usually happens (venues.id); leave empty if it moves around", "number", "false");
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesStatus, "Status", "open | closed | moved | seasonal | unverified. Close a series rather than deleting it — deleting also deletes all its events.", "text", "true");
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesLastVerifiedAtUs, "Verified", "When a person last confirmed the series is still running as described. Set it only when you have checked; routine edits leave it alone.", "date", "false");
@@ -320,6 +327,7 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsLocationText, "Location", "Where it is when there is no venue row, e.g. a park", "text", "false");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsUrl, "Website", "The event page or tickets", "text", "false");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsCostText, "Cost", "As stated, e.g. Free, or $10–20 sliding scale", "text", "false");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsVideoUrl, "Video", kVideoUrlHint, "text", "false");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsSourceId, "Source", "The source it was ingested from (event_sources.id); empty for hand-entered events", "number", "false");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsSeriesId, "Series", "The series this is an instance of (series.id); empty for a one-off", "number", "false");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsExternalKey, "External Key", "The source's own id for this item, set by the ingest. Leave empty for hand-entered events.", "text", "false");
@@ -348,6 +356,22 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsSeriesId, "Series", "The series (series.id)", "number", "true");
         AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsSceneTagId, "Scene Tag", "The scene tag (scene_tags.id). Instances without scene tags of their own inherit these.", "number", "true");
         AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsCreatedUs, "Created", "When this assignment was created", "date", "false", "true");
+
+        // CM3. The consent record is stamped by the server when a photo is
+        // added (the events editor's "Add photo"), so it is read-only here.
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosEventId, "Event", "The event it belongs to (events.id); fill in this or Series, not both", "number", "false");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosSeriesId, "Series", "The series it belongs to (series.id); fill in this or Event, not both", "number", "false");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosSortOrder, "Order", "Lower shows first", "number", "true");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosAltText, "Alt Text", "What the picture shows, for screen readers. Never name an attendee.", "text", "true", "",
+               { DbPair(DbSchema::kAdminColumnDataInfoMaxLength, std::to_string(DbSchema::kEventGalleryPhotosAltTextMaxLength)) });
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosCaption, "Caption", "Optional. Name performers or organizers only with their agreement; never attendees.", "text", "false", "",
+               { DbPair(DbSchema::kAdminColumnDataInfoMaxLength, std::to_string(DbSchema::kEventGalleryPhotosCaptionMaxLength)) });
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosCredit, "Credit", "Who took it, if they want the credit", "text", "false", "",
+               { DbPair(DbSchema::kAdminColumnDataInfoMaxLength, std::to_string(DbSchema::kEventGalleryPhotosCreditMaxLength)) });
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosConsentConfirmedByPersonId, "Consent Confirmed By", "Who confirmed that everyone recognizable in the photo agreed to be shown (people.id)", "number", "false", "true");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosConsentConfirmedUs, "Consent Confirmed", "When they confirmed it", "date", "false", "true");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosCreatedUs, "Created", "When this photo was added", "date", "false", "true");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosUpdatedUs, "Updated", "When this photo was last updated", "date", "false", "true");
 
         // --- Stream B (the guide, GD2) ---------------------------------------
         constexpr std::string_view kStatusHint =
@@ -536,6 +560,7 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesDescription, "Description");
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesCadenceText, "Cadence");
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesUrl, "Website");
+        AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesVideoUrl, "Video");
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesVenueId, "Venue");
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesStatus, "Status");
         AddRow(DbSchema::kSeriesTable, DbSchema::kSeriesLastVerifiedAtUs, "Verified");
@@ -563,6 +588,7 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsLocationText, "Location");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsUrl, "Website");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsCostText, "Cost");
+        AddRow(DbSchema::kEventsTable, DbSchema::kEventsVideoUrl, "Video");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsSourceId, "Source");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsSeriesId, "Series");
         AddRow(DbSchema::kEventsTable, DbSchema::kEventsExternalKey, "External Key");
@@ -595,6 +621,18 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsSeriesId, "Series");
         AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsSceneTagId, "Scene Tag");
         AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, DbSchema::kSeriesSceneTagAssignmentsCreatedUs, "Created");
+
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosId, "ID");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosEventId, "Event");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosSeriesId, "Series");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosSortOrder, "Order");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosAltText, "Alt Text");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosCaption, "Caption");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosCredit, "Credit");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosConsentConfirmedByPersonId, "Consent Confirmed By");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosConsentConfirmedUs, "Consent Confirmed");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosCreatedUs, "Created");
+        AddRow(DbSchema::kEventGalleryPhotosTable, DbSchema::kEventGalleryPhotosUpdatedUs, "Updated");
 
         // --- Stream B (the guide, GD2) ---------------------------------------
         AddRow(DbSchema::kVenueProfilesTable, DbSchema::kVenueProfilesId, "ID");
@@ -724,6 +762,7 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kEventSceneTagAssignmentsTable, "Event Scene Tags", "An event's own scene tags. When an event has any, they replace its series' scene tags.");
         AddRow(DbSchema::kSeriesCategoryAssignmentsTable, "Series Categories", "A series' categories, inherited by instances that have none of their own.");
         AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, "Series Scene Tags", "A series' scene tags, inherited by instances that have none of their own.");
+        AddRow(DbSchema::kEventGalleryPhotosTable, "Gallery Photos", "An event's or a series' photo gallery; an event without one shows its series'. Add photos from the events editor, which records who confirmed consent. Everyone recognizable must have agreed to be shown, and captions never name attendees. Remove a photo whenever someone asks.");
 
         // --- Stream B (the guide, GD2) ---------------------------------------
         AddRow(DbSchema::kVenueProfilesTable, "Venue Profiles", "The guide's take on a venue: crowd, vibe, price, the 18+ flag, and the closure story. One per venue.");
@@ -759,6 +798,7 @@ void PopulateAdminMetadata(
         AddRow(DbSchema::kEventSceneTagAssignmentsTable, "{event_id} — {scene_tag_id}");
         AddRow(DbSchema::kSeriesCategoryAssignmentsTable, "{series_id} — {category_id}");
         AddRow(DbSchema::kSeriesSceneTagAssignmentsTable, "{series_id} — {scene_tag_id}");
+        AddRow(DbSchema::kEventGalleryPhotosTable, "{alt_text}");
 
         // --- Stream B (the guide, GD2) ---------------------------------------
         // A profile has no name of its own (the venue's is authoritative), so
@@ -781,14 +821,16 @@ void PopulateAdminMetadata(
     // FKs onto admin_top_level_tables.
     //
     // The editor shows a nested table under every table it has an FK onto: a
-    // guide link under its venue profile, organization, place, or scene tag, and
-    // a venue profile under its venue.
+    // guide link under its venue profile, organization, place, or scene tag, a
+    // venue profile under its venue, and a gallery photo under its event or
+    // series.
     {
         for (std::string_view table :
              { DbSchema::kEventCategoryAssignmentsTable,
                DbSchema::kEventSceneTagAssignmentsTable,
                DbSchema::kSeriesCategoryAssignmentsTable,
                DbSchema::kSeriesSceneTagAssignmentsTable,
+               DbSchema::kEventGalleryPhotosTable,
                DbSchema::kVenueProfilesTable,
                DbSchema::kVenueProfileSceneTagAssignmentsTable,
                DbSchema::kOrganizationSceneTagAssignmentsTable,
@@ -802,9 +844,10 @@ void PopulateAdminMetadata(
     }
 }
 
-// The events domain: EV1's eleven tables plus EV3's submissions. manage_events
-// reaches every one of them in the generic CRUD editor. Listed explicitly rather
-// than taken from AppTableCreationOrder, which also holds the guide's tables.
+// The events domain: EV1's eleven tables, EV3's submissions, and CM3's gallery.
+// manage_events reaches every one of them in the generic CRUD editor (and so
+// may upload their photos). Listed explicitly rather than taken from
+// AppTableCreationOrder, which also holds the guide's tables.
 constexpr std::string_view kEventsDomainTables[] = {
     DbSchema::kCategoriesTable,
     DbSchema::kSceneTagsTable,
@@ -818,6 +861,7 @@ constexpr std::string_view kEventsDomainTables[] = {
     DbSchema::kEventSceneTagAssignmentsTable,
     DbSchema::kSeriesCategoryAssignmentsTable,
     DbSchema::kSeriesSceneTagAssignmentsTable,
+    DbSchema::kEventGalleryPhotosTable,
 };
 
 // The guide: GD2's ten tables, plus `venues`, because verifying a venue's facts
@@ -882,7 +926,8 @@ void PopulateAppPermissions(
     AddAppPermission(
         transaction, databaseHelper, DbSchema::kPermissionManageEvents,
         "Permission to curate events: ingest and review them, and edit "
-        "events, series, sources, venues, and the shared vocabularies.",
+        "events, series, their photo galleries, sources, venues, and the shared "
+        "vocabularies.",
         kEventsDomainTables);
     AddAppPermission(
         transaction, databaseHelper, DbSchema::kPermissionManageGuide,
@@ -897,11 +942,13 @@ void PopulateAppPermissions(
 // Tables whose rows can carry photos through the framework pipeline
 // (table_item_photos). honuware lists `people`; venue, event, and guide images
 // ride the same pipeline instead of image columns. A venue profile's photos
-// are its venue's.
+// are its venue's. CM3 adds series (an instance without a photo of its own
+// shows its series') and the gallery, one photo per row.
 void PopulatePhotoSupportTables(
     Transaction& transaction, DatabaseHelper databaseHelper) {
     for (std::string_view table :
          { DbSchema::kVenuesTable, DbSchema::kEventsTable,
+           DbSchema::kSeriesTable, DbSchema::kEventGalleryPhotosTable,
            DbSchema::kOrganizationsTable, DbSchema::kPlacesTable,
            DbSchema::kGuidePagesTable }) {
         MakeAddRowLambda(
@@ -950,6 +997,8 @@ const std::vector<std::string_view>& AppTableCreationOrder() {
         DbSchema::kEventSceneTagAssignmentsTable,
         DbSchema::kSeriesCategoryAssignmentsTable,
         DbSchema::kSeriesSceneTagAssignmentsTable,
+        // CM3 — gallery photos, after both their parents.
+        DbSchema::kEventGalleryPhotosTable,
         // --- Stream B (the guide) ---
         // GD2 — the directory entities, the pages, their scene-tag
         // assignments, then the links.
@@ -977,6 +1026,7 @@ void CreateAppTables(
     DbSchema::CreateVenuesIndexes(transaction);
     DbSchema::CreateEventSubmissionsIndexes(transaction);
     DbSchema::CreateEventsIndexes(transaction);
+    DbSchema::CreateEventGalleryPhotosIndexes(transaction);
 }
 
 void PopulateAppTables(

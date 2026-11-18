@@ -26,6 +26,9 @@ namespace DbSchema {
 	inline constexpr std::string_view kEventsLocationText = "location_text";
 	inline constexpr std::string_view kEventsUrl = "url";
 	inline constexpr std::string_view kEventsCostText = "cost_text";
+	// CM3 — one embedded video, as a canonical link (db_schema/video_links.h).
+	// '' = none; the event then shows its series' video, if any.
+	inline constexpr std::string_view kEventsVideoUrl = "video_url";
 	// NULL = entered by hand, not ingested.
 	inline constexpr std::string_view kEventsSourceId = "source_id";
 	// NULL = a one-off.
@@ -64,6 +67,7 @@ namespace DbSchema {
 
 	inline constexpr std::string_view kEventsOriginCheck = "events_origin_check";
 	inline constexpr std::string_view kEventsStatusCheck = "events_status_check";
+	inline constexpr std::string_view kEventsVideoUrlCheck = "events_video_url_check";
 	// The ingestion idempotency anchor: one event per item per source. Named the
 	// way Postgres names the unnamed UNIQUEs (`<table>_<columns>_key`) so every
 	// unique constraint reads alike in psql.

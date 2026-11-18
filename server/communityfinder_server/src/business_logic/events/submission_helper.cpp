@@ -6,6 +6,8 @@
 #include <set>
 #include <stdexcept>
 
+#include "business_logic/events/video_link.h"
+#include "business_logic/images/image_helper.h"
 #include "db_schema/categories.h"
 #include "db_schema/event_submissions.h"
 #include "db_schema/events.h"
@@ -14,6 +16,7 @@
 #include "sql_util/table_helpers/admin_alerts.h"
 #include "util/logging.h"
 #include "util/mail/tenant_branding.h"
+#include "util/secrets/secret_keys.h"
 #include "util/types.h"
 
 namespace Events {
@@ -28,6 +31,7 @@ constexpr std::string_view kFieldLocationText = "location_text";
 constexpr std::string_view kFieldDescription = "description";
 constexpr std::string_view kFieldUrl = "url";
 constexpr std::string_view kFieldCostText = "cost_text";
+constexpr std::string_view kFieldVideoUrl = "video_url";
 constexpr std::string_view kFieldSubmitterNote = "submitter_note";
 constexpr std::string_view kFieldRelationship = "relationship";
 constexpr std::string_view kFieldCategorySlugs = "category_slugs";
@@ -360,6 +364,17 @@ SubmitResult SubmissionHelper::Submit(
     if (!url.empty() && !IsWebUrl(url)) {
         return fail(kSubmissionErrorBadUrl, kFieldUrl, "Links must start with http:// or https://.");
     }
+    std::string videoUrl;
+    if (!SingleLine(request.videoUrl).empty()) {
+        VideoLinkResult video = ParseVideoLink(request.videoUrl);
+        if (!video.ok) {
+            return fail(video.errorCode, kFieldVideoUrl,
+                        video.errorCode == kVideoErrorHostNotSupported
+                            ? "Video links can be from YouTube or Vimeo."
+                            : "That isn't a link to one YouTube or Vimeo video.");
+        }
+        videoUrl = video.link.canonicalUrl;
+    }
 
     const std::string relationship = request.relationship.empty()
         ? std::string(DbSchema::kEventSubmissionsRelationshipOther) : request.relationship;
@@ -447,6 +462,7 @@ SubmitResult SubmissionHelper::Submit(
         }
         if (!url.empty()) values[std::string(DbSchema::kEventsUrl)] = url;
         if (!costText.empty()) values[std::string(DbSchema::kEventsCostText)] = costText;
+        if (!videoUrl.empty()) values[std::string(DbSchema::kEventsVideoUrl)] = videoUrl;
 
         const int64_t eventId = events_.AddEvent(transaction, values);
         for (int64_t categoryId : categories.ids) {
@@ -536,6 +552,73 @@ WithdrawResult SubmissionHelper::Withdraw(
     }
     // No email for a withdrawal, now or from a later path.
     submissions_.MarkDecisionNotified(transaction, submissionId, NowUs(transaction));
+    result.ok = true;
+    return result;
+}
+
+FlyerResult SubmissionHelper::AttachFlyer(
+    Transaction& transaction,
+    const Secrets::SecretsHelperPtr& secrets,
+    int64_t submissionId,
+    int64_t personId,
+    std::string_view imageType,
+    const std::vector<char>& imageBytes) {
+    FlyerResult result;
+    auto fail = [&](std::string_view errorCode, std::string message) {
+        result.errorCode = std::string(errorCode);
+        result.errorMessage = std::move(message);
+        return result;
+    };
+
+    // Locked first, as every path that touches a submission's dates does, so a
+    // curator's decision can't land between the pending check and the upload.
+    KeyValueTable submission = submissions_.GetSubmissionForUpdate(transaction, submissionId);
+    if (submission.empty()
+        || OptionalIdColumn(submission, DbSchema::kEventSubmissionsSubmittedByPersonId) != personId) {
+        return fail(kSubmissionErrorNotYours, "Submission not found.");
+    }
+    const std::vector<KeyValueTable> pending =
+        PendingOf(events_.GetEventsBySubmission(transaction, submissionId));
+    if (pending.empty()) {
+        return fail(kSubmissionErrorNothingPending,
+                    "Nothing in this submission is waiting for review.");
+    }
+    if (imageType != kFlyerImageTypeJpeg && imageType != kFlyerImageTypePng) {
+        return fail(kSubmissionErrorBadImageType, "The flyer must be a JPEG or PNG image.");
+    }
+    if (imageBytes.empty()) {
+        return fail(kSubmissionErrorBadImage, "The flyer is empty.");
+    }
+    const std::string maxBytes = secrets ? secrets->LookupSecret(transaction, Secrets::kImageMaxUploadBytes)
+                                         : std::string();
+    if (!maxBytes.empty() && static_cast<int64_t>(imageBytes.size()) > std::stoll(maxBytes)) {
+        return fail(kSubmissionErrorImageTooLarge, "The flyer is too large.");
+    }
+
+    Images::ImageHelper imageHelper(databaseHelper_, secrets);
+    for (size_t index = 0; index < pending.size(); ++index) {
+        const int64_t eventId = std::stoll(Column(pending[index], DbSchema::kEventsId));
+        Images::UploadResult upload;
+        try {
+            upload = imageHelper.UploadAndAssociatePhoto(
+                transaction, DbSchema::kEventsTable, eventId, imageBytes, imageType);
+        }
+        catch (const std::exception& e) {
+            // The decoder refused the bytes, before anything was written.
+            upload.errorMessage = e.what();
+        }
+        if (!upload.success) {
+            if (index > 0) {
+                // The same bytes went onto the first date, so this is a bug, not
+                // the submitter's mistake; throwing rolls the first one back.
+                throw std::runtime_error("SubmissionHelper::AttachFlyer - " + upload.errorMessage);
+            }
+            LogInfo() << "Flyer for submission " << submissionId << " refused: "
+                      << upload.errorMessage << "\n";
+            return fail(kSubmissionErrorBadImage, "That file isn't an image we can read.");
+        }
+        result.eventIds.push_back(eventId);
+    }
     result.ok = true;
     return result;
 }

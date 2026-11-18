@@ -5,6 +5,7 @@
 #include "commands/events_commands.h"
 #include "commands/guide_commands.h"
 #include "commands/jobs_commands.h"
+#include "commands/media_commands.h"
 #include "commands/submission_commands.h"
 #include "commands/utility_commands.h"
 #include "console_colors.h"
@@ -105,6 +106,7 @@ void RegisterAllCommands(CommandRegistry& registry) {
 
     RegisterUtilityCommands(registry);
     RegisterEventsCommands(registry);
+    RegisterMediaCommands(registry);
     RegisterGuideCommands(registry);
     RegisterSubmissionCommands(registry);
     RegisterJobsCommands(registry);

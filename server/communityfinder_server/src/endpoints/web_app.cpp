@@ -45,6 +45,10 @@
 #include "get_event_settings.h"
 #include "get_past_events.h"
 
+// CM3 — event photos and video: the gallery-row add and the cap's setting.
+#include "admin_event_gallery_photos.h"
+#include "admin_event_gallery_settings.h"
+
 namespace Endpoints {
 
 // Anchor every endpoint's translation unit into the final link.
@@ -109,6 +113,11 @@ void RegisterAllEndpoints() {
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetAdminPastEventSettings);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetEventSettings);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetPastEvents);
+
+    // CM3 — the gallery-row add, and the cap's two admin routes on one anchor.
+    // The flyer route rides PostEventSubmission's.
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminEventGalleryPhoto);
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetAdminEventGallerySettings);
 }
 
 }  // namespace Endpoints

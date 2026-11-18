@@ -2,6 +2,7 @@
 
 #include "categories.h"
 #include "event_category_assignments.h"
+#include "event_gallery_photos.h"
 #include "event_scene_tag_assignments.h"
 #include "event_sources.h"
 #include "event_submissions.h"
@@ -47,6 +48,8 @@ namespace DbSchema {
 		MakeEventSceneTagAssignmentsTable(databaseInfo);
 		MakeSeriesCategoryAssignmentsTable(databaseInfo);
 		MakeSeriesSceneTagAssignmentsTable(databaseInfo);
+		// CM3 — gallery photos hang off an event or a series.
+		MakeEventGalleryPhotosTable(databaseInfo);
 
 		// --- Stream B (the guide) -------------------------------------------
 		// GD2 — the directory entities, the CMS-lite pages, their scene-tag

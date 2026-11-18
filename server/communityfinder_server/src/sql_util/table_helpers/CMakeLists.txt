@@ -8,6 +8,8 @@ target_sources(communityfinder_core PRIVATE
     categories.cpp
     event_category_assignments.h
     event_category_assignments.cpp
+    event_gallery_photos.h
+    event_gallery_photos.cpp
     event_scene_tag_assignments.h
     event_scene_tag_assignments.cpp
     event_sources.h
@@ -54,6 +56,7 @@ target_sources(communityfinder_test_cases PUBLIC
     bigint_array_literal_test.cpp
     categories_test.cpp
     event_category_assignments_test.cpp
+    event_gallery_photos_test.cpp
     event_scene_tag_assignments_test.cpp
     event_sources_test.cpp
     event_submissions_test.cpp
@@ -64,6 +67,8 @@ target_sources(communityfinder_test_cases PUBLIC
     neighborhoods_test.cpp
     organization_scene_tag_assignments_test.cpp
     organizations_test.cpp
+    photo_test_support.h
+    photo_test_support.cpp
     place_scene_tag_assignments_test.cpp
     places_test.cpp
     scene_tags_test.cpp
