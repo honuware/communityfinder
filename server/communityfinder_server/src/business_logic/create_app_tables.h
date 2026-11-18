@@ -59,3 +59,10 @@ void PopulateAppTables(
 bool ProvisionSchedulerAccount(
     Transaction& transaction, DatabaseHelper databaseHelper,
     std::string_view password);
+
+// CM3 OQ10: overwrites honuware's config_secrets rows with
+// App::FillInFrameworkSecretOverrides' values (the public photo cap, 1600×1200).
+// Runs after PopulateFrameworkTables, which seeds those rows. Throws if one is
+// missing, so a key honuware renames or stops seeding fails the seed rather
+// than leaving the site quietly on honuware's value.
+void ApplyFrameworkSecretOverrides(Transaction& transaction);

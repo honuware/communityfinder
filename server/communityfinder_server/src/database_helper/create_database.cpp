@@ -154,6 +154,11 @@ namespace {
 			AddRow(name, value);
 			});
 
+		// CommunityFinder's own values for keys honuware already defaulted above
+		// (CM3 OQ10: the public photo cap, 1600×1200). UPDATEs, for the same
+		// reason as the mail app password below.
+		ApplyFrameworkSecretOverrides(transaction);
+
 		// The mail app password comes from the environment, NEVER source control.
 		//
 		// honuware's PopulateFrameworkTables seeds this row with an EMPTY default

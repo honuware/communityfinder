@@ -39,9 +39,9 @@
 // RequirePermission. CommunityFinder has no implication tiers, so this is moot here.
 //
 // NOTE (escalation): there is no fine-grained self-assignment guard anywhere — the
-// ENTIRE defense is that roles/role_assignments/role_permissions are admin-only
-// (not in any non-admin's allowed-tables set), so a non-admin add_item on them is a
-// flat 400 "not an allowed table".
+// ENTIRE defense is that roles/role_assignments/role_permissions are admin-only:
+// no permission grants them through admin_table_permissions, so a non-admin
+// add_item on them is refused by the generic write check (403).
 namespace Endpoints {
 namespace {
 
@@ -193,7 +193,7 @@ TEST(CommunityFinderRolesPermissionsTest, AdminAssignsRoleViaCrudPropagatesAndRe
 
         // Revoke via the CRUD endpoint → gone from the target's session.
         ActAs(helper, admin.token);
-        crow::response deleteResp = Handle(helper, crow::HTTPMethod::Get,
+        crow::response deleteResp = Handle(helper, crow::HTTPMethod::Post,
             "/api/delete_item/role_assignments/id/" + assignmentId);
         ASSERT_EQ(deleteResp.code, 200) << deleteResp.body;
 
@@ -208,7 +208,7 @@ TEST(CommunityFinderRolesPermissionsTest, AdminAssignsRoleViaCrudPropagatesAndRe
 }
 
 // A logged-in non-admin cannot escalate: role_assignments is admin-only, so trying to
-// grant themselves the admin role is refused (400 "not an allowed table") and they do
+// grant themselves the admin role is refused (403: no grant on the table) and they do
 // not become admin. This coarse admin-only gate is the whole escalation defense.
 TEST(CommunityFinderRolesPermissionsTest, NonAdminCannotSelfAssignAdminRole) {
     Auth::ServerConfig::Shutdown();
@@ -233,9 +233,7 @@ TEST(CommunityFinderRolesPermissionsTest, NonAdminCannotSelfAssignAdminRole) {
                 {std::string(DbSchema::kRoleAssignmentsPersonId), std::to_string(user.personId)},
                 {std::string(DbSchema::kRoleAssignmentsRoleId), std::to_string(adminRoleId)},
             }));
-        ASSERT_EQ(resp.code, 400) << resp.body;
-        EXPECT_EQ(Json::Value::FromText(resp.body)["type"].Get<std::string>(),
-                  ErrorCodes::kValidationError);
+        ASSERT_EQ(resp.code, 403) << resp.body;
 
         // And they are still not an admin.
         crow::response infoResp = Handle(helper, crow::HTTPMethod::Post, "/api/get_user_info");

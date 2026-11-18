@@ -1,3 +1,4 @@
+#include <functional>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -42,8 +43,14 @@ int main(int argc, char** argv)
     // test secrets double. The harness (honuware_testing) is app-agnostic and loads
     // only Secrets::Values framework defaults itself; this app-side entry point
     // layers the app defaults on top — the same injection pattern as
-    // MakeDatabaseInfo below.
-    Secrets::Test::RegisterAppSecretDefaults(App::FillInAppSecretDefaultsString);
+    // MakeDatabaseInfo below. Then CommunityFinder's own values for keys the
+    // framework defaults (CM3 OQ10's public photo cap), which the live seed
+    // writes over honuware's rows — so a test sees the values a live server does.
+    Secrets::Test::RegisterAppSecretDefaults(
+        [](std::function<void(const std::string&, const std::string&)> addSecret) {
+            App::FillInAppSecretDefaultsString(addSecret);
+            App::FillInFrameworkSecretOverridesString(addSecret);
+        });
 
     // Inject the app's composed schema (framework + app tables). The harness is
     // app-agnostic and never calls MakeDatabaseInfo itself. The control-plane

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -49,6 +50,7 @@
 #include "db_schema/venues.h"
 #include "sql_util/database_access/transaction.h"
 #include "test/src/util/database_test_helper.h"
+#include "util/secrets/secret_keys.h"
 
 // The app halves of create_database. The harness pre-creates tables from
 // MakeDatabaseInfo but seeds no rows, so these run the seed in a test
@@ -759,6 +761,50 @@ TEST(CreateAppTablesTest, ProvisioningTheSchedulerAccountTwiceIsANoOp) {
         EXPECT_EQ(PermissionsOfRole(transaction, Auth::kSchedulerRoleName),
                   std::vector<std::string>{
                       std::string(DbSchema::kPermissionRunScheduledJobs)});
+    });
+}
+
+// --- CM3 OQ10: CommunityFinder's values for framework-defaulted keys ---------
+
+std::string ConfigSecret(Transaction& transaction, std::string_view name) {
+    return transaction.RunSqlStatementReturningOneValue(
+        "SELECT value FROM config_secrets WHERE name = $1", std::string(name));
+}
+
+std::string ConfigSecretCount(Transaction& transaction, std::string_view name) {
+    return transaction.RunSqlStatementReturningOneValue(
+        "SELECT count(*) FROM config_secrets WHERE name = $1", std::string(name));
+}
+
+// honuware seeds the public photo cap at 800×800; the app's seed step writes
+// 1600×1200 over those rows rather than adding second ones.
+TEST(CreateAppTablesTest, RaisesThePublicPhotoCapOverHonuwaresRows) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("PublicPhotoCap", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+        EXPECT_EQ(ConfigSecret(transaction, Secrets::kImageMaxPublicScaledWidth), "800");
+        EXPECT_EQ(ConfigSecret(transaction, Secrets::kImageMaxPublicScaledHeight), "800");
+
+        ApplyFrameworkSecretOverrides(transaction);
+
+        EXPECT_EQ(ConfigSecret(transaction, Secrets::kImageMaxPublicScaledWidth), "1600");
+        EXPECT_EQ(ConfigSecret(transaction, Secrets::kImageMaxPublicScaledHeight), "1200");
+        EXPECT_EQ(ConfigSecretCount(transaction, Secrets::kImageMaxPublicScaledWidth), "1");
+        EXPECT_EQ(ConfigSecretCount(transaction, Secrets::kImageMaxPublicScaledHeight), "1");
+    });
+}
+
+// A key honuware no longer seeds fails the seed, rather than leaving the site
+// quietly on honuware's cap.
+TEST(CreateAppTablesTest, RefusesAnOverrideWithNoRowToOverwrite) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("OverrideWithNoRow", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+        transaction.RunSqlStatement(
+            "DELETE FROM config_secrets WHERE name = $1",
+            std::string(Secrets::kImageMaxPublicScaledHeight));
+
+        EXPECT_THROW(ApplyFrameworkSecretOverrides(transaction), std::runtime_error);
     });
 }
 

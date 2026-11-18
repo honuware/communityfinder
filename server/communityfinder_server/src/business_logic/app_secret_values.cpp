@@ -49,6 +49,14 @@ inline constexpr std::string_view kEventsShowPastByDefaultValue = "false";
 // (GallerySettingsTest.AppSecretDefaultMatchesTheCodeDefault pins it).
 inline constexpr std::string_view kEventGalleryMaxPhotosValue = "12";
 
+// --- CommunityFinder's values for framework-defaulted keys ---
+// CM3 OQ10: the largest photo get_scaled_photo serves. honuware defaults it to
+// 800×800, which cut the 1200×630 event hero to 800×420 and the 1600×1200
+// gallery full view to 800×600. 1600×1200 lets both come out whole; the cost is
+// more stored scaled copies, which EV4's cleanup job already prunes.
+inline constexpr std::string_view kImageMaxPublicScaledWidthValue = "1600";
+inline constexpr std::string_view kImageMaxPublicScaledHeightValue = "1200";
+
 }  // namespace
 
 void FillInAppSecretDefaults(
@@ -80,6 +88,20 @@ void FillInAppSecretDefaultsString(
     FillInAppSecretDefaults(
         [&](std::string_view key, std::string_view value) {
             addSecret(std::string(key), std::string(value));
+        });
+}
+
+void FillInFrameworkSecretOverrides(
+    std::function<void(std::string_view, std::string_view)> overrideSecret) {
+    overrideSecret(Secrets::kImageMaxPublicScaledWidth, kImageMaxPublicScaledWidthValue);
+    overrideSecret(Secrets::kImageMaxPublicScaledHeight, kImageMaxPublicScaledHeightValue);
+}
+
+void FillInFrameworkSecretOverridesString(
+    std::function<void(const std::string&, const std::string&)> overrideSecret) {
+    FillInFrameworkSecretOverrides(
+        [&](std::string_view key, std::string_view value) {
+            overrideSecret(std::string(key), std::string(value));
         });
 }
 

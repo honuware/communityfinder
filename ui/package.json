@@ -20,7 +20,7 @@
     "@angular/material": "^21.2.0",
     "@angular/platform-browser": "^21.2.0",
     "@angular/router": "^21.2.0",
-    "@honuware/ui": "0.1.2",
+    "@honuware/ui": "0.3.1",
     "marked": "^18.0.8",
     "ngx-markdown": "^21.3.0",
     "rxjs": "~7.8.0",

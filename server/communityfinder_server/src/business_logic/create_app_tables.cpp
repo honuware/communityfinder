@@ -2,10 +2,12 @@
 
 #include <cstdint>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "business_logic/app_secret_values.h"
 #include "business_logic/app_service_account_config.h"
 #include "business_logic/auth/service_account.h"
 #include "db_schema/admin_column_data_info.h"
@@ -17,6 +19,7 @@
 #include "db_schema/admin_top_level_tables.h"
 #include "db_schema/allowed_tables.h"
 #include "db_schema/categories.h"
+#include "db_schema/config_secrets.h"
 #include "db_schema/event_category_assignments.h"
 #include "db_schema/event_gallery_photos.h"
 #include "db_schema/event_scene_tag_assignments.h"
@@ -1050,4 +1053,26 @@ bool ProvisionSchedulerAccount(
         transaction, databaseHelper, App::kSchedulerServiceAccountEmail,
         password, {});
     return true;
+}
+
+void ApplyFrameworkSecretOverrides(Transaction& transaction) {
+    // UPDATE, not an insert: honuware's seed already wrote the row and
+    // config_secrets.name is UNIQUE (the mail app password in create_database.cpp
+    // works the same way). Plaintext, as every seeded row is: SecretsAtRest reads
+    // plaintext as-is, and the server encrypts the rows when it starts.
+    const std::string sql =
+        "UPDATE " + std::string(DbSchema::kConfigSecretsTable) +
+        " SET " + std::string(DbSchema::kConfigSecretsValue) + " = $1 WHERE " +
+        std::string(DbSchema::kConfigSecretsName) + " = $2 RETURNING " +
+        std::string(DbSchema::kConfigSecretsName);
+    App::FillInFrameworkSecretOverrides(
+        [&](std::string_view name, std::string_view value) {
+            if (transaction.RunSqlStatementReturningStringTable(
+                    sql, std::string(value), std::string(name)).empty()) {
+                throw std::runtime_error(FormatString(
+                    "ApplyFrameworkSecretOverrides: honuware's seed has no "
+                    "config_secrets row named {name} to overwrite.",
+                    { { "name", std::string(name) } }));
+            }
+        });
 }

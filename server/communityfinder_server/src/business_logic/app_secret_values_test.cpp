@@ -104,5 +104,43 @@ TEST(AppSecretValuesTest, FrameworkAndAppKeySetsDoNotOverlap) {
     }
 }
 
+// --- CM3 OQ10: CommunityFinder's values for framework-defaulted keys ---
+
+std::map<std::string, std::string> CollectFrameworkOverrides() {
+    std::map<std::string, std::string> out;
+    FillInFrameworkSecretOverrides([&](std::string_view k, std::string_view v) {
+        out[std::string(k)] = std::string(v);
+    });
+    return out;
+}
+
+TEST(AppSecretValuesTest, RaisesThePublicPhotoCapTo1600By1200) {
+    auto overrides = CollectFrameworkOverrides();
+    EXPECT_EQ(overrides.size(), 2u);
+    EXPECT_EQ(overrides[std::string(Secrets::kImageMaxPublicScaledWidth)], "1600");
+    EXPECT_EQ(overrides[std::string(Secrets::kImageMaxPublicScaledHeight)], "1200");
+}
+
+// The inverse of the no-overlap rule: an override replaces a row honuware's seed
+// writes, so each must name a key honuware defaults (a key honuware renamed
+// would otherwise overwrite nothing), and none may also be an app default.
+TEST(AppSecretValuesTest, OverridesNameOnlyFrameworkDefaultedKeys) {
+    auto fw = CollectFrameworkDefaults();
+    auto app = CollectAppDefaults();
+    for (const auto& [key, value] : CollectFrameworkOverrides()) {
+        EXPECT_EQ(fw.count(key), 1u) << "honuware doesn't default " << key;
+        EXPECT_EQ(app.count(key), 0u) << "also an app default: " << key;
+        EXPECT_NE(fw[key], value) << key << " matches honuware's own default";
+    }
+}
+
+TEST(AppSecretValuesTest, OverridesStringVariantMatchesStringViewVariant) {
+    std::map<std::string, std::string> s;
+    FillInFrameworkSecretOverridesString([&](const std::string& k, const std::string& v) {
+        s[k] = v;
+    });
+    EXPECT_EQ(CollectFrameworkOverrides(), s);
+}
+
 }  // namespace
 }  // namespace App

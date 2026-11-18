@@ -36,11 +36,14 @@
 // (GetRowConfigSecrets*Forbidden), and admin-vs-anonymous gating. These CF-side
 // tests are the app's own coverage of the loop in its build: a full admin CRUD
 // round-trip, the anonymous denial, CF's secrets-exclusion policy, and schema
-// discovery. Access to the generic CRUD endpoints is a function of the caller's
-// effective allowed-tables set (public `allowed_tables` for everyone, all
-// `admin_top_level_tables` for the `admin` role) — there is NO per-endpoint
-// permission check, so an out-of-set table returns 400 ValidationError, never
-// 401/403.
+// discovery. READS are a function of the caller's effective allowed-tables set
+// (public `allowed_tables` for everyone, all `admin_top_level_tables` for the
+// `admin` role, `admin_table_permissions` grants for everyone else), so an
+// out-of-set read returns 400 ValidationError. WRITES (add_item,
+// add_item_fetch_primary_key, update_item, and delete_item, which is POST only)
+// also need write access: 401 signed out, 403 for a non-admin without a grant
+// on the table — the public list lets anyone read a table, never change it
+// (knottyyoga Beta feedback Phase 1.2).
 namespace Endpoints {
 namespace {
 
@@ -176,8 +179,8 @@ TEST(CommunityFinderCrudTest, AdminCanCrudFrameworkTableEndToEnd) {
         EXPECT_EQ(CellValue(getBody2, DbSchema::kRolesDescription),
                   "Edits everything");
 
-        // DELETE
-        crow::response deleteResp = Handle(helper, crow::HTTPMethod::Get,
+        // DELETE (POST only; a GET would skip the CSRF guard)
+        crow::response deleteResp = Handle(helper, crow::HTTPMethod::Post,
                                            "/api/delete_item/roles/id/" + newId);
         ASSERT_EQ(deleteResp.code, 200) << deleteResp.body;
 
@@ -239,6 +242,50 @@ TEST(CommunityFinderCrudTest, AnonymousCanReadTheSeededVocabularies) {
             Json::Value body = Json::Value::FromText(resp.body);
             EXPECT_EQ(body["dataTable"].GetArray().size(), rowCount) << table;
         }
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// The public list lets a signed-out visitor READ the vocabularies; it must not
+// let them change one. Before the honuware write check, a signed-out POST to
+// delete_item (then a GET) removed any row on the public list.
+TEST(CommunityFinderCrudTest, AnonymousCannotChangeAPublicTable) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("CFAnonCannotWritePublic", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        crow::response before =
+            Handle(helper, crow::HTTPMethod::Get, "/api/get_table_rows/categories");
+        ASSERT_EQ(before.code, 200) << before.body;
+        Json::Value beforeBody = Json::Value::FromText(before.body);
+        const size_t rowCount = beforeBody["dataTable"].GetArray().size();
+        const std::string firstId = CellValue(beforeBody, "id");
+        ASSERT_FALSE(firstId.empty());
+
+        crow::response deleteResp = Handle(helper, crow::HTTPMethod::Post,
+                                           "/api/delete_item/categories/id/" + firstId);
+        EXPECT_EQ(deleteResp.code, 401) << deleteResp.body;
+
+        Json::Value updateBody(Json::JsonObject{
+            {"table_name", std::string("categories")},
+            {"value", Json::Value(Json::JsonObject{{"name", std::string("Vandalised")}})},
+            {"column_name", std::string("id")},
+            {"column_value", firstId},
+        });
+        crow::response updateResp = Handle(helper, crow::HTTPMethod::Post,
+                                           "/api/update_item", updateBody.ToString());
+        EXPECT_EQ(updateResp.code, 401) << updateResp.body;
+
+        // Nothing changed.
+        crow::response after =
+            Handle(helper, crow::HTTPMethod::Get, "/api/get_table_rows/categories");
+        ASSERT_EQ(after.code, 200) << after.body;
+        Json::Value afterBody = Json::Value::FromText(after.body);
+        EXPECT_EQ(afterBody["dataTable"].GetArray().size(), rowCount);
+        EXPECT_EQ(after.body.find("Vandalised"), std::string::npos);
     });
     Auth::ServerConfig::Shutdown();
 }

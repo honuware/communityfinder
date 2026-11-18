@@ -26,4 +26,18 @@ void FillInAppSecretDefaults(
 void FillInAppSecretDefaultsString(
     std::function<void(const std::string&, const std::string&)> addSecret);
 
+// CM3 OQ10: CommunityFinder's own values for FRAMEWORK keys that honuware
+// already defaults — today, the public photo cap (1600×1200, not honuware's
+// 800×800). honuware seeds these rows itself, so they can't be app defaults:
+// config_secrets.name is UNIQUE, and FillInAppSecretDefaults must not overlap
+// the framework's. The seed overwrites honuware's rows with them instead
+// (ApplyFrameworkSecretOverrides, create_app_tables.h), and the test main
+// layers them over the test secrets double so tests see what a live server does.
+void FillInFrameworkSecretOverrides(
+    std::function<void(std::string_view, std::string_view)> overrideSecret);
+
+// std::string variant, for the test secrets double.
+void FillInFrameworkSecretOverridesString(
+    std::function<void(const std::string&, const std::string&)> overrideSecret);
+
 }  // namespace App

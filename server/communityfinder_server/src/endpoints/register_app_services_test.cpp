@@ -26,6 +26,7 @@
 #include "sql_util/table_helpers/series.h"
 #include "sql_util/table_helpers/venues.h"
 #include "test/src/util/database_test_helper.h"
+#include "util/image_resize.h"
 #include "util/thread_pool.h"
 
 // After the app headers: on Windows, <windows.h> (pulled in above) must come
@@ -66,10 +67,12 @@ std::vector<char> MakeTestJpeg(int width, int height) {
 }
 
 // An anonymous scaled-photo read. Nothing is logged in, so no cookie is set.
-crow::response GetScaledPhoto(EndpointTestHelper& helper, std::string_view table, int64_t id) {
+crow::response GetScaledPhoto(EndpointTestHelper& helper, std::string_view table, int64_t id,
+                              int width = 32, int height = 24) {
     crow::request req;
     req.method = crow::HTTPMethod::Get;
-    req.url = "/api/get_scaled_photo/" + std::string(table) + "/" + std::to_string(id) + "/32/24";
+    req.url = "/api/get_scaled_photo/" + std::string(table) + "/" + std::to_string(id) + "/" +
+              std::to_string(width) + "/" + std::to_string(height);
     crow::response resp;
     helper.GetWebApp().GetApp().handle_full(req, resp);
     ThreadPool::GetInstance().Shutdown();
@@ -78,13 +81,13 @@ crow::response GetScaledPhoto(EndpointTestHelper& helper, std::string_view table
 
 // Attaches a photo to a row, as the framework upload endpoint does after its checks.
 void AttachPhoto(Transaction& transaction, TestDatabaseUtil& testDb,
-                 std::string_view table, int64_t id) {
+                 std::string_view table, int64_t id, int width = 64, int height = 48) {
     TableHelpers::PhotoSupportTables photoSupport(testDb.GetDatabaseHelper());
     if (!photoSupport.IsPhotoSupportedForTable(transaction, table)) {
         photoSupport.AddPhotoSupportTable(transaction, std::string(table));
     }
     Images::UploadResult result = Images::ImageHelper(testDb.GetDatabaseHelper())
-        .UploadAndAssociatePhoto(transaction, std::string(table), id, MakeTestJpeg(64, 48), "jpeg");
+        .UploadAndAssociatePhoto(transaction, std::string(table), id, MakeTestJpeg(width, height), "jpeg");
     EXPECT_TRUE(result.success) << table << " " << id << ": " << result.errorMessage;
 }
 
@@ -242,6 +245,35 @@ TEST(RegisterAppServicesTest, APendingEventsPhotosNeedALogin) {
         });
         EXPECT_EQ(GetScaledPhoto(helper, DbSchema::kEventsTable, pending).code, 200);
         EXPECT_EQ(GetScaledPhoto(helper, DbSchema::kEventGalleryPhotosTable, galleryRow).code, 200);
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// CM3 OQ10 — CommunityFinder serves photos up to 1600×1200, not honuware's
+// 800×800, so the gallery's full view and the 1200×630 hero come out whole. The
+// source is bigger than the cap, so the answer shows both that the cap was raised
+// and that it still applies. (2048×1536 scales by exactly 0.78125; a ratio that
+// isn't exact in binary can truncate the clipped height to 1199.)
+TEST(RegisterAppServicesTest, ASignedOutVisitorGetsPhotosUpTo1600By1200) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("PhotosUpTo1600By1200", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        RegisterAppServices(helper.GetWebApp());
+
+        int64_t seriesId = TableHelpers::Series(testDb.GetDatabaseHelper()).AddSeries(transaction, {
+            { std::string(DbSchema::kSeriesTitle), "Sample Night" },
+            { std::string(DbSchema::kSeriesSlug), "sample-night" },
+        });
+        AttachPhoto(transaction, testDb, DbSchema::kSeriesTable, seriesId, 2048, 1536);
+
+        crow::response resp = GetScaledPhoto(helper, DbSchema::kSeriesTable, seriesId, 2048, 1536);
+        ASSERT_EQ(resp.code, 200) << resp.body;
+        const ImageResize::ImageDimensions served = ImageResize::GetImageDimensions(
+            std::vector<char>(resp.body.begin(), resp.body.end()), ImageResize::IMAGE_TYPE_JPEG);
+        EXPECT_EQ(served.width, 1600);
+        EXPECT_EQ(served.height, 1200);
     });
     Auth::ServerConfig::Shutdown();
 }
