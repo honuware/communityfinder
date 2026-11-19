@@ -1,13 +1,22 @@
-import { inject, Injectable } from '@angular/core';
+import { inject, Injectable, Injector } from '@angular/core';
 import { forkJoin, map, Observable, of, switchMap, throwError } from 'rxjs';
 import { FilterPair, HONUWARE_CRUD_ACCESS } from '@honuware/ui/access';
+import { AuthService } from '@honuware/ui/auth';
 import { SubmissionProblem } from '../event-submissions-access/event-submissions-access';
+import { GallerySettingsMockStore } from '../mock/gallery-settings-mock-store';
 import { PastEventSettingsMockStore } from '../mock/past-event-settings-mock-store';
 import { SubmissionSettingsMockStore } from '../mock/submission-settings-mock-store';
 import { dataResultsToRecords } from '../types/events.types';
 import { nowUs } from '../utils/events-date.utils';
 import {
   EventsAdminAccess,
+  GALLERY_ALT_TEXT_MAX,
+  GALLERY_CAPTION_MAX,
+  GALLERY_CREDIT_MAX,
+  GALLERY_FULL,
+  GalleryProblem,
+  GallerySettings,
+  NewGalleryPhoto,
   PastEventSettings,
   PastEventSettingsUpdate,
   ReviewAction,
@@ -23,15 +32,21 @@ import {
 // so the editor's pending queue behaves as it does live, and a submitted
 // event's reason and message land on its submission. The decision "email" is
 // sent (decision_emailed) once a submission's last pending date is decided,
-// once. The settings live in the shared SubmissionSettingsMockStore and
-// PastEventSettingsMockStore. (The public events pages read their own demo
-// dataset, so an offline approval doesn't show up on them; a past-events
-// window does.)
+// once. The settings live in the shared SubmissionSettingsMockStore,
+// PastEventSettingsMockStore and GallerySettingsMockStore. A gallery row goes
+// into the CRUD store by the server's checks and order, its consent record
+// the signed-in curator. (The public events pages read their own demo
+// dataset, so an offline approval or gallery photo doesn't show up on them;
+// a past-events window does.)
 @Injectable()
 export class EventsAdminMockAccess implements EventsAdminAccess {
   private crud = inject(HONUWARE_CRUD_ACCESS);
+  // Looked up only when a gallery row needs its consent record, so the
+  // settings cards' specs needn't provide a session.
+  private injector = inject(Injector);
   private settingsStore = inject(SubmissionSettingsMockStore);
   private pastSettingsStore = inject(PastEventSettingsMockStore);
+  private gallerySettingsStore = inject(GallerySettingsMockStore);
 
   reviewEvent(
     eventId: number,
@@ -108,6 +123,87 @@ export class EventsAdminMockAccess implements EventsAdminAccess {
     return refused ? throwError(() => refused) : of(this.pastSettingsStore.settings());
   }
 
+  getGallerySettings(): Observable<GallerySettings> {
+    return of(this.gallerySettingsStore.settings());
+  }
+
+  saveGallerySettings(maxPhotos: number): Observable<GallerySettings> {
+    const refused = this.gallerySettingsStore.save(maxPhotos);
+    return refused ? throwError(() => refused) : of(this.gallerySettingsStore.settings());
+  }
+
+  // EventGalleryHelper::AddGalleryPhoto's checks, in its order: one parent
+  // that exists, the alt text, the lengths, the consent box, then the cap.
+  // A new row goes one past the highest sort_order in its gallery (0 first).
+  addGalleryPhoto(photo: NewGalleryPhoto): Observable<{ id: number }> {
+    const parent =
+      photo.event_id !== undefined && photo.series_id === undefined
+        ? { table: 'events', column: 'event_id', id: String(photo.event_id) }
+        : photo.series_id !== undefined && photo.event_id === undefined
+          ? { table: 'series', column: 'series_id', id: String(photo.series_id) }
+          : null;
+    if (!parent) {
+      return throwError(() => galleryProblem('ONE_PARENT_REQUIRED', 'event_id'));
+    }
+    const altText = photo.alt_text.trim();
+    const caption = (photo.caption ?? '').trim();
+    const credit = (photo.credit ?? '').trim();
+    const authData = this.injector.get(AuthService).authData;
+    return forkJoin({
+      parentRows: this.rows(parent.table, [{ column_name: 'id', column_value: parent.id }]),
+      gallery: this.rows('event_gallery_photos', [
+        { column_name: parent.column, column_value: parent.id },
+      ]),
+    }).pipe(
+      switchMap(({ parentRows, gallery }) => {
+        const refused =
+          parentRows.length === 0
+            ? galleryProblem('PARENT_NOT_FOUND', parent.column)
+            : !altText
+              ? galleryProblem('ALT_TEXT_REQUIRED', 'alt_text')
+              : characters(altText) > GALLERY_ALT_TEXT_MAX
+                ? galleryProblem('TOO_LONG', 'alt_text')
+                : characters(caption) > GALLERY_CAPTION_MAX
+                  ? galleryProblem('TOO_LONG', 'caption')
+                  : characters(credit) > GALLERY_CREDIT_MAX
+                    ? galleryProblem('TOO_LONG', 'credit')
+                    : !photo.consent_confirmed
+                      ? galleryProblem('CONSENT_REQUIRED', 'consent_confirmed')
+                      : gallery.length >= this.gallerySettingsStore.maxPhotos
+                        ? {
+                            ...galleryProblem(GALLERY_FULL, parent.column),
+                            max_photos: this.gallerySettingsStore.maxPhotos,
+                          }
+                        : null;
+        if (refused) {
+          return throwError(() => refused);
+        }
+        const now = String(nowUs());
+        const nextSortOrder = gallery.reduce(
+          (next, row) => Math.max(next, (Number(row['sort_order']) || 0) + 1),
+          0,
+        );
+        return this.crud
+          .addItemFetchPrimaryKey({
+            table_name: 'event_gallery_photos',
+            value: {
+              event_id: parent.table === 'events' ? parent.id : '',
+              series_id: parent.table === 'series' ? parent.id : '',
+              sort_order: String(nextSortOrder),
+              alt_text: altText,
+              caption,
+              credit,
+              consent_confirmed_by_person_id: authData.isAuth ? String(authData.personId) : '',
+              consent_confirmed_us: now,
+              created_us: now,
+              updated_us: now,
+            },
+          })
+          .pipe(map((id) => ({ id: Number(id) })));
+      }),
+    );
+  }
+
   private decide(eventId: string, status: string, decision: ReviewDecision): Observable<void> {
     return this.crud.updateItem({
       table_name: 'events',
@@ -178,4 +274,21 @@ function statusFor(action: ReviewAction): 'approved' | 'rejected' {
 
 function problem(status: number, errorCode: string, detail: string): SubmissionProblem {
   return { status, error_code: errorCode, field: '', date_index: null, detail };
+}
+
+// The server's gallery refusal: a 400 whose detail is the code itself.
+function galleryProblem(errorCode: string, field: string): GalleryProblem {
+  return {
+    status: 400,
+    error_code: errorCode,
+    field,
+    date_index: null,
+    detail: errorCode,
+    max_photos: null,
+  };
+}
+
+// Characters, not UTF-16 units, as the server counts them.
+function characters(text: string): number {
+  return [...text].length;
 }

@@ -39,6 +39,15 @@
     <div class="submit-event__sent" role="status">
       <h2 class="submit-event__subtitle">Thanks, it's waiting for review.</h2>
       <p>We'll email you when it's decided.</p>
+      @if (flyerOutcome(); as flyer) {
+        <p
+          class="submit-event__flyer-outcome"
+          [class.submit-event__error]="!flyer.ok"
+          [class.submit-event__hint]="flyer.ok"
+        >
+          {{ flyer.message }}
+        </p>
+      }
       @if (result.possible_duplicates.length) {
         <div class="submit-event__duplicates">
           <p>
@@ -220,6 +229,36 @@
       @if (fieldError('cost_text'); as message) {
         <p class="submit-event__error" data-field="cost_text">{{ message }}</p>
       }
+
+      @let video = videoFeedback();
+      <mat-form-field appearance="outline" class="submit-event__wide" subscriptSizing="dynamic">
+        <mat-label>Video link (optional)</mat-label>
+        <input matInput type="url" formControlName="videoUrl" maxlength="500" />
+        @if (video.message) {
+          <mat-hint
+            class="submit-event__video-feedback"
+            [class.submit-event__video-feedback--bad]="!video.ok"
+            >{{ video.message }}</mat-hint
+          >
+        } @else {
+          <mat-hint>A YouTube or Vimeo video about the event: a trailer, or last time's.</mat-hint>
+        }
+      </mat-form-field>
+      @if (fieldError('video_url'); as message) {
+        <p class="submit-event__error" data-field="video_url">{{ message }}</p>
+      }
+
+      <fieldset class="submit-event__group submit-event__flyer">
+        <legend>Flyer (optional)</legend>
+        <p class="submit-event__hint">
+          A JPEG or PNG. It's shown on the event's page once a curator approves it. Only send
+          artwork you're allowed to share, and no photos of people who haven't agreed to be shown.
+        </p>
+        <hw-photo-upload [tableName]="'events'" [tableItemId]="0" [deferUpload]="true" />
+        @if (fieldError('flyer'); as message) {
+          <p class="submit-event__error" data-field="flyer">{{ message }}</p>
+        }
+      </fieldset>
 
       <fieldset class="submit-event__group">
         <legend>Categories (up to {{ maxTags }})</legend>

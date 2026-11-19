@@ -487,14 +487,30 @@ std::vector<SubmissionView> SubmissionHelper::GetMySubmissions(
         ids.push_back(std::stoll(Column(row, DbSchema::kEventSubmissionsId)));
     }
     // One batch read; it comes back ordered by submission, then start.
+    const KeyValueTableArray events = events_.GetEventsBySubmissions(transaction, ids);
+    // CM3: which dates have a photo of their own, in one more read. The
+    // picker falls back to the venue's photo, which isn't the date's.
+    std::vector<int64_t> eventIds;
+    eventIds.reserve(events.size());
+    for (const KeyValueTable& event : events) {
+        eventIds.push_back(std::stoll(Column(event, DbSchema::kEventsId)));
+    }
+    std::set<int64_t> withOwnPhoto;
+    for (const KeyValueTable& owner : events_.GetPhotoOwners(transaction, eventIds)) {
+        if (Column(owner, TableHelpers::kPhotoOwnerTable) == DbSchema::kEventsTable) {
+            withOwnPhoto.insert(std::stoll(Column(owner, DbSchema::kEventsId)));
+        }
+    }
     std::map<int64_t, std::vector<SubmissionDateView>> datesBySubmission;
-    for (const KeyValueTable& event : events_.GetEventsBySubmissions(transaction, ids)) {
+    for (const KeyValueTable& event : events) {
         SubmissionDateView date;
         date.eventId = std::stoll(Column(event, DbSchema::kEventsId));
         date.title = Column(event, DbSchema::kEventsTitle);
         date.startsAtUs = std::stoll(Column(event, DbSchema::kEventsStartsAtUs));
         date.endsAtUs = OptionalIdColumn(event, DbSchema::kEventsEndsAtUs);
         date.state = DateState(event);
+        date.hasPhoto = withOwnPhoto.count(date.eventId) > 0;
+        date.video = StoredVideoLink(Column(event, DbSchema::kEventsVideoUrl));
         datesBySubmission[std::stoll(Column(event, DbSchema::kEventsSubmissionId))].push_back(
             std::move(date));
     }

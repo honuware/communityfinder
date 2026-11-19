@@ -75,3 +75,25 @@
 .event-editor__error {
   color: var(--mat-sys-error, #b3261e);
 }
+
+// CM3: green when the link reads, red when it doesn't.
+.event-editor__video-feedback {
+  color: var(--mat-sys-primary);
+}
+
+.event-editor__video-feedback--bad {
+  color: var(--mat-sys-error, #b3261e);
+}
+
+.event-editor__media {
+  display: block;
+  margin: 24px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.event-editor__media-title {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  font-weight: 600;
+}

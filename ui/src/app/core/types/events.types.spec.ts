@@ -5,12 +5,16 @@ import {
   neighborhoodsFromRows,
   buildPastEventsQueryString,
   normalizeEvent,
+  normalizeEventDetail,
   normalizeEventSeriesDetail,
   normalizeEventSeriesList,
   normalizeEventSettings,
+  normalizeGallery,
   normalizePastEvents,
   normalizeUpcomingEvents,
   sceneTagsFromRows,
+  toPhotoRef,
+  toVideoRef,
   venueChoicesFromRows,
 } from './events.types';
 
@@ -36,9 +40,72 @@ const WIRE_EVENT = {
   series_slug: 't4t',
   series_title: 'T4T',
   origin: 'scanned',
+  // CM3: the photo it shows (its own or one it borrows), and its video.
+  photo: { table: 'series', id: 3 },
+  video: { provider: 'youtube', id: 'dQw4w9WgXcQ' },
 };
 
 describe('events.types', () => {
+  describe('CM3 photos, videos and galleries', () => {
+    it('reads a photo reference only for a table that owns photos, with a real id', () => {
+      expect(toPhotoRef({ table: 'events', id: 7 })).toEqual({ table: 'events', id: 7 });
+      expect(toPhotoRef({ table: 'venues', id: '2' })).toEqual({ table: 'venues', id: 2 });
+      expect(toPhotoRef(null)).toBeNull();
+      expect(toPhotoRef({ table: 'persons', id: 1 })).toBeNull();
+      expect(toPhotoRef({ table: 'events', id: 0 })).toBeNull();
+      expect(toPhotoRef({ table: 'events', id: 1.5 })).toBeNull();
+    });
+
+    it('reads a video reference only for YouTube or Vimeo, with an id', () => {
+      expect(toVideoRef({ provider: 'vimeo', id: '76979871' })).toEqual({
+        provider: 'vimeo',
+        id: '76979871',
+      });
+      expect(toVideoRef(null)).toBeNull();
+      expect(toVideoRef({ provider: 'tiktok', id: '1' })).toBeNull();
+      expect(toVideoRef({ provider: 'youtube', id: '' })).toBeNull();
+    });
+
+    it('reads a gallery in the order sent, dropping entries without an id', () => {
+      expect(
+        normalizeGallery([
+          { id: 5, alt_text: 'The stage', caption: 'Doors at nine', credit: 'Photo: Sam' },
+          { id: '2', alt_text: 'The bar' },
+          { alt_text: 'No id' },
+        ]),
+      ).toEqual([
+        { id: 5, alt_text: 'The stage', caption: 'Doors at nine', credit: 'Photo: Sam' },
+        { id: 2, alt_text: 'The bar', caption: '', credit: '' },
+      ]);
+      expect(normalizeGallery(undefined)).toEqual([]);
+    });
+
+    it('reads an event page with its gallery, and a series page with its own', () => {
+      const detail = normalizeEventDetail({
+        ...WIRE_EVENT,
+        gallery: [{ id: 1, alt_text: 'The floor' }],
+      });
+      expect(detail.photo).toEqual({ table: 'series', id: 3 });
+      expect(detail.gallery).toEqual([{ id: 1, alt_text: 'The floor', caption: '', credit: '' }]);
+      expect(normalizeEventDetail(WIRE_EVENT).gallery).toEqual([]);
+
+      const series = normalizeEventSeriesDetail({
+        series: { id: 3, title: 'T4T', photo: { table: 'venues', id: 7 }, video: null },
+        upcoming: [],
+        gallery: [{ id: 9, alt_text: 'Last month' }],
+      });
+      expect(series.series.photo).toEqual({ table: 'venues', id: 7 });
+      expect(series.series.video).toBeNull();
+      expect(series.gallery.map((photo) => photo.id)).toEqual([9]);
+    });
+
+    it('reads no photo and no video when an event names none', () => {
+      const event = normalizeEvent({ id: 1, title: 'Bare', starts_at_us: 5 });
+      expect(event.photo).toBeNull();
+      expect(event.video).toBeNull();
+    });
+  });
+
   describe('normalizeEvent', () => {
     it('keeps a full event as it is', () => {
       expect(normalizeEvent(WIRE_EVENT)).toEqual(WIRE_EVENT);

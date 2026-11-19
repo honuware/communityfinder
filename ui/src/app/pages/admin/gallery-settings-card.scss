@@ -1,0 +1,26 @@
+.gallery-settings {
+  display: block;
+  margin: 0 0 16px;
+  padding: 16px;
+}
+
+.gallery-settings__max mat-form-field {
+  width: 100%;
+  max-width: 420px;
+}
+
+.gallery-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.gallery-settings__hint {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.gallery-settings__error {
+  color: var(--mat-sys-error, #b3261e);
+}

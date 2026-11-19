@@ -68,7 +68,7 @@ describe('PageMeta', () => {
       ogSiteName: 'CommunityFinder',
       ogImage: PHOTO,
       twitterCard: 'summary_large_image',
-      jsonLd: buildEventJsonLd(event(), url, PHOTO),
+      jsonLd: buildEventJsonLd(event(), url, [PHOTO]),
       canonicalCount: 1,
       descriptionCount: 1,
     });
@@ -82,6 +82,26 @@ describe('PageMeta', () => {
     expect(tags.twitterCard).toBe('summary');
     expect(tags.description).toBe('Fri, Aug 14, 9:00 PM · The Lantern Room');
     expect(tags.jsonLd?.['image']).toBeUndefined();
+  });
+
+  // CM3 §5.5.
+  it('lists the main photo then up to three gallery photos in the JSON-LD; og:image stays the main one', () => {
+    const { pageMeta, document } = setUp();
+    const gallery = [1, 2, 3, 4].map(
+      (id) =>
+        `https://communityfinder.example/api/get_scaled_photo/event_gallery_photos/${id}/1600/1200`,
+    );
+    pageMeta.setEventPage(event(), PHOTO, gallery);
+    let tags = head(document);
+    expect(tags.ogImage).toBe(PHOTO);
+    expect(tags.jsonLd?.['image']).toEqual([PHOTO, ...gallery.slice(0, 3)]);
+
+    // A gallery but no main photo: the JSON-LD has the gallery's, and there's
+    // no og:image.
+    pageMeta.setEventPage(event(), '', gallery.slice(0, 2));
+    tags = head(document);
+    expect(tags.ogImage).toBeNull();
+    expect(tags.jsonLd?.['image']).toEqual(gallery.slice(0, 2));
   });
 
   it("gives a curator's preview of an unapproved event no JSON-LD", () => {

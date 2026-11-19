@@ -32,6 +32,8 @@ const DESCRIPTION_MAX_LENGTH = 160;
 const JSON_LD_SCRIPT_ID = 'page-json-ld';
 const SOCIAL_TAGS = ['og:title', 'og:description', 'og:url', 'og:type', 'og:site_name', 'og:image'];
 const NAME_TAGS = ['description', 'twitter:card'];
+// How many gallery photos follow the main one in an event's JSON-LD.
+export const JSON_LD_GALLERY_IMAGES = 3;
 
 // Text cut to a snippet on a word boundary, with an ellipsis.
 export function snippet(text: string, maxLength = DESCRIPTION_MAX_LENGTH): string {
@@ -88,8 +90,11 @@ export class PageMeta {
 
   // An event's page: "T4T Dance Party — Sat, Aug 15", its description (or
   // when and where, if it has none), its photo, and its JSON-LD. A curator's
-  // preview of an unapproved event gets no JSON-LD.
-  setEventPage(event: PublicEvent, imageUrl?: string): void {
+  // preview of an unapproved event gets no JSON-LD. Both images are absolute:
+  // og:image is the main photo alone; the JSON-LD lists it, then up to three
+  // gallery photos (CM3 §5.5).
+  setEventPage(event: PublicEvent, heroUrl = '', galleryUrls: readonly string[] = []): void {
+    const imageUrls = [heroUrl, ...galleryUrls.slice(0, JSON_LD_GALLERY_IMAGES)].filter(Boolean);
     const path = eventPagePath(event.id);
     const isPublic = isPublicEvent(event);
     const when = `${formatEventShortDate(event.starts_at_us)}, ${formatEventTime(event.starts_at_us)}`;
@@ -98,9 +103,9 @@ export class PageMeta {
       title: `${event.title} — ${formatEventShortDate(event.starts_at_us)}`,
       description: event.description || [when, where].filter(Boolean).join(' · '),
       canonicalPath: path,
-      imageUrl,
+      imageUrl: heroUrl || undefined,
       jsonLd: isPublic
-        ? buildEventJsonLd(event, absoluteUrl(this.origin, path), imageUrl)
+        ? buildEventJsonLd(event, absoluteUrl(this.origin, path), imageUrls)
         : undefined,
     });
   }

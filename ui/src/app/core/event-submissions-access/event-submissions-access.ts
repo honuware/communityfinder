@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { InjectionToken } from '@angular/core';
 import { Observable } from 'rxjs';
+import { VideoRef } from '../types/events.types';
 
 // The submitter's side of the submission pipeline (EV3 §4.1, §4.6): the form,
 // "My submissions", withdraw, and whether the form is open. Field names mirror
@@ -29,8 +30,21 @@ export interface SubmissionRequest {
   regular_thing?: boolean;
   relationship?: SubmissionRelationship;
   submitter_note?: string;
+  // CM3: one YouTube or Vimeo link, stored canonical on every date. Refused
+  // with BAD_VIDEO_URL or VIDEO_HOST_NOT_SUPPORTED on field "video_url".
+  video_url?: string;
   agreed: boolean;
   website?: string;
+}
+
+// CM3 §4.4: a flyer is a photo, never a vector, from a stranger.
+export type FlyerImageType = 'jpeg' | 'png';
+
+// POST /api/event_submissions/<id>/photo/<type>: the dates it went on (every
+// one still waiting).
+export interface FlyerResult {
+  submission_id: number;
+  event_ids: number[];
 }
 
 // An approved event that looks like one of the submitted dates.
@@ -61,6 +75,10 @@ export interface MySubmissionDate {
   starts_at_us: number;
   ends_at_us: number | null;
   state: SubmissionDateState;
+  // CM3: whether the date has a photo of its own (the flyer, or one a
+  // curator added; not its venue's), and its video, or null.
+  has_photo: boolean;
+  video: VideoRef | null;
 }
 
 // GET /api/event_submissions/mine: newest first, dates in start order. No
@@ -140,6 +158,14 @@ export interface EventSubmissionsAccess {
   getMine(): Observable<MySubmission[]>;
   // POST /api/event_submissions/<id>/withdraw — your own, while a date waits.
   withdraw(submissionId: number): Observable<WithdrawResult>;
+  // POST /api/event_submissions/<id>/photo/<type> — your own, while a date
+  // waits: the image's bytes become every waiting date's photo (CM3 §4.4).
+  // NOTHING_PENDING, BAD_IMAGE_TYPE, IMAGE_TOO_LARGE, BAD_IMAGE.
+  attachFlyer(
+    submissionId: number,
+    imageData: ArrayBuffer,
+    imageType: FlyerImageType,
+  ): Observable<FlyerResult>;
 }
 
 export const EVENT_SUBMISSIONS_ACCESS = new InjectionToken<EventSubmissionsAccess>(

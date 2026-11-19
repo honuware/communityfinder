@@ -7,19 +7,29 @@ import { vi } from 'vitest';
 import { CrudAccess } from '@honuware/ui/access';
 import { AuthService } from '@honuware/ui/auth';
 import { SimpleDateComponent } from '@honuware/ui/controls';
+import { PhotoUploadComponent } from '@honuware/ui/photos';
 import { provideHonuwareAccessMock } from '@honuware/ui/testing';
+import { provideEventsAdminAccess } from '../../core/events-admin-access/events-admin-access.providers';
 import { HONUWARE_MOCK_OPTIONS } from '../../core/mock/honuware-mock';
 import { dataResultsToRecords } from '../../core/types/events.types';
 import { pacificWallClockToUs } from '../../core/utils/events-date.utils';
+import {
+  VIDEO_ERROR_BAD_URL,
+  VIDEO_ERROR_HOST_NOT_SUPPORTED,
+  videoErrorMessage,
+} from '../../core/utils/video-links';
 import { EditRequest, EventEditor, SavedEvent } from './event-editor';
+import { EventGalleryEditor } from './event-gallery-editor';
 import { EMPTY_EVENT_FORM } from './manage-events-form';
 
 // Wed Aug 12, 2026, 3:00 PM Pacific: the mock dataset's reference week.
 const NOW_US = pacificWallClockToUs(2026, 8, 12, 15);
 
 // In the seed: Leather Night (Fri 9 PM – Sat 2 AM at The Lantern Room) has
-// category bar (1) and scene leather (2) of its own.
+// category bar (1) and scene leather (2) of its own, the demo's video, and a
+// gallery.
 const LEATHER_NIGHT = '103';
+const LEATHER_NIGHT_VIDEO = 'https://www.youtube.com/watch?v=demoVideo01';
 const BAR = 1;
 const COMMUNITY = 12;
 const BEAR = 1;
@@ -59,6 +69,8 @@ function create(request: EditRequest | null = null) {
       provideRouter([]),
       provideNoopAnimations(),
       provideHonuwareAccessMock(HONUWARE_MOCK_OPTIONS, (mocks) => (crud = mocks.crud)),
+      // The gallery's cap and its "Add photo".
+      provideEventsAdminAccess(true),
       { provide: AuthService, useValue: { authData: ADMIN } },
     ],
   });
@@ -210,6 +222,7 @@ describe('EventEditor', () => {
         endTime: '02:00',
         venueId: '1',
         costText: '$10 cover',
+        videoUrl: LEATHER_NIGHT_VIDEO,
       });
       expect(editor.selectedCategoryIds()).toEqual([BAR]);
       expect(editor.selectedSceneTagIds()).toEqual([LEATHER]);
@@ -252,11 +265,82 @@ describe('EventEditor', () => {
       expect(editor.formError()).toBe('');
     });
 
+    it('has its main photo and its gallery below the form', () => {
+      const { fixture, element } = create({ id: LEATHER_NIGHT });
+      const upload = fixture.debugElement.query(By.directive(PhotoUploadComponent))
+        .componentInstance as PhotoUploadComponent;
+      expect(upload.tableName).toBe('events');
+      expect(upload.tableItemId).toBe(103);
+      expect(upload.deferUpload).toBe(false);
+      const gallery = fixture.debugElement.query(By.directive(EventGalleryEditor))
+        .componentInstance as EventGalleryEditor;
+      expect(gallery.eventId()).toBe(103);
+      expect(element.querySelector('form app-event-gallery-editor')).toBeNull();
+      expect(element.querySelector('.event-editor__media-later')).toBeNull();
+    });
+
     it('shows only the problem when the event can’t be found, so it can’t be saved as new', () => {
       const { editor, element } = create({ id: '9999' });
       expect(editor.formError()).toBe("Event 9999 wasn't found.");
       expect(element.querySelector('form')).toBeNull();
       expect(text(element)).toBe("Event 9999 wasn't found.");
+    });
+  });
+
+  describe('the video link', () => {
+    function feedback(element: HTMLElement): Element | null {
+      return element.querySelector('.event-editor__video-feedback');
+    }
+
+    it('says what it found as it’s typed, or why not', () => {
+      const { editor, fixture, element } = create();
+      expect(feedback(element)).toBeNull();
+
+      editor.form.controls.videoUrl.setValue('https://youtu.be/dQw4w9WgXcQ');
+      fixture.detectChanges();
+      expect(text(feedback(element))).toBe('YouTube video ✓');
+      expect(feedback(element)!.classList).not.toContain('event-editor__video-feedback--bad');
+
+      editor.form.controls.videoUrl.setValue('https://vimeo.com/76979871');
+      fixture.detectChanges();
+      expect(text(feedback(element))).toBe('Vimeo video ✓');
+
+      editor.form.controls.videoUrl.setValue('https://www.tiktok.com/@someone/video/1');
+      fixture.detectChanges();
+      expect(text(feedback(element))).toBe(videoErrorMessage(VIDEO_ERROR_HOST_NOT_SUPPORTED));
+      expect(feedback(element)!.classList).toContain('event-editor__video-feedback--bad');
+    });
+
+    it('saves the canonical link', async () => {
+      const { crud, editor } = create({ id: LEATHER_NIGHT });
+      const update = vi.spyOn(crud, 'updateItem');
+      editor.form.controls.videoUrl.setValue('  https://youtu.be/dQw4w9WgXcQ?t=42 ');
+      editor.save();
+      expect(update.mock.calls[0][0].value).toEqual({
+        video_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      });
+      expect((await eventRow(crud, LEATHER_NIGHT))['video_url']).toBe(
+        'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      );
+    });
+
+    it('saves a cleared link as none', async () => {
+      const { crud, editor } = create({ id: LEATHER_NIGHT });
+      const update = vi.spyOn(crud, 'updateItem');
+      editor.form.controls.videoUrl.setValue('');
+      editor.save();
+      expect(update.mock.calls[0][0].value).toEqual({ video_url: '' });
+      expect((await eventRow(crud, LEATHER_NIGHT))['video_url']).toBe('');
+    });
+
+    it('won’t save a link it can’t read', () => {
+      const { crud, editor, saved } = create({ id: LEATHER_NIGHT });
+      const update = vi.spyOn(crud, 'updateItem');
+      editor.form.controls.videoUrl.setValue('https://www.youtube.com/playlist?list=PL123');
+      editor.save();
+      expect(editor.formError()).toBe(videoErrorMessage(VIDEO_ERROR_BAD_URL));
+      expect(update).not.toHaveBeenCalled();
+      expect(saved).toEqual([]);
     });
   });
 
@@ -267,6 +351,15 @@ describe('EventEditor', () => {
       expect(editor.form.getRawValue()).toEqual(EMPTY_EVENT_FORM);
       expect(element.querySelector('.event-editor__heading')).toBeNull();
       expect(text(element.querySelector('button[type="submit"]'))).toBe('Add event');
+    });
+
+    it('has no photo or gallery until it’s added, and says so', () => {
+      const { element } = create();
+      expect(element.querySelector('hw-photo-upload')).toBeNull();
+      expect(element.querySelector('app-event-gallery-editor')).toBeNull();
+      expect(text(element.querySelector('.event-editor__media-later'))).toBe(
+        'Once the event is added, open it again to give it a photo and a gallery.',
+      );
     });
 
     it('is added as pending, with its tags, and the form is blank again', async () => {

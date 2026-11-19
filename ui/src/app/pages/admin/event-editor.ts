@@ -23,7 +23,9 @@ import { DataResults, FkOption, HONUWARE_CRUD_ACCESS } from '@honuware/ui/access
 import { AuthService } from '@honuware/ui/auth';
 import { SimpleDateComponent } from '@honuware/ui/controls';
 import { ToastService } from '@honuware/ui/foundation';
+import { PhotoUploadComponent } from '@honuware/ui/photos';
 import { dataResultsToRecords } from '../../core/types/events.types';
+import { videoFieldFeedback, VideoFieldFeedback } from '../../core/utils/video-links';
 import {
   datePickerValue,
   pickedDateText,
@@ -43,7 +45,10 @@ import {
   nextDayEndNote,
   rowChanges,
   rowForCreate,
+  videoColumnValue,
 } from './manage-events-form';
+import { EventGalleryEditor } from './event-gallery-editor';
+import { PhotoPolicyNote } from './photo-policy-note';
 
 // One junction table: an event's categories, or its scene tags.
 interface AssignmentTable {
@@ -115,6 +120,10 @@ function pickerStartsFor(value: EventFormValue, load: number): PickerStarts {
 //   inheritance rule).
 // - A new event is saved as pending, like any other; it goes public once
 //   approved in the queue.
+// - CM3 §5.6: the video field says what it found ("YouTube video ✓") or why
+//   not as it's typed, and saves the canonical link. Once the event is saved,
+//   its main photo (hw-photo-upload, which saves on its own) and its gallery
+//   (EventGalleryEditor) appear below the form.
 @Component({
   selector: 'app-event-editor',
   imports: [
@@ -126,6 +135,9 @@ function pickerStartsFor(value: EventFormValue, load: number): PickerStarts {
     MatInputModule,
     MatProgressSpinnerModule,
     MatSelectModule,
+    EventGalleryEditor,
+    PhotoPolicyNote,
+    PhotoUploadComponent,
     SimpleDateComponent,
   ],
   providers: [
@@ -177,6 +189,7 @@ export class EventEditor {
     locationText: new FormControl('', { nonNullable: true }),
     url: new FormControl('', { nonNullable: true }),
     costText: new FormControl('', { nonNullable: true }),
+    videoUrl: new FormControl('', { nonNullable: true }),
   });
 
   // The row and assignments as loaded, to save only what changed.
@@ -201,6 +214,15 @@ export class EventEditor {
 
   endNote(): string {
     return nextDayEndNote(this.form.getRawValue());
+  }
+
+  // Under the video field, as it's typed: '' while blank.
+  videoFeedback(): VideoFieldFeedback {
+    return videoFieldFeedback(this.form.controls.videoUrl.value);
+  }
+
+  editingNumber(id: string): number {
+    return Number(id);
   }
 
   isCategorySelected(id: number): boolean {
@@ -235,7 +257,12 @@ export class EventEditor {
       this.formError.set(times.error);
       return;
     }
-    const row = eventRowValue(value, times);
+    const video = videoColumnValue(value.videoUrl);
+    if (!video.ok) {
+      this.formError.set(video.error);
+      return;
+    }
+    const row = eventRowValue(value, times, video.videoUrl);
     const editingId = this.editingId();
     let saveRow$: Observable<string>;
     if (editingId) {

@@ -55,14 +55,16 @@ function slideToggle(element: HTMLElement): HTMLButtonElement {
 describe('SubmissionSettingsPage', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('is the Event settings page: submissions, then past events', () => {
+  it('is the Event settings page: submissions, then past events, then galleries', () => {
     const { element } = render();
     expect(text(element.querySelector('h1'))).toBe('Event settings');
     expect(Array.from(element.querySelectorAll('h2')).map(text)).toEqual([
       'Submissions',
       'Past events',
+      'Photo galleries',
     ]);
     expect(element.querySelector('app-past-event-settings-card input')).not.toBeNull();
+    expect(element.querySelector('app-gallery-settings-card input')).not.toBeNull();
   });
 
   describe('the limits', () => {

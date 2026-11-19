@@ -1,6 +1,6 @@
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { PhotoUrlBuilder } from '@honuware/ui/access';
+import { EventPhotos, LIST_THUMB_SIZE } from '../../core/services/event-photos.service';
 import { PublicEvent } from '../../core/types/events.types';
 import {
   EMPTY_VOCABULARIES,
@@ -18,7 +18,9 @@ import { tagChips } from './events-view';
 // One event in a list: photo thumb, time, title, place, neighborhood, and
 // its category / scene chips (each a link to that filtered list). The list
 // page groups rows under day headers; the series page and the past list pass
-// `showDate`. An event that's over is muted (EV4 OQ7).
+// `showDate`. An event that's over is muted (EV4 OQ7). The thumb is the photo
+// the server picked (its own, else its series', else its venue's: CM3 OQ2);
+// with none, the tile keeps its gradient and no image is asked for.
 @Component({
   selector: 'app-event-row',
   imports: [RouterLink],
@@ -26,22 +28,17 @@ import { tagChips } from './events-view';
   styleUrl: './event-row.scss',
 })
 export class EventRow {
-  private photoUrls = inject(PhotoUrlBuilder);
+  private photos = inject(EventPhotos);
 
   readonly event = input.required<PublicEvent>();
   readonly vocabularies = input<EventVocabularies>(EMPTY_VOCABULARIES);
   // Name the day too, where no day header sits above the row.
   readonly showDate = input(false);
 
-  // Most events have no photo; the thumb's request 404s and it's hidden.
-  readonly photoFailed = signal(false);
-
   readonly pagePath = computed(() => eventPagePath(this.event().id));
   // Read when the event arrives.
   readonly hasEnded = computed(() => eventHasEnded(this.event(), nowUs()));
-  readonly photoUrl = computed(() =>
-    this.photoUrls.scaledPhotoUrl('events', this.event().id, 160, 160),
-  );
+  readonly photoUrl = computed(() => this.photos.photoFor(this.event(), LIST_THUMB_SIZE));
   readonly when = computed(() => {
     const event = this.event();
     const times = formatEventTimeRange(event.starts_at_us, event.ends_at_us);

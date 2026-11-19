@@ -107,8 +107,22 @@ Visual Studio keeps each target's command-line `args` and `env` in
 by hand**. Keep the values in `launch_defaults.local.json` instead (also
 gitignored, because it holds credentials) and let honuware's
 `sync_launch_targets.ps1` write them into `launch.vs.json`. Without this step every
-debug target launches bare: the database helper gets no `--recreate_database`, and
-nothing gets the database connection variables.
+debug target launches bare: the database helper gets no arguments, and nothing gets
+the database connection variables.
+
+> **The database helper needs both of these arguments. Neither is optional for a
+> working dev site:**
+>
+> - `--recreate_database` builds the `communityfinder` database: it drops it,
+>   creates every table, and seeds the accounts, roles and vocabularies. It
+>   **creates no events**.
+> - `--populate_sample_data` adds the events and the guide: four weeks of made-up
+>   events starting today, plus sample venues, organizations, places and guide
+>   pages. **Without it the site loads but shows no events.**
+>
+> The example file you copy below comes from honuware and has **only
+> `--recreate_database`**. `--populate_sample_data` is CommunityFinder's own flag,
+> so **add it yourself**, as in the example further down.
 
 After the first configure, FetchContent has placed the script and an example
 defaults file in the build tree. From `server\communityfinder_server\`:
@@ -132,7 +146,8 @@ or allow local scripts for your account, a one-time setting:
 
 The script reads every executable target from the CMake file API and stamps the
 defaults onto each entry. Entries under `all` apply to every target. Keys under
-`targets` match the target label as a wildcard. Edit your copy to look like this:
+`targets` match the target label as a wildcard. Edit your copy to look like this.
+Note the database helper's **two** `args`:
 
 ```json
 {
@@ -148,7 +163,7 @@ defaults onto each entry. Entries under `all` apply to every target. Keys under
   },
   "targets": {
     "*database_helper.exe*": {
-      "args": ["--recreate_database"],
+      "args": ["--recreate_database", "--populate_sample_data"],
       "env": {
         "HONUWARE_ALLOW_DESTRUCTIVE": "1",
         "HONUWARE_MAIL_APP_PASSWORD": "<app password for community.finder.seattle@gmail.com>"
@@ -161,8 +176,11 @@ defaults onto each entry. Entries under `all` apply to every target. Keys under
 }
 ```
 
-- `HONUWARE_ALLOW_DESTRUCTIVE` must be exactly `"1"`, otherwise
-  `--recreate_database` refuses to run.
+- `args` must list **both** `--recreate_database` and `--populate_sample_data`
+  (see the box above). With both, the helper rebuilds the database first, then adds
+  the sample data.
+- `HONUWARE_ALLOW_DESTRUCTIVE` must be exactly `"1"`, otherwise both flags refuse
+  to run.
 - `HONUWARE_MAIL_APP_PASSWORD` is **required**. It is read only at seed time
   (`--recreate_database`) and stored in `config_secrets`. If it's unset, the seed
   still succeeds, but the server then refuses to start (`MakeMailHelper` throws
@@ -184,17 +202,42 @@ up the change, close and reopen the folder.
 
 ### 7. Create and seed the dev database
 
-Select `communityfinder_database_helper.exe` as the startup item and run it. It
-drops and recreates the `communityfinder` database, creates the tables, and seeds
-them. A successful run prints:
+Select `communityfinder_database_helper.exe` as the startup item and run it. With
+the two arguments from step 6, it:
+
+1. drops and recreates the `communityfinder` database, creates the tables, and
+   seeds them (`--recreate_database`);
+2. then adds the sample events and guide (`--populate_sample_data`).
+
+A successful run prints both halves (the counts vary):
 
 ```
 [database_helper] event=recreate_database_starting
 Database connection: host=localhost port=5432 dbname=communityfinder user=docker sslmode=disable sslrootcert=<unset>
 [database_helper] event=recreate_database_done
+[database_helper] event=populate_sample_data_starting
+Database connection: host=localhost port=5432 dbname=communityfinder user=docker sslmode=disable sslrootcert=<unset>
+Sample data: … listings created, 0 already there.
+Sample events: … created, 0 moved or updated, 0 unchanged; … approved.
+[database_helper] event=populate_sample_data_done
 ```
 
-and exits with code 0. **Passing tests don't prove this step worked.** The test
+and exits with code 0. **If the `populate_sample_data` lines are missing,** the
+helper didn't get `--populate_sample_data`, and the site will have no events.
+Add it in step 6, re-run the sync script, and run the helper again.
+
+**Re-run the helper after pulling schema changes.** The dev database isn't
+migrated, so after a change adds tables or columns, an old database fails in
+confusing ways until it's recreated. (Example: every event page says *This event
+couldn't be loaded* while the events list still works.)
+
+`--populate_sample_data` can also run on its own: it doesn't wipe anything, and
+it's safe to repeat. A later run moves the same sample events into the four weeks
+after that run instead of adding more, which is handy when the sample events have
+drifted into the past. To do that, temporarily set the helper's `args` to just
+`["--populate_sample_data"]` and re-run the sync script.
+
+**Passing tests don't prove this step worked.** The test
 suite uses its own database (`test_communityfinder_windows`) and builds its tables
 itself, so it passes even when `communityfinder` is empty or missing.
 
@@ -237,7 +280,9 @@ The UI can also be opened as its own folder in a second Visual Studio instance.
 |---|---|
 | `ERROR: Lockfile doesn't exist: …\conan.lock`, followed by `Could not find a package configuration file provided by "Boost"` | Your checkout predates the committed `conan.lock`. Pull, then **Project → Delete Cache and Reconfigure**. The Boost error goes away with the Conan one. |
 | `sync_launch_targets.ps1 cannot be loaded because running scripts is disabled on this system` | PowerShell's default execution policy. See step 6. |
-| The database helper exits immediately with `Specify exactly one of --recreate_database or --migrate`, or the server can't reach the database | The launch settings weren't generated, or were cleared along with `.vs/`. Redo step 6. |
+| The database helper exits immediately with `Specify one of --recreate_database or --migrate, and/or --populate_sample_data.`, or the server can't reach the database | The launch settings weren't generated, or were cleared along with `.vs/`. Redo step 6. |
+| The site loads, but there are no events (and no guide listings) | The database helper ran without `--populate_sample_data`. `--recreate_database` creates no events. Add the flag to the helper's `args` (step 6), re-run the sync script, and run the helper again. |
+| The events list works, but every event page says *This event couldn't be loaded* | The `communityfinder` database is older than the code: a pulled change added tables or columns it doesn't have. Run the database helper again (step 7). |
 | The server fails with `ERROR: relation "config_secrets" does not exist` | The `communityfinder` database exists but is empty: the helper never ran successfully. Redo step 7 and check its output. |
 | The server throws `config_secrets.mail_app_password is empty - cannot send mail` (in `Mail::MakeMailHelper`) | The database was seeded without `HONUWARE_MAIL_APP_PASSWORD`. Add it (step 6), re-run the sync script, then re-run the database helper. |
 | The server crashes and the console window is empty | On Windows, the server's log output is buffered and lost when the process crashes. Run it under the debugger (F5) and read the **Call Stack** window when it stops. Or add `"HONUWARE_LOG_DEST": "C:\\temp\\communityfinder.log"` to the server target's `env`, which logs to a file that is flushed after every line. |

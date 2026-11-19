@@ -12,7 +12,12 @@ import {
 } from '@angular/common/http';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideRouter, withInMemoryScrolling } from '@angular/router';
-import { CsrfInterceptor, HONUWARE_API_BASE, provideHonuwareAccess } from '@honuware/ui/access';
+import {
+  CsrfInterceptor,
+  HONUWARE_API_BASE,
+  PhotoUrlBuilder,
+  provideHonuwareAccess,
+} from '@honuware/ui/access';
 import {
   AUTH_ROUTES,
   AuthRoutes,
@@ -30,6 +35,7 @@ import { provideEventsAdminAccess } from './core/events-admin-access/events-admi
 import { provideEventSubmissionsAccess } from './core/event-submissions-access/event-submissions-access.providers';
 import { SiteConfigService } from './core/services/site-config.service';
 import { HONUWARE_MOCK_OPTIONS } from './core/mock/honuware-mock';
+import { DemoPhotoUrlBuilder, seedDemoPhotos } from './core/mock/demo-photo-art';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -52,8 +58,14 @@ export const appConfig: ApplicationConfig = {
     // `local` build config sets useMock), the real HTTP impls otherwise. This is
     // the DI swap the plan calls for. In mock mode we seed a demo admin + a small
     // CRUD schema/rows so the admin editor is fully navigable offline.
+    // Offline there's no photo scaler either, so the events photos are drawn
+    // (CM3's placeholder art: shapes and color fields, never people), and the
+    // photo store is told which demo rows have one.
     ...(environment.useMock
-      ? provideHonuwareAccessMock(HONUWARE_MOCK_OPTIONS)
+      ? [
+          ...provideHonuwareAccessMock(HONUWARE_MOCK_OPTIONS, seedDemoPhotos),
+          { provide: PhotoUrlBuilder, useClass: DemoPhotoUrlBuilder },
+        ]
       : provideHonuwareAccess()),
     // CommunityFinder's app-specific access (health + site_info). The guide's
     // seam isn't here: the lazy /guide routes provide it (GD3 OQ7 (d)).

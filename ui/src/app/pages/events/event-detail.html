@@ -26,8 +26,8 @@
       </p>
     }
 
-    @if (photoUrl()) {
-      <img class="event-detail__photo" [src]="photoUrl()" alt="" />
+    @if (photoUrl(); as hero) {
+      <img class="event-detail__photo" [src]="hero" alt="" width="1200" height="630" />
     }
 
     <h1 class="event-detail__title">{{ event.title }}</h1>
@@ -111,6 +111,14 @@
         }
       </div>
     }
+
+    <!-- CM3 §5.5: after the hero, the video, then the gallery. -->
+    @if (event.video; as video) {
+      <div class="event-detail__video">
+        <app-video-embed [video]="video" [title]="event.title" />
+      </div>
+    }
+    <app-photo-gallery [photos]="event.gallery" [title]="event.title" [pageUrl]="pageUrl()" />
 
     @if (canManage()) {
       <p class="event-detail__manage">

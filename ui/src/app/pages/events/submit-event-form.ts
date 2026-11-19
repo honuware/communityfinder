@@ -1,8 +1,9 @@
 import {
+  FlyerImageType,
   SubmissionRelationship,
   SubmissionRequest,
 } from '../../core/event-submissions-access/event-submissions-access';
-import { composeEventTimes, EventTimesValue } from '../admin/manage-events-form';
+import { composeEventTimes, EventTimesValue, videoColumnValue } from '../admin/manage-events-form';
 
 // The submit form's model (EV3 §5.2), kept out of the page so the rules are
 // tested on their own: each date row's Seattle wall-clock inputs → `_us`
@@ -52,6 +53,8 @@ export interface SubmitFormValue {
   description: string;
   url: string;
   costText: string;
+  // CM3: a YouTube or Vimeo link as pasted; sent in its canonical form.
+  videoUrl: string;
   categorySlugs: string[];
   sceneTagSlugs: string[];
   regularThing: boolean;
@@ -71,6 +74,7 @@ export const EMPTY_SUBMIT_FORM: SubmitFormValue = {
   description: '',
   url: '',
   costText: '',
+  videoUrl: '',
   categorySlugs: [],
   sceneTagSlugs: [],
   regularThing: false,
@@ -128,6 +132,10 @@ export function composeSubmission(value: SubmitFormValue): ComposedSubmission {
   if (value.placeMode === 'elsewhere' && !value.locationText.trim()) {
     return fail('location_text', 'Say where it is: a place name and address.');
   }
+  const video = videoColumnValue(value.videoUrl);
+  if (!video.ok) {
+    return fail('video_url', video.error);
+  }
   if (!value.agreed) {
     return fail('agreed', 'Please confirm the details are accurate and can be listed publicly.');
   }
@@ -153,6 +161,9 @@ export function composeSubmission(value: SubmitFormValue): ComposedSubmission {
   text('description', value.description);
   text('url', value.url);
   text('cost_text', value.costText);
+  if (video.videoUrl) {
+    request.video_url = video.videoUrl;
+  }
   text('submitter_note', value.submitterNote);
   if (value.categorySlugs.length) {
     request.category_slugs = [...value.categorySlugs];
@@ -165,3 +176,26 @@ export function composeSubmission(value: SubmitFormValue): ComposedSubmission {
   }
   return { ok: true, request };
 }
+
+// CM3 §5.7: the flyer's type as the flyer endpoint names it, or null for
+// anything but a JPEG or PNG (the server takes only those, and the picker
+// lets any image through). A file dragged in from some file managers has no
+// type, so its extension decides.
+export function flyerImageType(file: { type: string; name: string }): FlyerImageType | null {
+  const type = file.type.toLowerCase();
+  if (type === 'image/jpeg' || type === 'image/jpg') {
+    return 'jpeg';
+  }
+  if (type === 'image/png') {
+    return 'png';
+  }
+  if (type) {
+    return null;
+  }
+  if (/\.jpe?g$/i.test(file.name)) {
+    return 'jpeg';
+  }
+  return /\.png$/i.test(file.name) ? 'png' : null;
+}
+
+export const FLYER_TYPE_MESSAGE = 'The flyer must be a JPEG or PNG image.';

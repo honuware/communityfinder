@@ -104,11 +104,72 @@ describe('EventDetailPage', () => {
       startDate: '2026-08-14T21:00:00-07:00',
       url: `${document.location.origin}/events/103`,
     });
-    // No photo uploaded: no og:image, no <img>.
-    expect(document.head.querySelector('meta[property="og:image"]')).toBeNull();
-    expect(element.querySelector('.event-detail__photo')).toBeNull();
     // Not a curator: no edit link.
     expect(link(element, 'edit Edit this event')).toBeUndefined();
+  });
+
+  // CM3 §5.2, §5.5. Leather Night has its own photo, a gallery of four and a
+  // video in the demo data.
+  it('shows its own photo, then its video, then its gallery, without asking has_photo', async () => {
+    const { photo } = configure();
+    const hasPhoto = vi.spyOn(photo, 'hasPhoto');
+    const { element } = await open('/events/103');
+    const document = TestBed.inject(DOCUMENT);
+    const origin = document.location.origin;
+    const heroPath = '/api/get_scaled_photo/events/103/1200/630';
+
+    const hero = element.querySelector('.event-detail__photo')!;
+    expect(hero.getAttribute('src')).toBe(heroPath);
+    expect(document.head.querySelector('meta[property="og:image"]')?.getAttribute('content')).toBe(
+      `${origin}${heroPath}`,
+    );
+    // The main photo, then the gallery's first three, full size.
+    expect(jsonLd(document).image).toEqual([
+      `${origin}${heroPath}`,
+      `${origin}/api/get_scaled_photo/event_gallery_photos/1/1600/1200`,
+      `${origin}/api/get_scaled_photo/event_gallery_photos/2/1600/1200`,
+      `${origin}/api/get_scaled_photo/event_gallery_photos/3/1600/1200`,
+    ]);
+
+    // The video is YouTube's own player from the start (CM3 OQ23), and the
+    // event's photo appears only as the hero, never as a stand-in for the video.
+    const tile = element.querySelector('.video-embed')!;
+    expect(tile.querySelector('iframe')!.getAttribute('src')).toContain(
+      'https://www.youtube-nocookie.com/embed/',
+    );
+    expect(element.querySelectorAll(`img[src="${heroPath}"]`).length).toBe(1);
+    expect(element.querySelectorAll('.photo-gallery__thumb').length).toBe(4);
+
+    const gallery = element.querySelector('.photo-gallery')!;
+    const follows = (first: Element, second: Element) =>
+      Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(hero, tile)).toBe(true);
+    expect(follows(tile, gallery)).toBe(true);
+    expect(hasPhoto).not.toHaveBeenCalled();
+  });
+
+  it("borrows its series' photo, else its venue's; with none, no image at all", async () => {
+    configure();
+    const document = TestBed.inject(DOCUMENT);
+    const hero = (element: HTMLElement) =>
+      element.querySelector('.event-detail__photo')?.getAttribute('src') ?? null;
+    // Bear Happy Hour: the series' photo.
+    const { harness, element } = await open('/events/107');
+    expect(hero(element)).toBe('/api/get_scaled_photo/series/11/1200/630');
+    expect(element.querySelector('.photo-gallery')).toBeNull();
+    expect(element.querySelector('app-video-embed')).toBeNull();
+
+    // The Late Show at Driftwood Hall: the venue's.
+    await harness.navigateByUrl('/events/102');
+    expect(hero(harness.routeNativeElement as HTMLElement)).toBe(
+      '/api/get_scaled_photo/venues/2/1200/630',
+    );
+
+    // Karaoke Night: nothing, and nothing pointing at a missing photo.
+    await harness.navigateByUrl('/events/101');
+    expect(hero(harness.routeNativeElement as HTMLElement)).toBeNull();
+    expect(document.head.querySelector('meta[property="og:image"]')).toBeNull();
+    expect(jsonLd(document).image).toBeUndefined();
   });
 
   it('links a series event to its series, with the tags it inherits', async () => {
@@ -119,19 +180,6 @@ describe('EventDetailPage', () => {
     );
     expect(link(element, 'Bears')?.getAttribute('href')).toBe('/events?scene=bear');
     expect(link(element, 'Bar & club nights')?.getAttribute('href')).toBe('/events?category=bar');
-  });
-
-  it('shows the photo, and gives it to og:image, once the photo check finds one', async () => {
-    const { photo } = configure();
-    await firstValueFrom(photo.uploadPhoto('events', 103, new ArrayBuffer(8), 'image/jpeg'));
-    const { element } = await open('/events/103');
-    const document = TestBed.inject(DOCUMENT);
-    const photoUrl = `${document.location.origin}/api/get_scaled_photo/events/103/1200/630`;
-    expect(element.querySelector('.event-detail__photo')?.getAttribute('src')).toBe(photoUrl);
-    expect(document.head.querySelector('meta[property="og:image"]')?.getAttribute('content')).toBe(
-      photoUrl,
-    );
-    expect(jsonLd(document).image).toEqual([photoUrl]);
   });
 
   it('is a "not found" page for an unlisted event or a bad id', async () => {

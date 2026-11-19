@@ -13,6 +13,10 @@ export interface SiteConfig {
   logoUrl: string;
   logoAltText: string;
   taglineLines: string[];
+  // Where a visitor writes to us: for now, a request to remove a photo (CM3
+  // OQ8, until CM1's report flag). App-static: the address the site's mail
+  // already comes from (the server's mail_sender_address default).
+  contactEmail: string;
 }
 
 // The hardcoded fallback — used until (and if) the /api/site_info fetch resolves,
@@ -23,6 +27,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   logoUrl: '',
   logoAltText: 'CommunityFinder',
   taglineLines: ['Find your community.'],
+  contactEmail: 'community.finder.seattle@gmail.com',
 };
 
 @Injectable({ providedIn: 'root' })

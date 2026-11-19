@@ -2,10 +2,16 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, of, throwError } from 'rxjs';
 import { CommunityAccess, HealthInfo, SiteInfo } from './community-access';
-import { buildEventsMockData, MockEventRecord } from '../mock/events-mock-data';
+import {
+  buildEventsMockData,
+  MockEventRecord,
+  mockGalleryFor,
+  mockSeriesGallery,
+} from '../mock/events-mock-data';
 import { PastEventSettingsMockStore } from '../mock/past-event-settings-mock-store';
 import {
   Category,
+  EventDetail,
   EventSeries,
   EventSeriesDetail,
   EventSettings,
@@ -133,9 +139,13 @@ export class CommunityMockAccess implements CommunityAccess {
     return of(this.pastEventSettings.publicSettings());
   }
 
-  getEvent(id: number): Observable<PublicEvent> {
+  // With its gallery (CM3): its own, else its series'. Only public events
+  // are served here, so the gallery is always the visible one.
+  getEvent(id: number): Observable<EventDetail> {
     const event = this.visible().find((candidate) => candidate.id === id);
-    return event ? of(structuredClone(event)) : notFound('Event not found');
+    return event
+      ? of({ ...structuredClone(event), gallery: mockGalleryFor(event.id, event.series_id) })
+      : notFound('Event not found');
   }
 
   getEventSeriesList(): Observable<EventSeries[]> {
@@ -154,6 +164,7 @@ export class CommunityMockAccess implements CommunityAccess {
     return of({
       series: structuredClone(series),
       upcoming: this.upcoming(window.fromUs, window.toUs, { series_id: series.id }),
+      gallery: mockSeriesGallery(series.id),
     });
   }
 

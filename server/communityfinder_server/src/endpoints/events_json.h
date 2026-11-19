@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include "business_logic/events/event_helper.h"
@@ -28,5 +29,9 @@ Json::Value PublicSeriesListToJson(const std::vector<Events::PublicSeries>& seri
 // CM3: a gallery as [{"id", "alt_text", "caption", "credit"}], in order. The
 // texts stay strings whatever they hold.
 Json::Value GalleryToJson(const std::vector<Events::GalleryPhoto>& gallery);
+
+// CM3: a video as {"provider", "id"}, or a real null. The same shape on every
+// payload that carries one (events, series, "My submissions").
+Json::Value VideoToJson(const std::optional<Events::VideoLink>& video);
 
 }  // namespace Endpoints

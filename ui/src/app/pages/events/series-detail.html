@@ -13,6 +13,9 @@
   } @else if (failed()) {
     <p>This series couldn't be loaded. Please try again in a moment.</p>
   } @else if (detail(); as detail) {
+    @if (photoUrl(); as hero) {
+      <img class="series-detail__photo" [src]="hero" alt="" width="1200" height="630" />
+    }
     <h1 class="series-detail__title">{{ detail.series.title }}</h1>
     @if (whenAndWhere()) {
       <p class="series-detail__when">{{ whenAndWhere() }}</p>
@@ -47,6 +50,18 @@
         }
       </div>
     }
+
+    <!-- CM3 §5.5: after the hero, the video, then the gallery. -->
+    @if (detail.series.video; as video) {
+      <div class="series-detail__video">
+        <app-video-embed [video]="video" [title]="detail.series.title" />
+      </div>
+    }
+    <app-photo-gallery
+      [photos]="detail.gallery"
+      [title]="detail.series.title"
+      [pageUrl]="pageUrl()"
+    />
 
     <h2 class="series-detail__subtitle">Upcoming dates</h2>
     @if (detail.upcoming.length) {

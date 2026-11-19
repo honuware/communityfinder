@@ -8,12 +8,13 @@ import {
   buildPastEventsQueryString,
   categoriesFromRows,
   Category,
+  EventDetail,
   EventSeries,
   EventSeriesDetail,
   EventSettings,
   Neighborhood,
   neighborhoodsFromRows,
-  normalizeEvent,
+  normalizeEventDetail,
   normalizeEventSeriesDetail,
   normalizeEventSeriesList,
   normalizeEventSettings,
@@ -21,7 +22,6 @@ import {
   normalizeUpcomingEvents,
   PastEvents,
   PastEventsQuery,
-  PublicEvent,
   SceneTag,
   sceneTagsFromRows,
   UpcomingEvents,
@@ -71,10 +71,10 @@ export class CommunityHttpAccess implements CommunityAccess {
       .pipe(map(normalizeEventSettings));
   }
 
-  getEvent(id: number): Observable<PublicEvent> {
+  getEvent(id: number): Observable<EventDetail> {
     return this.http
       .get<unknown>(`${this.apiBase}/events/${id}`, { withCredentials: true })
-      .pipe(map(normalizeEvent));
+      .pipe(map(normalizeEventDetail));
   }
 
   getEventSeriesList(): Observable<EventSeries[]> {

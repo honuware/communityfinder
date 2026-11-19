@@ -2,6 +2,7 @@ import { InjectionToken } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   Category,
+  EventDetail,
   EventSeries,
   EventSeriesDetail,
   EventSettings,
@@ -46,8 +47,9 @@ export interface CommunityAccess {
   getEventSettings(): Observable<EventSettings>;
   // GET /api/events/<id> — one public event, past ones within the window
   // included (a curator also gets pending ones, and older ones, with
-  // `status`); errors with a 404 HttpErrorResponse otherwise.
-  getEvent(id: number): Observable<PublicEvent>;
+  // `status`), with its gallery (CM3); errors with a 404 HttpErrorResponse
+  // otherwise.
+  getEvent(id: number): Observable<EventDetail>;
   // GET /api/event_series — the active series, by title.
   getEventSeriesList(): Observable<EventSeries[]>;
   // GET /api/event_series/<slug> — any series, ended ones included, with its

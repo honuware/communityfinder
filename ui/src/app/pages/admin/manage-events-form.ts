@@ -5,6 +5,7 @@ import {
   pacificInputsToUs,
   pacificTimeOfDay,
 } from '../../core/utils/events-date.utils';
+import { parseVideoLink, videoErrorMessage } from '../../core/utils/video-links';
 
 // The event editor's form model, kept out of the page so the rules are
 // tested on their own: Pacific wall-clock inputs → `_us` instants, an events
@@ -28,6 +29,8 @@ export interface EventFormValue {
   locationText: string;
   url: string;
   costText: string;
+  // CM3: a YouTube or Vimeo link as pasted; saved in its canonical form.
+  videoUrl: string;
 }
 
 export const EMPTY_EVENT_FORM: EventFormValue = {
@@ -42,7 +45,23 @@ export const EMPTY_EVENT_FORM: EventFormValue = {
   locationText: '',
   url: '',
   costText: '',
+  videoUrl: '',
 };
+
+// The video field → what the column stores: '' for none, or the canonical
+// link (the column's CHECK takes nothing else). An unreadable link is
+// refused with the words to show; the form never saves it.
+export type VideoColumnValue = { ok: true; videoUrl: string } | { ok: false; error: string };
+
+export function videoColumnValue(text: string): VideoColumnValue {
+  if (!text.trim()) {
+    return { ok: true, videoUrl: '' };
+  }
+  const video = parseVideoLink(text);
+  return video.ok
+    ? { ok: true, videoUrl: video.canonicalUrl }
+    : { ok: false, error: videoErrorMessage(video.errorCode) };
+}
 
 // Just the start and end of the form (the submit form's date rows share it).
 export type EventTimesValue = Pick<
@@ -130,6 +149,7 @@ export function eventFormFromRow(row: Record<string, string>): EventFormValue {
     locationText: row['location_text'] ?? '',
     url: row['url'] ?? '',
     costText: row['cost_text'] ?? '',
+    videoUrl: row['video_url'] ?? '',
   };
 }
 
@@ -141,9 +161,11 @@ export type EventRowValue = Record<string, string>;
 // update, which the server writes as NULL.
 const NUMBER_COLUMNS = ['ends_at_us', 'venue_id', 'series_id'];
 
+// `videoUrl` is the column's value (videoColumnValue's), not the field's text.
 export function eventRowValue(
   value: EventFormValue,
   times: { startsAtUs: number; endsAtUs: number | null },
+  videoUrl = '',
 ): EventRowValue {
   return {
     title: value.title.trim(),
@@ -155,6 +177,7 @@ export function eventRowValue(
     location_text: value.locationText.trim(),
     url: value.url.trim(),
     cost_text: value.costText.trim(),
+    video_url: videoUrl,
   };
 }
 

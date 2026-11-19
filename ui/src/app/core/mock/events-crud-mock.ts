@@ -2,7 +2,7 @@ import { ColumnDataInfo, TableSchema } from '@honuware/ui/access';
 import { MockRow } from '@honuware/ui/testing';
 import { pacificDateTime, pacificWallClockToUs } from '../utils/events-date.utils';
 import { US_PER_DAY } from '../types/events.types';
-import { EventsMockData } from './events-mock-data';
+import { EventsMockData, MOCK_GALLERY, MOCK_VIDEO, MOCK_VIDEO_EVENT_ID } from './events-mock-data';
 
 // The events tables as the offline (mock) generic CRUD store holds them, so
 // the bespoke event editor (/admin/events) works with no server: the pending
@@ -46,7 +46,12 @@ const ID = column('id', 'BIGSERIAL', { readonly: true });
 
 export const EVENTS_CRUD_MOCK_TABLES: TableSchema[] = [
   table('venues', 'Venues', [ID, column('name', 'VARCHAR'), column('address', 'VARCHAR')]),
-  table('series', 'Series', [ID, column('title', 'VARCHAR'), column('slug', 'VARCHAR')]),
+  table('series', 'Series', [
+    ID,
+    column('title', 'VARCHAR'),
+    column('slug', 'VARCHAR'),
+    column('video_url', 'VARCHAR'),
+  ]),
   table(
     'events',
     'Events',
@@ -60,6 +65,7 @@ export const EVENTS_CRUD_MOCK_TABLES: TableSchema[] = [
       column('location_text', 'VARCHAR'),
       column('url', 'VARCHAR'),
       column('cost_text', 'VARCHAR'),
+      column('video_url', 'VARCHAR'),
       column('series_id', 'BIGINT', { nullable: true }),
       column('origin', 'VARCHAR'),
       column('status', 'VARCHAR'),
@@ -100,6 +106,30 @@ export const EVENTS_CRUD_MOCK_TABLES: TableSchema[] = [
     'Event Scene Tags',
     [ID, column('event_id', 'BIGINT'), column('scene_tag_id', 'BIGINT')],
     [{ column_name: 'event_id', parent_table_name: 'events', parent_column_name: 'id' }],
+  ),
+  // CM3: one row per gallery picture, its photo the row's own. Rows are added
+  // through POST /api/admin/event_gallery_photos (the mock's addGalleryPhoto),
+  // which stamps the consent record; edits and deletes are generic CRUD.
+  table(
+    'event_gallery_photos',
+    'Event Gallery Photos',
+    [
+      ID,
+      column('event_id', 'BIGINT', { nullable: true }),
+      column('series_id', 'BIGINT', { nullable: true }),
+      column('sort_order', 'INTEGER'),
+      column('alt_text', 'VARCHAR'),
+      column('caption', 'VARCHAR'),
+      column('credit', 'VARCHAR'),
+      column('consent_confirmed_by_person_id', 'BIGINT', { readonly: true }),
+      column('consent_confirmed_us', 'BIGINT', { readonly: true }),
+      column('created_us', 'BIGINT', { readonly: true }),
+      column('updated_us', 'BIGINT', { readonly: true }),
+    ],
+    [
+      { column_name: 'event_id', parent_table_name: 'events', parent_column_name: 'id' },
+      { column_name: 'series_id', parent_table_name: 'series', parent_column_name: 'id' },
+    ],
   ),
 ];
 
@@ -156,6 +186,10 @@ export function buildEventsCrudSeedRows(data: EventsMockData): Record<string, Mo
       location_text: event.location_text,
       url: event.url,
       cost_text: event.cost_text,
+      // The event's own video, as the column stores it (an inherited one is
+      // the series').
+      video_url:
+        event.id === MOCK_VIDEO_EVENT_ID ? `https://www.youtube.com/watch?v=${MOCK_VIDEO.id}` : '',
       series_id: event.series_id === null ? '' : String(event.series_id),
       origin: event.origin,
       status,
@@ -175,11 +209,30 @@ export function buildEventsCrudSeedRows(data: EventsMockData): Record<string, Mo
       id: String(series.id),
       title: series.title,
       slug: series.slug,
+      video_url: '',
     })),
     events,
     event_category_assignments: categoryRows,
     event_scene_tag_assignments: sceneTagRows,
+    event_gallery_photos: buildGalleryCrudSeedRows(),
   };
+}
+
+// The demo gallery as table rows, its consent record the demo admin's.
+export function buildGalleryCrudSeedRows(): MockRow[] {
+  return MOCK_GALLERY.map((row) => ({
+    id: String(row.id),
+    event_id: row.event_id === null ? '' : String(row.event_id),
+    series_id: row.series_id === null ? '' : String(row.series_id),
+    sort_order: String(row.sort_order),
+    alt_text: row.alt_text,
+    caption: row.caption,
+    credit: row.credit,
+    consent_confirmed_by_person_id: '1',
+    consent_confirmed_us: '0',
+    created_us: '0',
+    updated_us: '0',
+  }));
 }
 
 const HOUR_US = 3_600 * 1_000_000;
@@ -250,6 +303,7 @@ export function buildSubmissionsCrudSeedRows(
     location_text: '',
     url: fields.url,
     cost_text: fields.costText,
+    video_url: '',
     series_id: '',
     origin: 'user_submitted',
     status: 'pending',

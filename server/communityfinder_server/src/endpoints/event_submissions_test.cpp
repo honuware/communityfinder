@@ -541,5 +541,44 @@ TEST(EventSubmissionsEndpointTest, TheFlyerGoesOnYourWaitingDates) {
     Auth::ServerConfig::Shutdown();
 }
 
+// CM3 §5.7: "My submissions" carries each date's photo flag and video, the
+// video in the events' own {provider, id} shape and a real null without one.
+TEST(EventSubmissionsEndpointTest, MineSaysWhichDatesHaveAFlyerAndAVideo) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("MineSaysWhichDatesHaveAFlyerAndAVideo", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        TableHelpers::PhotoTest::EnsurePhotoSupport(transaction, databaseHelper, DbSchema::kEventsTable);
+        SignIn(transaction, testDb, helper, "submitter@example.com", false);
+
+        Json::JsonObject withVideo = Form(NowUs(transaction));
+        withVideo["video_url"] = Json::Value("https://youtu.be/dQw4w9WgXcQ");
+        crow::response first = Submit(helper, withVideo);
+        ASSERT_EQ(first.code, 200) << first.body;
+        const int64_t submissionId = Json::Value::FromText(first.body)["submission_id"].Get<int64_t>();
+        const std::vector<char> jpegBytes = TableHelpers::PhotoTest::MakeTestJpeg(64, 48);
+        ASSERT_EQ(Flyer(helper, submissionId, "jpeg", std::string(jpegBytes.begin(), jpegBytes.end())).code, 200);
+        crow::response second = Submit(helper, Form(NowUs(transaction) + kUsPerHour));
+        ASSERT_EQ(second.code, 200) << second.body;
+
+        crow::response resp = Mine(helper);
+        ASSERT_EQ(resp.code, 200) << resp.body;
+        const Json::Value body = Json::Value::FromText(resp.body);
+        const Json::JsonArray& items = body["items"].GetArray();
+        ASSERT_EQ(items.size(), 2u);
+        // Newest first: the plain one, then the one with a flyer and a video.
+        const Json::Value& plain = items[0]["dates"].GetArray().at(0);
+        EXPECT_FALSE(plain["has_photo"].Get<bool>());
+        EXPECT_TRUE(plain["video"].IsNull());
+        const Json::Value& dressed = items[1]["dates"].GetArray().at(0);
+        EXPECT_TRUE(dressed["has_photo"].Get<bool>());
+        EXPECT_EQ(dressed["video"]["provider"].Get<std::string>(), Events::kVideoProviderYoutube);
+        EXPECT_EQ(dressed["video"]["id"].Get<std::string>(), "dQw4w9WgXcQ");
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
 }  // namespace
 }  // namespace Endpoints

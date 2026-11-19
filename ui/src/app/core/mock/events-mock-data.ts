@@ -2,12 +2,15 @@ import {
   Category,
   EventSeries,
   EventStatus,
+  GalleryPhoto,
   Neighborhood,
   NeighborhoodRegion,
+  PhotoRef,
   PublicEvent,
   SceneCoverage,
   SceneTag,
   US_PER_DAY,
+  VideoRef,
 } from '../types/events.types';
 import {
   pacificDateTime,
@@ -158,8 +161,97 @@ const EASTSIDE_COMMONS: MockVenue = {
   neighborhoodSlug: 'bellevue',
 };
 
+// ---- photos, the gallery and the video (CM3) ----
+//
+// Which demo rows have a photo of their own. The pages get the server's
+// fallback from it (an event's own, else its series', else its venue's), so
+// the demo shows each case: Leather Night has its own, the Bear Happy Hour
+// dates borrow the series', the Driftwood Hall nights borrow the venue's,
+// and the rest have none (the gradient tile). The pictures themselves are
+// generated shapes, never people (core/mock/demo-photo-art).
+export const MOCK_PHOTO_OWNERS: Readonly<Record<'events' | 'series' | 'venues', number[]>> = {
+  events: [103],
+  series: [11],
+  venues: [2],
+};
+
+// One gallery row as the offline CRUD store and the public pages share it.
+export interface MockGalleryRow extends GalleryPhoto {
+  event_id: number | null;
+  series_id: number | null;
+  sort_order: number;
+}
+
+// Leather Night's gallery: four pictures, in order. Captions and alt text
+// never name attendees (the photo policy).
+export const MOCK_GALLERY: readonly MockGalleryRow[] = [
+  {
+    id: 1,
+    event_id: 103,
+    series_id: null,
+    sort_order: 1,
+    alt_text: 'The bar lit in deep red, with a mirror ball over the dance floor',
+    caption: 'The main room before doors.',
+    credit: 'Photo: The Lantern Room',
+  },
+  {
+    id: 2,
+    event_id: 103,
+    series_id: null,
+    sort_order: 2,
+    alt_text: 'The night’s flyer: a black harness drawn over a coral sunset',
+    caption: '',
+    credit: 'Flyer art: the organizers',
+  },
+  {
+    id: 3,
+    event_id: 103,
+    series_id: null,
+    sort_order: 3,
+    alt_text: 'A crowded dance floor from the balcony, faces too small to recognize',
+    caption: 'Midnight on the floor.',
+    credit: '',
+  },
+  {
+    id: 4,
+    event_id: 103,
+    series_id: null,
+    sort_order: 4,
+    alt_text: 'The DJ booth, with the DJ’s hands on the mixer',
+    caption: 'DJ set until close.',
+    credit: 'Photo: the DJ',
+  },
+];
+
+// Leather Night's video. A made-up id of the right shape, so the offline demo
+// shows the play tile and builds the player without pointing at anyone's
+// real video (pressing play shows YouTube's "unavailable").
+export const MOCK_VIDEO: VideoRef = { provider: 'youtube', id: 'demoVideo01' };
+export const MOCK_VIDEO_EVENT_ID = 103;
+
+function ownPhoto(table: keyof typeof MOCK_PHOTO_OWNERS, id: number | null): PhotoRef | null {
+  return id !== null && MOCK_PHOTO_OWNERS[table].includes(id) ? { table, id } : null;
+}
+
+// The gallery an event page shows: its own, else its series' (OQ7).
+export function mockGalleryFor(eventId: number, seriesId: number | null): GalleryPhoto[] {
+  const own = galleryRows((row) => row.event_id === eventId);
+  return own.length || seriesId === null ? own : galleryRows((row) => row.series_id === seriesId);
+}
+
+// A series page's: its own.
+export function mockSeriesGallery(seriesId: number): GalleryPhoto[] {
+  return galleryRows((row) => row.series_id === seriesId);
+}
+
+function galleryRows(match: (row: MockGalleryRow) => boolean): GalleryPhoto[] {
+  return MOCK_GALLERY.filter(match)
+    .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
+    .map(({ id, alt_text, caption, credit }) => ({ id, alt_text, caption, credit }));
+}
+
 function makeSeries(
-  fields: Omit<EventSeries, 'venue_id' | 'venue_name' | 'neighborhood_slug'>,
+  fields: Omit<EventSeries, 'venue_id' | 'venue_name' | 'neighborhood_slug' | 'photo' | 'video'>,
   venue?: MockVenue,
 ): EventSeries {
   return {
@@ -167,6 +259,8 @@ function makeSeries(
     venue_id: venue?.id ?? null,
     venue_name: venue?.name ?? '',
     neighborhood_slug: venue?.neighborhoodSlug ?? '',
+    photo: ownPhoto('series', fields.id) ?? ownPhoto('venues', venue?.id ?? null),
+    video: null,
   };
 }
 
@@ -199,6 +293,7 @@ interface EventSpec {
 
 function makeEvent(spec: EventSpec): MockEventRecord {
   const { venue, series } = spec;
+  const ownVideo = spec.id === MOCK_VIDEO_EVENT_ID ? { ...MOCK_VIDEO } : null;
   return {
     status: spec.status ?? 'approved',
     event: {
@@ -224,6 +319,13 @@ function makeEvent(spec: EventSpec): MockEventRecord {
       series_slug: series?.slug ?? '',
       series_title: series?.title ?? '',
       origin: 'manual',
+      // The server's picks: own, else the series', else the venue's (OQ2),
+      // and the video, own else the series' (OQ7).
+      photo:
+        ownPhoto('events', spec.id) ??
+        ownPhoto('series', series?.id ?? null) ??
+        ownPhoto('venues', venue?.id ?? null),
+      video: ownVideo ?? series?.video ?? null,
     },
   };
 }

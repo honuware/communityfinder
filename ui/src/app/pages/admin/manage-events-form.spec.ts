@@ -1,5 +1,10 @@
 import { pacificWallClockToUs } from '../../core/utils/events-date.utils';
 import {
+  VIDEO_ERROR_BAD_URL,
+  VIDEO_ERROR_HOST_NOT_SUPPORTED,
+  videoErrorMessage,
+} from '../../core/utils/video-links';
+import {
   assignmentChanges,
   composeEventTimes,
   EMPTY_EVENT_FORM,
@@ -9,6 +14,7 @@ import {
   nextDayEndNote,
   rowChanges,
   rowForCreate,
+  videoColumnValue,
 } from './manage-events-form';
 
 function utc(year: number, month: number, day: number, hour = 0, minute = 0): number {
@@ -137,6 +143,31 @@ describe('manage-events-form', () => {
     });
   });
 
+  describe('videoColumnValue', () => {
+    it('stores nothing for a blank field', () => {
+      expect(videoColumnValue('')).toEqual({ ok: true, videoUrl: '' });
+      expect(videoColumnValue('   ')).toEqual({ ok: true, videoUrl: '' });
+    });
+
+    it('stores a Vimeo link in its canonical form', () => {
+      expect(videoColumnValue(' https://player.vimeo.com/video/76979871 ')).toEqual({
+        ok: true,
+        videoUrl: 'https://vimeo.com/76979871',
+      });
+    });
+
+    it('refuses another site, and a link that names no one video, saying which', () => {
+      expect(videoColumnValue('https://www.tiktok.com/@someone/video/1')).toEqual({
+        ok: false,
+        error: videoErrorMessage(VIDEO_ERROR_HOST_NOT_SUPPORTED),
+      });
+      expect(videoColumnValue('https://www.youtube.com/@someone')).toEqual({
+        ok: false,
+        error: videoErrorMessage(VIDEO_ERROR_BAD_URL),
+      });
+    });
+  });
+
   it('loads an events row into the form in Seattle time', () => {
     const row = {
       id: '7',
@@ -149,6 +180,7 @@ describe('manage-events-form', () => {
       location_text: '',
       url: '',
       cost_text: '$10 cover',
+      video_url: 'https://vimeo.com/76979871',
     };
     // A 9 PM – 2 AM night: the end time alone says it, so no end date.
     expect(eventFormFromRow(row)).toEqual({
@@ -163,7 +195,9 @@ describe('manage-events-form', () => {
       locationText: '',
       url: '',
       costText: '$10 cover',
+      videoUrl: 'https://vimeo.com/76979871',
     });
+    expect(eventFormFromRow({ starts_at_us: row.starts_at_us }).videoUrl).toBe('');
     expect(eventFormFromRow({ ...row, ends_at_us: '' })).toMatchObject({
       endDate: '',
       endTime: '',
@@ -207,10 +241,23 @@ describe('manage-events-form', () => {
         location_text: '',
         url: '',
         cost_text: 'Free',
+        // Text, so '' (none) is written as it is.
+        video_url: '',
         status: 'pending',
         created_by_person_id: '3',
       });
       expect(rowForCreate(row, null)['created_by_person_id']).toBeUndefined();
+    });
+
+    it('writes the video link it is given, which is the canonical one', () => {
+      const video = videoColumnValue('https://youtu.be/dQw4w9WgXcQ?t=42');
+      expect(video).toEqual({ ok: true, videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
+      const row = eventRowValue(form({}), times, video.ok ? video.videoUrl : '');
+      expect(row['video_url']).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+      // Unchanged when it was already saved that way.
+      expect(
+        rowChanges(row, { ...row, video_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }),
+      ).toEqual({});
     });
 
     it('sends only what changed on an edit, a cleared number column as blank', () => {

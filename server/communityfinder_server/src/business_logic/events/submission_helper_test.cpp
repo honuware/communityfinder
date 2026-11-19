@@ -829,6 +829,55 @@ TEST(SubmissionHelperTest, AFlyerGoesOnEveryPendingDate) {
     });
 }
 
+// CM3 §5.7: "My submissions" says which dates have a photo and a video. A
+// photo the date only borrows from its venue isn't the date's own.
+TEST(SubmissionHelperTest, MySubmissionsSayWhichDatesHaveAPhotoAndAVideo) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("MySubmissionsSayWhichDatesHaveAPhotoAndAVideo", [&](Transaction& transaction) {
+        DatabaseHelper db = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, db);
+        TableHelpers::PhotoTest::EnsurePhotoSupport(transaction, db, DbSchema::kEventsTable);
+        TableHelpers::PhotoTest::AttachTestPhoto(transaction, db, DbSchema::kVenuesTable, world.venueOne);
+        Secrets::SecretsHelperPtr secrets = Secrets::MakeSecretsHelper(db);
+        int64_t personId = AddVerifiedPerson(transaction, db, "submitter@example.com");
+        SubmissionHelper helper(db);
+
+        SubmissionRequest request = MakeRequest(NowUs(transaction), 2);
+        request.venueId = world.venueOne;
+        request.videoUrl = "https://vimeo.com/76979871";
+        SubmitResult submitted = helper.Submit(transaction, *secrets, request, personId);
+        ASSERT_TRUE(submitted.ok) << submitted.errorCode;
+        // Before the flyer: the venue has a photo, the dates don't.
+        std::vector<SubmissionView> mine = helper.GetMySubmissions(transaction, personId);
+        ASSERT_EQ(mine.size(), 1u);
+        ASSERT_EQ(mine[0].dates.size(), 2u);
+        for (const SubmissionDateView& date : mine[0].dates) {
+            EXPECT_FALSE(date.hasPhoto) << date.eventId;
+            ASSERT_TRUE(date.video.has_value()) << date.eventId;
+            EXPECT_EQ(date.video->provider, kVideoProviderVimeo);
+            EXPECT_EQ(date.video->id, "76979871");
+        }
+
+        // The first date is decided, so the flyer goes on the second only.
+        ASSERT_TRUE(helper.ReviewDate(transaction, submitted.eventIds[0], ReviewAction::Approve,
+                                      kCuratorId, "", {}).review.ok);
+        ASSERT_TRUE(helper.AttachFlyer(transaction, secrets, submitted.submissionId, personId,
+                                       "jpeg", TableHelpers::PhotoTest::MakeTestJpeg(64, 48)).ok);
+        mine = helper.GetMySubmissions(transaction, personId);
+        ASSERT_EQ(mine[0].dates.size(), 2u);
+        EXPECT_EQ(mine[0].dates[0].eventId, submitted.eventIds[0]);
+        EXPECT_FALSE(mine[0].dates[0].hasPhoto);
+        EXPECT_TRUE(mine[0].dates[1].hasPhoto);
+
+        // No link, no video.
+        ASSERT_TRUE(helper.Submit(transaction, *secrets, MakeRequest(NowUs(transaction) + kUsPerHour), personId).ok);
+        mine = helper.GetMySubmissions(transaction, personId);
+        ASSERT_EQ(mine.size(), 2u);
+        EXPECT_FALSE(mine[0].dates[0].video.has_value());
+        EXPECT_FALSE(mine[0].dates[0].hasPhoto);
+    });
+}
+
 TEST(SubmissionHelperTest, AFlyerIsRefusedWithoutWritingAnything) {
     TestDatabaseUtil testDb;
     testDb.RunInTransaction("AFlyerIsRefusedWithoutWritingAnything", [&](Transaction& transaction) {

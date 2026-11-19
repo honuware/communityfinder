@@ -5,6 +5,8 @@ import { HONUWARE_API_BASE } from '@honuware/ui/access';
 import { toSubmissionProblem } from '../event-submissions-access/event-submissions-access';
 import {
   EventsAdminAccess,
+  GallerySettings,
+  NewGalleryPhoto,
   PastEventSettings,
   PastEventSettingsUpdate,
   ReviewAction,
@@ -13,6 +15,7 @@ import {
   ReviewSubmissionResult,
   SubmissionSettings,
   SubmissionSettingsUpdate,
+  toGalleryProblem,
 } from './events-admin-access';
 
 // The real HTTP implementation. `withCredentials` carries the curator's session
@@ -79,6 +82,32 @@ export class EventsAdminHttpAccess implements EventsAdminAccess {
       .put<PastEventSettings>(`${this.apiBase}/admin/past_event_settings`, update, {
         withCredentials: true,
       })
+      .pipe(catchError((error) => throwError(() => toSubmissionProblem(error))));
+  }
+
+  addGalleryPhoto(photo: NewGalleryPhoto): Observable<{ id: number }> {
+    return this.http
+      .post<{ id: number }>(`${this.apiBase}/admin/event_gallery_photos`, photo, {
+        withCredentials: true,
+      })
+      .pipe(catchError((error) => throwError(() => toGalleryProblem(error))));
+  }
+
+  getGallerySettings(): Observable<GallerySettings> {
+    return this.http
+      .get<GallerySettings>(`${this.apiBase}/admin/event_gallery_settings`, {
+        withCredentials: true,
+      })
+      .pipe(catchError((error) => throwError(() => toSubmissionProblem(error))));
+  }
+
+  saveGallerySettings(maxPhotos: number): Observable<GallerySettings> {
+    return this.http
+      .put<GallerySettings>(
+        `${this.apiBase}/admin/event_gallery_settings`,
+        { event_gallery_max_photos: maxPhotos },
+        { withCredentials: true },
+      )
       .pipe(catchError((error) => throwError(() => toSubmissionProblem(error))));
   }
 }

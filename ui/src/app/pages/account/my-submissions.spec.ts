@@ -17,13 +17,21 @@ const FRIDAY_9PM = pacificWallClockToUs(2026, 8, 14, 21);
 const HOUR_US = 3_600 * 1_000_000;
 const DAY_US = 24 * HOUR_US;
 
-function date(eventId: number, state: SubmissionDateState, dayOffset = 0): MySubmissionDate {
+function date(
+  eventId: number,
+  state: SubmissionDateState,
+  dayOffset = 0,
+  fields: Partial<MySubmissionDate> = {},
+): MySubmissionDate {
   return {
     event_id: eventId,
     title: 'Queer Craft Night',
     starts_at_us: FRIDAY_9PM + dayOffset * DAY_US,
     ends_at_us: FRIDAY_9PM + dayOffset * DAY_US + 2 * HOUR_US,
     state,
+    has_photo: false,
+    video: null,
+    ...fields,
   };
 }
 
@@ -46,7 +54,11 @@ const MINE: MySubmission[] = [
   submission(5, [date(51, 'waiting'), date(52, 'waiting', 7), date(53, 'listed', 14)], {
     regular_thing: true,
   }),
-  submission(4, [date(41, 'listed')], { relationship: 'attendee' }),
+  submission(
+    4,
+    [date(41, 'listed', 0, { has_photo: true, video: { provider: 'vimeo', id: '76979871' } })],
+    { relationship: 'attendee' },
+  ),
   submission(3, [date(31, 'not_listed')], {
     reject_reason: 'missing-details',
     message_to_submitter: 'Which room is it in?',
@@ -143,6 +155,15 @@ describe('MySubmissionsPage', () => {
     // A withdrawal is the submitter's own doing: no "why".
     expect(card(element, 2).querySelector('.my-submissions__reason')).toBeNull();
     expect(card(element, 4).querySelector('.my-submissions__reason')).toBeNull();
+  });
+
+  // CM3 §5.7.
+  it('says when a date came with a photo or a video, and nothing when not', () => {
+    const { element } = render();
+    expect(text(card(element, 4).querySelector('.my-submissions__extras'))).toBe(
+      'With a photo · With a Vimeo video',
+    );
+    expect(card(element, 5).querySelector('.my-submissions__extras')).toBeNull();
   });
 
   it('offers Withdraw only while a date is waiting', () => {

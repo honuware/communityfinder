@@ -30,9 +30,14 @@
 .event-detail__photo {
   display: block;
   width: 100%;
+  height: auto;
   max-height: 360px;
   object-fit: cover;
   border-radius: 12px;
+}
+
+.event-detail__video {
+  margin: 24px 0 0;
 }
 
 .event-detail__facts {

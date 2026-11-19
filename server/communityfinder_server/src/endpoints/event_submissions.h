@@ -38,8 +38,10 @@ Json::Value PostEventSubmission(
 // GET /api/event_submissions/mine — the caller's submissions, newest first:
 // {"items": [{"id", "created_us", "relationship", "regular_thing",
 // "submitter_note", "reject_reason", "message_to_submitter", "dates":
-// [{"event_id", "title", "starts_at_us", "ends_at_us", "state"}]}]}. `state` is
-// waiting / listed / not_listed / withdrawn / past. No curator notes.
+// [{"event_id", "title", "starts_at_us", "ends_at_us", "state", "has_photo",
+// "video"}]}]}. `state` is waiting / listed / not_listed / withdrawn / past.
+// CM3: `has_photo` is whether the date has a photo of its own (the flyer, or a
+// curator's), and `video` is {"provider", "id"} or null. No curator notes.
 Json::Value GetMyEventSubmissions(
     EndpointAuthHelper& endpointAuthHelper,
     const crow::request& req,

@@ -116,6 +116,22 @@
       <input matInput type="url" formControlName="url" />
     </mat-form-field>
 
+    <!-- CM3 §5.6: says what it found as it's typed; saved canonical. -->
+    @let video = videoFeedback();
+    <mat-form-field appearance="outline" class="event-editor__wide" subscriptSizing="dynamic">
+      <mat-label>Video (YouTube or Vimeo)</mat-label>
+      <input matInput type="url" formControlName="videoUrl" />
+      @if (video.message) {
+        <mat-hint
+          class="event-editor__video-feedback"
+          [class.event-editor__video-feedback--bad]="!video.ok"
+          >{{ video.message }}</mat-hint
+        >
+      } @else {
+        <mat-hint>Paste the address of the video's own page. It plays only when pressed.</mat-hint>
+      }
+    </mat-form-field>
+
     <fieldset class="event-editor__group event-editor__tags">
       <legend>Categories</legend>
       @for (tag of categories(); track tag.id) {
@@ -153,4 +169,22 @@
       </button>
     </div>
   </form>
+
+  <!-- CM3 §5.6: these save on their own, so they need a saved event. -->
+  @if (editingId(); as id) {
+    <section class="event-editor__media">
+      <h4 class="event-editor__media-title">Main photo</h4>
+      <p class="event-editor__hint">
+        Shown on the event's page and in lists. With none, the event shows its series' photo, then
+        its venue's. It saves as soon as it's chosen.
+      </p>
+      <app-photo-policy-note />
+      <hw-photo-upload [tableName]="'events'" [tableItemId]="editingNumber(id)" />
+    </section>
+    <app-event-gallery-editor class="event-editor__media" [eventId]="editingNumber(id)" />
+  } @else {
+    <p class="event-editor__hint event-editor__media-later">
+      Once the event is added, open it again to give it a photo and a gallery.
+    </p>
+  }
 }

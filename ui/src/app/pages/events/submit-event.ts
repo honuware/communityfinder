@@ -1,7 +1,8 @@
-import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormArray, FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { catchError, defer, map, Observable, of, switchMap } from 'rxjs';
 import {
   MatAutocompleteModule,
   MatAutocompleteSelectedEvent,
@@ -18,10 +19,12 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatSelectModule } from '@angular/material/select';
 import { AuthService } from '@honuware/ui/auth';
 import { SimpleDateComponent } from '@honuware/ui/controls';
+import { PhotoUploadComponent } from '@honuware/ui/photos';
 import { COMMUNITY_ACCESS } from '../../core/community-access/community-access';
 import {
   EMAIL_NOT_VERIFIED,
   EVENT_SUBMISSIONS_ACCESS,
+  FlyerImageType,
   SUBMISSIONS_PAUSED,
   SubmissionProblem,
   SubmissionRelationship,
@@ -45,16 +48,25 @@ import { eventPagePath } from '../../core/utils/event-links';
 import { formatEventShortDate, formatEventTime } from '../../core/utils/events-date.utils';
 import { PageMeta } from '../../core/utils/page-meta';
 import { RELATIONSHIPS } from '../../core/utils/submission-labels';
+import { VideoFieldFeedback, videoFieldFeedback } from '../../core/utils/video-links';
 import { nextDayEndNote } from '../admin/manage-events-form';
 import {
   composeSubmission,
   dateRowTimes,
   EMPTY_SUBMIT_DATE,
+  FLYER_TYPE_MESSAGE,
+  flyerImageType,
   MAX_SUBMISSION_DATES,
   PlaceMode,
   SubmitDateValue,
   SubmitFormValue,
 } from './submit-event-form';
+
+// How the flyer went, said on the thanks panel; null when none was chosen.
+export interface FlyerOutcome {
+  ok: boolean;
+  message: string;
+}
 
 // At most this many categories, and this many scenes (the server's rule).
 export const MAX_TAGS_PER_KIND = 3;
@@ -69,6 +81,10 @@ const FORM_FIELDS = [
   'description',
   'url',
   'cost_text',
+  'video_url',
+  // Never named by the server (a flyer goes up after the send); the browser's
+  // own type check.
+  'flyer',
   'category_slugs',
   'scene_tag_slugs',
   'relationship',
@@ -102,6 +118,12 @@ function dateGroup(value: SubmitDateValue = EMPTY_SUBMIT_DATE) {
 // - A refusal shows next to the field it names, and a date's next to its row.
 // - After sending: thanks, any listed events that look the same, and links to
 //   "My submissions" and another submission.
+// - CM3 §5.7: an optional video link, checked as it's typed and sent in its
+//   canonical form, and an optional flyer (a JPEG or PNG, picked with
+//   hw-photo-upload held back). The flyer goes up only once the submission is
+//   in, to /api/event_submissions/<id>/photo/<type>, which puts it on every
+//   pending date; if that fails the submission still stands and the thanks
+//   says the flyer didn't make it.
 @Component({
   selector: 'app-submit-event',
   imports: [
@@ -117,6 +139,7 @@ function dateGroup(value: SubmitDateValue = EMPTY_SUBMIT_DATE) {
     MatProgressSpinnerModule,
     MatRadioModule,
     MatSelectModule,
+    PhotoUploadComponent,
     SimpleDateComponent,
   ],
   providers: [
@@ -159,6 +182,9 @@ export class SubmitEventPage implements OnInit {
   readonly unverified = signal(false);
   readonly sending = signal(false);
   readonly sent = signal<SubmissionResult | null>(null);
+  readonly flyerOutcome = signal<FlyerOutcome | null>(null);
+
+  private readonly flyerPicker = viewChild(PhotoUploadComponent);
 
   // Refusals: by field (JSON name), by date row, and for the form as a whole.
   readonly fieldErrors = signal<Record<string, string>>({});
@@ -190,6 +216,7 @@ export class SubmitEventPage implements OnInit {
     description: new FormControl('', { nonNullable: true }),
     url: new FormControl('', { nonNullable: true }),
     costText: new FormControl('', { nonNullable: true }),
+    videoUrl: new FormControl('', { nonNullable: true }),
     regularThing: new FormControl(false, { nonNullable: true }),
     relationship: new FormControl<SubmissionRelationship>('organizer', { nonNullable: true }),
     submitterNote: new FormControl('', { nonNullable: true }),
@@ -313,6 +340,11 @@ export class SubmitEventPage implements OnInit {
     return nextDayEndNote(dateRowTimes(row));
   }
 
+  // Under the video field, as it's typed: '' while blank.
+  videoFeedback(): VideoFieldFeedback {
+    return videoFieldFeedback(this.form.controls.videoUrl.value);
+  }
+
   send(): void {
     this.clearErrors();
     const composed = composeSubmission(this.formValue());
@@ -320,13 +352,28 @@ export class SubmitEventPage implements OnInit {
       this.showProblem(composed.field, composed.dateIndex, composed.message);
       return;
     }
+    // Taken now: the picker goes away with the form once it's sent.
+    const flyer = this.flyerPicker()?.pendingFile ?? null;
+    const flyerType = flyer ? flyerImageType(flyer) : null;
+    if (flyer && !flyerType) {
+      this.showProblem('flyer', null, FLYER_TYPE_MESSAGE);
+      return;
+    }
     this.sending.set(true);
     this.submissions
       .submit(composed.request)
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(
+        switchMap((result) =>
+          this.attachFlyer(result, flyer, flyerType).pipe(
+            map((flyerOutcome) => ({ result, flyerOutcome })),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
-        next: (result) => {
+        next: ({ result, flyerOutcome }) => {
           this.sending.set(false);
+          this.flyerOutcome.set(flyerOutcome);
           this.sent.set(result);
         },
         error: (error: unknown) => {
@@ -339,6 +386,9 @@ export class SubmitEventPage implements OnInit {
   // "Submit another": a fresh form.
   startOver(): void {
     this.sent.set(null);
+    this.flyerOutcome.set(null);
+    // The thanks panel normally takes the picker away; clear it all the same.
+    this.flyerPicker()?.clearPendingFile();
     this.clearErrors();
     this.form.reset();
     this.dateRows.clear();
@@ -381,6 +431,31 @@ export class SubmitEventPage implements OnInit {
     this.state.set('open');
   }
 
+  // The flyer, once the submission is in. Never an error: the submission
+  // stands either way, and the outcome says how the flyer went. A honeypot
+  // send (submission_id 0) has nothing to attach to, and is told nothing.
+  private attachFlyer(
+    result: SubmissionResult,
+    flyer: File | null,
+    flyerType: FlyerImageType | null,
+  ): Observable<FlyerOutcome | null> {
+    if (!flyer || !flyerType || !result.submission_id) {
+      return of(null);
+    }
+    return defer(() => flyer.arrayBuffer()).pipe(
+      switchMap((bytes) => this.submissions.attachFlyer(result.submission_id, bytes, flyerType)),
+      map(() => ({ ok: true, message: 'Your flyer is attached.' })),
+      catchError((error: unknown) =>
+        of({
+          ok: false,
+          message:
+            "Your event was sent, but its flyer couldn't be added. " +
+            (toSubmissionProblem(error).detail || 'Please try again later.'),
+        }),
+      ),
+    );
+  }
+
   private onRefused(problem: SubmissionProblem): void {
     if (problem.error_code === SUBMISSIONS_PAUSED) {
       // The form's values stay in `form`; "Check again" brings it back.
@@ -421,6 +496,7 @@ export class SubmitEventPage implements OnInit {
       description: raw.description,
       url: raw.url,
       costText: raw.costText,
+      videoUrl: raw.videoUrl,
       categorySlugs: this.categorySlugs(),
       sceneTagSlugs: this.sceneTagSlugs(),
       regularThing: raw.regularThing,

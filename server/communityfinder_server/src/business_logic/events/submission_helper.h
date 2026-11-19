@@ -168,6 +168,11 @@ struct SubmissionDateView {
     int64_t startsAtUs = 0;
     std::optional<int64_t> endsAtUs;
     std::string state;  // kSubmissionDate*
+    // CM3 §5.7, so "My submissions" can show what came with the date: whether
+    // it has a photo of its own (the submitter's flyer, or one a curator
+    // added; not one borrowed from its venue), and its video link.
+    bool hasPhoto = false;
+    std::optional<VideoLink> video;
 };
 
 // One submission as its submitter sees it. Deliberately has no curator note

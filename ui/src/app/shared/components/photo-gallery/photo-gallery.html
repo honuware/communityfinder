@@ -1,0 +1,91 @@
+@if (thumbs().length) {
+  <section class="photo-gallery" aria-labelledby="photo-gallery-heading">
+    <h2 class="photo-gallery__heading" id="photo-gallery-heading">Photos</h2>
+    <ul class="photo-gallery__grid">
+      @for (thumb of thumbs(); track thumb.photo.id; let index = $index) {
+        <li>
+          <!-- The button's name is the photo's alt text. -->
+          <button
+            type="button"
+            class="photo-gallery__thumb"
+            (click)="open(index, $event.currentTarget)"
+          >
+            <img
+              [src]="thumb.url"
+              [alt]="thumb.photo.alt_text"
+              loading="lazy"
+              width="480"
+              height="360"
+            />
+          </button>
+        </li>
+      }
+    </ul>
+    <p class="photo-gallery__removal">
+      <a [href]="galleryRemovalHref()">Ask us to remove a photo</a>
+    </p>
+
+    @if (current(); as photo) {
+      <div
+        class="photo-gallery__viewer"
+        role="dialog"
+        aria-modal="true"
+        [attr.aria-label]="'Photo ' + position()"
+        cdkTrapFocus
+        (click)="onBackdropClick($event)"
+        (touchstart)="onTouchStart($event)"
+        (touchend)="onTouchEnd($event)"
+      >
+        <button
+          #closeButton
+          type="button"
+          class="photo-gallery__close"
+          aria-label="Close"
+          (click)="close()"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+
+        <figure class="photo-gallery__figure">
+          <img class="photo-gallery__full" [src]="currentUrl()" [alt]="photo.alt_text" />
+          @if (photo.caption || photo.credit) {
+            <figcaption class="photo-gallery__caption">
+              @if (photo.caption) {
+                <span class="photo-gallery__caption-text">{{ photo.caption }}</span>
+              }
+              @if (photo.credit) {
+                <span class="photo-gallery__credit">{{ photo.credit }}</span>
+              }
+            </figcaption>
+          }
+        </figure>
+
+        @if (thumbs().length > 1) {
+          <button
+            type="button"
+            class="photo-gallery__step photo-gallery__step--previous"
+            aria-label="Previous photo"
+            (click)="previous()"
+          >
+            <mat-icon>chevron_left</mat-icon>
+          </button>
+          <button
+            type="button"
+            class="photo-gallery__step photo-gallery__step--next"
+            aria-label="Next photo"
+            (click)="next()"
+          >
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+        }
+
+        <p class="photo-gallery__footer">
+          <span class="photo-gallery__position" aria-live="polite">{{ position() }}</span>
+          <a class="photo-gallery__removal-link" [href]="photoRemovalHref()">
+            Ask us to remove this photo
+          </a>
+        </p>
+      </div>
+    }
+  </section>
+}

@@ -28,10 +28,13 @@ function buildLocation(event: PublicEvent): JsonLd | null {
   return null;
 }
 
+// `imageUrls`: absolute addresses, the main photo first, then up to three
+// from the gallery (CM3 §5.5). Google takes several and picks the one that
+// fits its layout; none, and the key is left out.
 export function buildEventJsonLd(
   event: PublicEvent,
   canonicalUrl: string,
-  imageUrl?: string,
+  imageUrls: readonly string[] = [],
 ): JsonLd {
   const location = buildLocation(event);
   return {
@@ -44,7 +47,7 @@ export function buildEventJsonLd(
     eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
     ...(location ? { location } : {}),
     ...(event.description ? { description: event.description } : {}),
-    ...(imageUrl ? { image: [imageUrl] } : {}),
+    ...(imageUrls.length ? { image: [...imageUrls] } : {}),
     url: canonicalUrl,
     ...(isFree(event.cost_text)
       ? { offers: { '@type': 'Offer', price: 0, priceCurrency: 'USD', url: canonicalUrl } }

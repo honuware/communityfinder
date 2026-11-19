@@ -1,0 +1,13 @@
+@if (playable()) {
+  <div class="video-embed">
+    <iframe
+      class="video-embed__frame"
+      [src]="frameUrl()"
+      [title]="frameTitle()"
+      loading="lazy"
+      allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+      allowfullscreen
+      referrerpolicy="strict-origin-when-cross-origin"
+    ></iframe>
+  </div>
+}

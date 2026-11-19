@@ -1,14 +1,17 @@
 import { inject, Injectable } from '@angular/core';
 import { concat, forkJoin, last, map, Observable, of, switchMap, throwError } from 'rxjs';
-import { FilterPair, HONUWARE_CRUD_ACCESS } from '@honuware/ui/access';
+import { FilterPair, HONUWARE_CRUD_ACCESS, HONUWARE_PHOTO_ACCESS } from '@honuware/ui/access';
 import { AuthService } from '@honuware/ui/auth';
 import { buildEventsMockData } from '../mock/events-mock-data';
 import { SubmissionSettingsMockStore } from '../mock/submission-settings-mock-store';
 import { dataResultsToRecords, US_PER_DAY } from '../types/events.types';
 import { isPossibleDuplicate } from '../utils/duplicate-hints';
 import { nowUs } from '../utils/events-date.utils';
+import { parseVideoLink, VIDEO_ERROR_HOST_NOT_SUPPORTED } from '../utils/video-links';
 import {
   EventSubmissionsAccess,
+  FlyerImageType,
+  FlyerResult,
   MySubmission,
   MySubmissionDate,
   PossibleDuplicate,
@@ -32,10 +35,12 @@ const WITHDRAWN_NOTE = 'withdrawn by the submitter';
 // (the pause switch, the agreement, the title, the dates, the venue, the link
 // and both rate limits, the last two from the shared SubmissionSettingsMockStore),
 // and fakes the duplicate hints from the store's approved events by the
-// server's two rules.
+// server's two rules. A flyer goes into the offline photo store on every
+// waiting date (CM3), so "My submissions" and the curator's editor see it.
 @Injectable()
 export class EventSubmissionsMockAccess implements EventSubmissionsAccess {
   private crud = inject(HONUWARE_CRUD_ACCESS);
+  private photos = inject(HONUWARE_PHOTO_ACCESS);
   private auth = inject(AuthService);
   private settings = inject(SubmissionSettingsMockStore);
   // The vocabularies' ids, as the CRUD seed numbered them.
@@ -99,11 +104,78 @@ export class EventSubmissionsMockAccess implements EventSubmissionsAccess {
       ]),
       events: this.rows('events', []),
     }).pipe(
-      map(({ submissions, events }) =>
-        submissions
-          .map((row) => toMySubmission(row, events))
-          .sort((a, b) => b.created_us - a.created_us || b.id - a.id),
-      ),
+      switchMap(({ submissions, events }) => {
+        const ids = new Set(submissions.map((row) => row['id']));
+        const theirs = events.filter((event) => ids.has(event['submission_id']));
+        const photoChecks = theirs.map((event) =>
+          this.photos
+            .hasPhoto('events', Number(event['id']))
+            .pipe(map((reply) => (reply.has_photo ? event['id'] : ''))),
+        );
+        return (photoChecks.length ? forkJoin(photoChecks) : of([] as string[])).pipe(
+          map((withPhoto) => {
+            const photoIds = new Set(withPhoto.filter(Boolean));
+            return submissions
+              .map((row) => toMySubmission(row, events, photoIds))
+              .sort((a, b) => b.created_us - a.created_us || b.id - a.id);
+          }),
+        );
+      }),
+    );
+  }
+
+  attachFlyer(
+    submissionId: number,
+    imageData: ArrayBuffer,
+    imageType: FlyerImageType,
+  ): Observable<FlyerResult> {
+    const personId = this.personId();
+    if (personId === null) {
+      return throwError(() => problem(401, '', '', 'Sign in to add a flyer'));
+    }
+    const id = String(submissionId);
+    return forkJoin({
+      submission: this.rows('event_submissions', [{ column_name: 'id', column_value: id }]),
+      pending: this.rows('events', [
+        { column_name: 'submission_id', column_value: id },
+        { column_name: 'status', column_value: 'pending' },
+      ]),
+    }).pipe(
+      switchMap(({ submission, pending }) => {
+        const row = submission[0];
+        if (!row || row['submitted_by_person_id'] !== personId) {
+          return throwError(() => problem(404, '', '', 'Submission not found'));
+        }
+        if (pending.length === 0) {
+          return throwError(() =>
+            problem(
+              400,
+              'NOTHING_PENDING',
+              '',
+              'Nothing in this submission is waiting for review.',
+            ),
+          );
+        }
+        if (imageType !== 'jpeg' && imageType !== 'png') {
+          return throwError(() =>
+            problem(400, 'BAD_IMAGE_TYPE', '', 'The flyer must be a JPEG or PNG image.'),
+          );
+        }
+        if (imageData.byteLength === 0) {
+          return throwError(() => problem(400, 'BAD_IMAGE', '', 'The flyer is empty.'));
+        }
+        return concat(
+          ...pending.map((event) =>
+            this.photos.uploadPhoto('events', Number(event['id']), imageData, imageType),
+          ),
+        ).pipe(
+          last(),
+          map(() => ({
+            submission_id: submissionId,
+            event_ids: pending.map((event) => Number(event['id'])),
+          })),
+        );
+      }),
     );
   }
 
@@ -208,6 +280,9 @@ export class EventSubmissionsMockAccess implements EventSubmissionsAccess {
     const sceneTagIds = new Map(this.vocabulary.sceneTags.map((entry) => [entry.slug, entry.id]));
     const categorySlugs = request.category_slugs ?? [];
     const sceneTagSlugs = request.scene_tag_slugs ?? [];
+    // checkForm has read it already; stored canonical, as on the server.
+    const video = parseVideoLink(request.video_url ?? '');
+    const videoUrl = video.ok ? video.canonicalUrl : '';
 
     return this.crud
       .addItemFetchPrimaryKey({
@@ -239,6 +314,7 @@ export class EventSubmissionsMockAccess implements EventSubmissionsAccess {
                   location_text: request.location_text ?? '',
                   url: request.url ?? '',
                   cost_text: request.cost_text ?? '',
+                  video_url: videoUrl,
                   series_id: '',
                   origin: 'user_submitted',
                   status: 'pending',
@@ -359,6 +435,19 @@ function checkForm(request: SubmissionRequest, now: number): SubmissionProblem |
   if (url && !/^https?:\/\/\S+$/i.test(url)) {
     return problem(400, 'BAD_URL', 'url', 'Links must start with http:// or https://.');
   }
+  if ((request.video_url ?? '').trim()) {
+    const video = parseVideoLink(request.video_url ?? '');
+    if (!video.ok) {
+      return problem(
+        400,
+        video.errorCode,
+        'video_url',
+        video.errorCode === VIDEO_ERROR_HOST_NOT_SUPPORTED
+          ? 'Video links can be from YouTube or Vimeo.'
+          : "That isn't a link to one YouTube or Vimeo video.",
+      );
+    }
+  }
   return null;
 }
 
@@ -410,16 +499,22 @@ function dateState(row: Record<string, string>): SubmissionDateState {
 function toMySubmission(
   row: Record<string, string>,
   events: Record<string, string>[],
+  eventIdsWithPhoto: ReadonlySet<string>,
 ): MySubmission {
   const dates: MySubmissionDate[] = events
     .filter((event) => event['submission_id'] === row['id'])
-    .map((event) => ({
-      event_id: Number(event['id']),
-      title: event['title'],
-      starts_at_us: Number(event['starts_at_us']),
-      ends_at_us: event['ends_at_us'] ? Number(event['ends_at_us']) : null,
-      state: dateState(event),
-    }))
+    .map((event) => {
+      const video = parseVideoLink(event['video_url'] ?? '');
+      return {
+        event_id: Number(event['id']),
+        title: event['title'],
+        starts_at_us: Number(event['starts_at_us']),
+        ends_at_us: event['ends_at_us'] ? Number(event['ends_at_us']) : null,
+        state: dateState(event),
+        has_photo: eventIdsWithPhoto.has(event['id']),
+        video: video.ok ? video.video : null,
+      };
+    })
     .sort((a, b) => a.starts_at_us - b.starts_at_us || a.event_id - b.event_id);
   return {
     id: Number(row['id']),

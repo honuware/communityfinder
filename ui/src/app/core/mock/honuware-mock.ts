@@ -39,8 +39,14 @@ export const ADMIN_MOCK_SCHEMA: DatabaseSchema = {
     'event_category_assignments',
     'event_scene_tag_assignments',
     'event_submissions',
+    'event_gallery_photos',
   ],
-  nested_tables: ['role_assignments', 'event_category_assignments', 'event_scene_tag_assignments'],
+  nested_tables: [
+    'role_assignments',
+    'event_category_assignments',
+    'event_scene_tag_assignments',
+    'event_gallery_photos',
+  ],
   tables: [
     ...EVENTS_CRUD_MOCK_TABLES,
     {

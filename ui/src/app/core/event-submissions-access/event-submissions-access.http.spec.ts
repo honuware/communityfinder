@@ -129,6 +129,8 @@ describe('EventSubmissionsHttpAccess', () => {
               starts_at_us: 1_000,
               ends_at_us: null,
               state: 'not_listed',
+              has_photo: true,
+              video: { provider: 'vimeo', id: '76979871' },
             },
           ],
         },
@@ -143,7 +145,21 @@ describe('EventSubmissionsHttpAccess', () => {
       starts_at_us: 1_000,
       ends_at_us: null,
       state: 'not_listed',
+      has_photo: true,
+      video: { provider: 'vimeo', id: '76979871' },
     });
+  });
+
+  it('sends a flyer as the bytes themselves, its type in the address', async () => {
+    const { access, http } = setUp();
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff]).buffer;
+    const result = firstValueFrom(access.attachFlyer(9, bytes, 'jpeg'));
+    const request = http.expectOne('/api/event_submissions/9/photo/jpeg');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.withCredentials).toBe(true);
+    expect(request.request.body).toBe(bytes);
+    request.flush({ submission_id: 9, event_ids: [41] });
+    expect(await result).toEqual({ submission_id: 9, event_ids: [41] });
   });
 
   it('withdraws with an empty body', async () => {
@@ -185,7 +201,17 @@ describe('normalizeMySubmission', () => {
       submitter_note: '',
       reject_reason: '',
       message_to_submitter: '',
-      dates: [{ event_id: 41, title: '', starts_at_us: 0, ends_at_us: 6_000, state: '' }],
+      dates: [
+        {
+          event_id: 41,
+          title: '',
+          starts_at_us: 0,
+          ends_at_us: 6_000,
+          state: '',
+          has_photo: false,
+          video: null,
+        },
+      ],
     });
   });
 });

@@ -1,7 +1,13 @@
 import {
+  VIDEO_ERROR_BAD_URL,
+  VIDEO_ERROR_HOST_NOT_SUPPORTED,
+  videoErrorMessage,
+} from '../../core/utils/video-links';
+import {
   composeSubmission,
   EMPTY_SUBMIT_DATE,
   EMPTY_SUBMIT_FORM,
+  flyerImageType,
   MAX_SUBMISSION_DATES,
   SubmitDateValue,
   SubmitFormValue,
@@ -201,6 +207,57 @@ describe('submit-event-form', () => {
       expect(person.ok && 'website' in person.request).toBe(false);
       const bot = composeSubmission(form({ website: 'https://spam.example' }));
       expect(bot.ok && bot.request.website).toBe('https://spam.example');
+    });
+  });
+
+  describe('the video link', () => {
+    it('sends it in its canonical form, and leaves it out when blank', () => {
+      const youtube = composeSubmission(form({ videoUrl: ' https://youtu.be/dQw4w9WgXcQ?t=42 ' }));
+      expect(youtube.ok && youtube.request.video_url).toBe(
+        'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      );
+      const vimeo = composeSubmission(form({ videoUrl: 'vimeo.com/76979871' }));
+      expect(vimeo.ok && vimeo.request.video_url).toBe('https://vimeo.com/76979871');
+      const none = composeSubmission(form({ videoUrl: '  ' }));
+      expect(none.ok && 'video_url' in none.request).toBe(false);
+    });
+
+    it('refuses one it can’t read, on its own field, before the agreement', () => {
+      expect(
+        composeSubmission(form({ videoUrl: 'https://www.tiktok.com/@x/video/1', agreed: false })),
+      ).toEqual({
+        ok: false,
+        field: 'video_url',
+        dateIndex: null,
+        message: videoErrorMessage(VIDEO_ERROR_HOST_NOT_SUPPORTED),
+      });
+      expect(composeSubmission(form({ videoUrl: 'https://www.youtube.com/@someone' }))).toEqual({
+        ok: false,
+        field: 'video_url',
+        dateIndex: null,
+        message: videoErrorMessage(VIDEO_ERROR_BAD_URL),
+      });
+    });
+  });
+
+  describe('flyerImageType', () => {
+    it('takes a JPEG or a PNG by its type', () => {
+      expect(flyerImageType({ type: 'image/jpeg', name: 'flyer.jpg' })).toBe('jpeg');
+      expect(flyerImageType({ type: 'image/png', name: 'flyer' })).toBe('png');
+      expect(flyerImageType({ type: 'IMAGE/PNG', name: 'flyer.png' })).toBe('png');
+    });
+
+    it('goes by the extension when the file has no type', () => {
+      expect(flyerImageType({ type: '', name: 'Flyer.JPEG' })).toBe('jpeg');
+      expect(flyerImageType({ type: '', name: 'flyer.jpg' })).toBe('jpeg');
+      expect(flyerImageType({ type: '', name: 'flyer.png' })).toBe('png');
+      expect(flyerImageType({ type: '', name: 'flyer.gif' })).toBeNull();
+    });
+
+    it('refuses everything else, whatever it is called', () => {
+      expect(flyerImageType({ type: 'image/svg+xml', name: 'flyer.svg' })).toBeNull();
+      expect(flyerImageType({ type: 'image/heic', name: 'flyer.jpg' })).toBeNull();
+      expect(flyerImageType({ type: 'image/webp', name: 'flyer.png' })).toBeNull();
     });
   });
 });

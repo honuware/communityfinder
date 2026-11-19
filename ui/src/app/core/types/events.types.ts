@@ -20,6 +20,32 @@ export type SceneCoverage = 'full' | 'link_out';
 export type NeighborhoodRegion =
   'seattle-core' | 'seattle-north' | 'seattle-south' | 'eastside' | 'south-king';
 
+// CM3: the photo an event or series shows, chosen by the server (OQ2): the
+// event's own, else its series', else its venue's; a series' own, else its
+// venue's. The client builds the address from it (EventPhotos.photoFor).
+export type PhotoOwnerTable = 'events' | 'series' | 'venues';
+export interface PhotoRef {
+  table: PhotoOwnerTable;
+  id: number;
+}
+
+// CM3: one embedded video, YouTube or Vimeo (OQ3). Only the id: the player's
+// address is built from it, never from a stored link (core/utils/video-links).
+export type VideoProvider = 'youtube' | 'vimeo';
+export interface VideoRef {
+  provider: VideoProvider;
+  id: string;
+}
+
+// CM3: one gallery picture. Its photo is the `event_gallery_photos` row's own.
+// The server lists only rows whose photo has been uploaded, in gallery order.
+export interface GalleryPhoto {
+  id: number;
+  alt_text: string;
+  caption: string;
+  credit: string;
+}
+
 // A public event, approved or archived (GET /api/events/upcoming,
 // /api/events/<id>, /api/event_series/<slug>). The slug lists are the EFFECTIVE
 // ones: the event's own, or its series' when it has none.
@@ -46,10 +72,20 @@ export interface PublicEvent {
   series_slug: string;
   series_title: string;
   origin: EventOrigin;
+  // CM3: the photo it shows (its own, else its series', else its venue's)
+  // and its video (its own, else its series'); null for none.
+  photo: PhotoRef | null;
+  video: VideoRef | null;
   // Only for a manage_events curator, who can preview an event that isn't
   // approved yet; absent for everyone else.
   status?: EventStatus;
   review_notes?: string;
+}
+
+// GET /api/events/<id>: the event plus its gallery (CM3): its own, else its
+// series'. Only the detail read carries it, not the lists.
+export interface EventDetail extends PublicEvent {
+  gallery: GalleryPhoto[];
 }
 
 // Whether the public can see it (EV4 OQ3): approved, or archived ("past and
@@ -143,13 +179,17 @@ export interface EventSeries {
   last_verified_at_us: number | null;
   category_slugs: string[];
   scene_tag_slugs: string[];
+  // CM3: its own photo, else its venue's; its own video. null for none.
+  photo: PhotoRef | null;
+  video: VideoRef | null;
 }
 
 // GET /api/event_series/<slug>: the series plus its upcoming approved events
-// in the default window.
+// in the default window, and its own gallery (CM3).
 export interface EventSeriesDetail {
   series: EventSeries;
   upcoming: PublicEvent[];
+  gallery: GalleryPhoto[];
 }
 
 // The shared vocabularies (GD1 §1–§3). Read through the framework's generic
@@ -224,6 +264,47 @@ function toBoolean(value: unknown): boolean {
   return value === true || value === 't' || value === 'true' || value === '1' || value === 1;
 }
 
+const PHOTO_OWNER_TABLES: readonly string[] = ['events', 'series', 'venues'];
+const VIDEO_PROVIDERS: readonly string[] = ['youtube', 'vimeo'];
+
+// {"table", "id"} → a PhotoRef; null, or anything else, is no photo.
+export function toPhotoRef(value: unknown): PhotoRef | null {
+  const raw = asRaw(value);
+  const table = toText(raw['table']);
+  const id = Number(raw['id']);
+  return PHOTO_OWNER_TABLES.includes(table) && Number.isInteger(id) && id > 0
+    ? { table: table as PhotoOwnerTable, id }
+    : null;
+}
+
+// {"provider", "id"} → a VideoRef; null, an unknown provider or a blank id is
+// no video. The id isn't checked here: video-links checks it before building
+// a player's address from it.
+export function toVideoRef(value: unknown): VideoRef | null {
+  const raw = asRaw(value);
+  const provider = toText(raw['provider']);
+  const id = toText(raw['id']);
+  return VIDEO_PROVIDERS.includes(provider) && id !== ''
+    ? { provider: provider as VideoProvider, id }
+    : null;
+}
+
+export function normalizeGallery(value: unknown): GalleryPhoto[] {
+  return Array.isArray(value)
+    ? value
+        .map((entry) => {
+          const raw = asRaw(entry);
+          return {
+            id: toNumber(raw['id']),
+            alt_text: toText(raw['alt_text']),
+            caption: toText(raw['caption']),
+            credit: toText(raw['credit']),
+          };
+        })
+        .filter((photo) => photo.id > 0)
+    : [];
+}
+
 export function normalizeEvent(value: unknown): PublicEvent {
   const raw = asRaw(value);
   const event: PublicEvent = {
@@ -245,12 +326,18 @@ export function normalizeEvent(value: unknown): PublicEvent {
     series_slug: toText(raw['series_slug']),
     series_title: toText(raw['series_title']),
     origin: toText(raw['origin']) as EventOrigin,
+    photo: toPhotoRef(raw['photo']),
+    video: toVideoRef(raw['video']),
   };
   if (raw['status'] !== undefined) {
     event.status = toText(raw['status']) as EventStatus;
     event.review_notes = toText(raw['review_notes']);
   }
   return event;
+}
+
+export function normalizeEventDetail(value: unknown): EventDetail {
+  return { ...normalizeEvent(value), gallery: normalizeGallery(asRaw(value)['gallery']) };
 }
 
 export function normalizeEvents(value: unknown): PublicEvent[] {
@@ -304,6 +391,8 @@ export function normalizeEventSeries(value: unknown): EventSeries {
     last_verified_at_us: toOptionalNumber(raw['last_verified_at_us']),
     category_slugs: toSlugs(raw['category_slugs']),
     scene_tag_slugs: toSlugs(raw['scene_tag_slugs']),
+    photo: toPhotoRef(raw['photo']),
+    video: toVideoRef(raw['video']),
   };
 }
 
@@ -318,6 +407,7 @@ export function normalizeEventSeriesDetail(value: unknown): EventSeriesDetail {
   return {
     series: normalizeEventSeries(raw['series']),
     upcoming: normalizeEvents(raw['upcoming']),
+    gallery: normalizeGallery(raw['gallery']),
   };
 }
 

@@ -54,9 +54,11 @@ Json::Value PhotoJson(const std::optional<Events::PhotoRef>& photo) {
     });
 }
 
-// CM3: {"provider": …, "id": "…"}, or null. Only the id: the client builds the
-// player's address from it, never from a stored link.
-Json::Value VideoJson(const std::optional<Events::VideoLink>& video) {
+}  // namespace
+
+// Only the id: the client builds the player's address from it, never from a
+// stored link.
+Json::Value VideoToJson(const std::optional<Events::VideoLink>& video) {
     if (!video) {
         return Json::Value(nullptr);
     }
@@ -66,15 +68,13 @@ Json::Value VideoJson(const std::optional<Events::VideoLink>& video) {
     });
 }
 
-}  // namespace
-
 Json::Value PublicEventToJson(const Events::PublicEvent& event) {
     Json::JsonObject object =
         ToJsonObject(Events::PublicEventToKeyValueTable(event), kEventTextKeys);
     object["category_slugs"] = SlugArray(event.categorySlugs);
     object["scene_tag_slugs"] = SlugArray(event.sceneTagSlugs);
     object["photo"] = PhotoJson(event.photo);
-    object["video"] = VideoJson(event.video);
+    object["video"] = VideoToJson(event.video);
     return Json::Value(object);
 }
 
@@ -93,7 +93,7 @@ Json::Value PublicSeriesToJson(const Events::PublicSeries& series) {
     object["category_slugs"] = SlugArray(series.categorySlugs);
     object["scene_tag_slugs"] = SlugArray(series.sceneTagSlugs);
     object["photo"] = PhotoJson(series.photo);
-    object["video"] = VideoJson(series.video);
+    object["video"] = VideoToJson(series.video);
     return Json::Value(object);
 }
 

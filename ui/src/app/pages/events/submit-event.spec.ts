@@ -10,14 +10,18 @@ import { AuthService } from '@honuware/ui/auth';
 import { SimpleDateComponent } from '@honuware/ui/controls';
 import { provideHonuwareAccessMock } from '@honuware/ui/testing';
 import { provideCommunityAccess } from '../../core/community-access/community-access.providers';
+import { PhotoUploadComponent } from '@honuware/ui/photos';
 import {
   EVENT_SUBMISSIONS_ACCESS,
+  FlyerImageType,
+  FlyerResult,
   SubmissionProblem,
   SubmissionRequest,
   SubmissionResult,
 } from '../../core/event-submissions-access/event-submissions-access';
 import { pacificWallClockToUs } from '../../core/utils/events-date.utils';
-import { MAX_SUBMISSION_DATES } from './submit-event-form';
+import { VIDEO_ERROR_HOST_NOT_SUPPORTED, videoErrorMessage } from '../../core/utils/video-links';
+import { FLYER_TYPE_MESSAGE, MAX_SUBMISSION_DATES } from './submit-event-form';
 import { SubmitEventPage } from './submit-event';
 import routes from './events.routes';
 
@@ -49,17 +53,22 @@ interface Options {
   authData?: object;
   accepting?: boolean[];
   submit?: (request: SubmissionRequest) => Observable<SubmissionResult>;
+  attachFlyer?: () => Observable<FlyerResult>;
 }
 
 // The submissions access is a stub: getStatus answers from `accepting` in
-// turn (the last answer repeats), and submit as given.
-function configure({ authData = MEMBER, accepting = [true], submit }: Options = {}) {
+// turn (the last answer repeats), and submit and attachFlyer as given.
+function configure({ authData = MEMBER, accepting = [true], submit, attachFlyer }: Options = {}) {
   const answers = [...accepting];
   const access = {
     getStatus: vi.fn(() => of(answers.length > 1 ? answers.shift()! : answers[0])),
     submit: vi.fn(submit ?? (() => of(RESULT))),
     getMine: vi.fn(() => of([])),
     withdraw: vi.fn(),
+    attachFlyer: vi.fn(
+      (_submissionId: number, _imageData: ArrayBuffer, _imageType: FlyerImageType) =>
+        attachFlyer?.() ?? of({ submission_id: 7, event_ids: [41, 42] }),
+    ),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -112,6 +121,18 @@ function typeInto(harness: RouterTestingHarness, input: HTMLInputElement, value:
   input.value = value;
   input.dispatchEvent(new Event('input', { bubbles: true }));
   harness.detectChanges();
+}
+
+// The flyer picker (hw-photo-upload, held back), and a file chosen in it.
+function flyerPicker(harness: RouterTestingHarness): PhotoUploadComponent {
+  return harness.fixture.debugElement.query(By.directive(PhotoUploadComponent))
+    .componentInstance as PhotoUploadComponent;
+}
+
+function chooseFlyer(harness: RouterTestingHarness, name: string, type: string): File {
+  const file = new File([new Uint8Array([1, 2, 3, 4, 5])], name, { type });
+  flyerPicker(harness).pendingFile = file;
+  return file;
 }
 
 describe('SubmitEventPage', () => {
@@ -363,6 +384,137 @@ describe('SubmitEventPage', () => {
         'Enter a start date and time.',
       );
     });
+
+    it('says what the video link is as it’s typed, and sends it canonical', async () => {
+      const { access, harness, page, element } = await open();
+      const feedback = () => element.querySelector('.submit-event__video-feedback');
+      expect(feedback()).toBeNull();
+      const input = element.querySelector<HTMLInputElement>('input[formcontrolname="videoUrl"]')!;
+      typeInto(harness, input, 'https://youtu.be/dQw4w9WgXcQ');
+      expect(text(feedback())).toBe('YouTube video ✓');
+      typeInto(harness, input, 'https://www.tiktok.com/@x/video/1');
+      expect(text(feedback())).toBe(videoErrorMessage(VIDEO_ERROR_HOST_NOT_SUPPORTED));
+      expect(feedback()!.classList).toContain('submit-event__video-feedback--bad');
+
+      // An unreadable link is caught before sending, beside the field.
+      fillIn(page);
+      page.send();
+      harness.detectChanges();
+      expect(access.submit).not.toHaveBeenCalled();
+      expect(text(element.querySelector('[data-field="video_url"]'))).toBe(
+        videoErrorMessage(VIDEO_ERROR_HOST_NOT_SUPPORTED),
+      );
+
+      typeInto(harness, input, 'https://vimeo.com/76979871');
+      page.send();
+      expect(access.submit.mock.calls[0][0].video_url).toBe('https://vimeo.com/76979871');
+    });
+  });
+
+  describe('the flyer', () => {
+    it('is picked with hw-photo-upload, held back until the submission is in', async () => {
+      const { harness } = await open();
+      expect(flyerPicker(harness).deferUpload).toBe(true);
+    });
+
+    it('goes up once the submission is in, and the thanks say so', async () => {
+      const { access, harness, page, element } = await open();
+      fillIn(page);
+      chooseFlyer(harness, 'flyer.png', 'image/png');
+      page.send();
+      // The page reads the file (a promise) before it sends it.
+      await vi.waitFor(() => expect(page.sent()).not.toBeNull());
+      harness.detectChanges();
+
+      expect(access.attachFlyer).toHaveBeenCalledTimes(1);
+      const [submissionId, bytes, type] = access.attachFlyer.mock.calls[0];
+      expect(submissionId).toBe(7);
+      expect(Array.from(new Uint8Array(bytes))).toEqual([1, 2, 3, 4, 5]);
+      expect(type).toBe('png');
+      expect(access.submit.mock.invocationCallOrder[0]).toBeLessThan(
+        access.attachFlyer.mock.invocationCallOrder[0],
+      );
+      const outcome = element.querySelector('.submit-event__sent .submit-event__flyer-outcome')!;
+      expect(text(outcome)).toBe('Your flyer is attached.');
+      expect(outcome.classList).not.toContain('submit-event__error');
+    });
+
+    it('takes a JPEG by its extension when it has no type', async () => {
+      const { access, harness, page } = await open();
+      fillIn(page);
+      chooseFlyer(harness, 'Flyer.JPG', '');
+      page.send();
+      await vi.waitFor(() => expect(page.sent()).not.toBeNull());
+      expect(access.attachFlyer.mock.calls[0][2]).toBe('jpeg');
+    });
+
+    it('refuses anything but a JPEG or PNG before sending, and keeps the form', async () => {
+      const { access, harness, page, element } = await open();
+      fillIn(page);
+      chooseFlyer(harness, 'flyer.svg', 'image/svg+xml');
+      page.send();
+      harness.detectChanges();
+      expect(access.submit).not.toHaveBeenCalled();
+      expect(text(element.querySelector('[data-field="flyer"]'))).toBe(FLYER_TYPE_MESSAGE);
+      expect(element.querySelector('form')).not.toBeNull();
+    });
+
+    it('keeps the submission when the flyer can’t be added, and says why', async () => {
+      const { access, harness, page, element } = await open({
+        attachFlyer: () =>
+          throwError(() =>
+            refusal({ error_code: 'IMAGE_TOO_LARGE', detail: 'The flyer is too large.' }),
+          ),
+      });
+      fillIn(page);
+      chooseFlyer(harness, 'flyer.jpg', 'image/jpeg');
+      page.send();
+      await vi.waitFor(() => expect(page.sent()).not.toBeNull());
+      harness.detectChanges();
+      expect(access.attachFlyer).toHaveBeenCalledTimes(1);
+      expect(text(element.querySelector('.submit-event__sent'))).toContain(
+        "Thanks, it's waiting for review.",
+      );
+      const outcome = element.querySelector('.submit-event__flyer-outcome')!;
+      expect(text(outcome)).toBe(
+        "Your event was sent, but its flyer couldn't be added. The flyer is too large.",
+      );
+      expect(outcome.classList).toContain('submit-event__error');
+    });
+
+    it('sends none when none was chosen, and none for a honeypot send', async () => {
+      const plain = await open();
+      fillIn(plain.page);
+      plain.page.send();
+      plain.harness.detectChanges();
+      expect(plain.access.attachFlyer).not.toHaveBeenCalled();
+      expect(plain.element.querySelector('.submit-event__flyer-outcome')).toBeNull();
+
+      TestBed.resetTestingModule();
+      const bot = await open({
+        submit: () => of({ ...RESULT, submission_id: 0, event_ids: [], possible_duplicates: [] }),
+      });
+      fillIn(bot.page);
+      chooseFlyer(bot.harness, 'flyer.png', 'image/png');
+      bot.page.send();
+      bot.harness.detectChanges();
+      expect(bot.page.sent()).not.toBeNull();
+      expect(bot.access.attachFlyer).not.toHaveBeenCalled();
+      expect(bot.element.querySelector('.submit-event__flyer-outcome')).toBeNull();
+    });
+
+    it('starts the next submission without the last one’s flyer news', async () => {
+      const { harness, page, element } = await open();
+      fillIn(page);
+      chooseFlyer(harness, 'flyer.png', 'image/png');
+      page.send();
+      await vi.waitFor(() => expect(page.sent()).not.toBeNull());
+      page.startOver();
+      harness.detectChanges();
+      expect(page.flyerOutcome()).toBeNull();
+      expect(flyerPicker(harness).hasPendingFile).toBe(false);
+      expect(element.querySelector('.submit-event__flyer-outcome')).toBeNull();
+    });
   });
 
   describe('a refusal from the server', () => {
@@ -388,6 +540,11 @@ describe('SubmitEventPage', () => {
         '[data-field="venue_id"]',
       ],
       ['the link', refusal({ error_code: 'BAD_URL', field: 'url' }), '[data-field="url"]'],
+      [
+        'the video link',
+        refusal({ error_code: 'BAD_VIDEO_URL', field: 'video_url' }),
+        '[data-field="video_url"]',
+      ],
       [
         'the cost',
         refusal({ error_code: 'COST_LENGTH', field: 'cost_text' }),

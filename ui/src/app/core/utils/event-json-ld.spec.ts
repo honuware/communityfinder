@@ -16,26 +16,26 @@ describe('buildEventJsonLd', () => {
       venue_address: '4800 Rainier Ave S, Seattle, WA 98118',
       cost_text: 'Free',
     });
-    expect(buildEventJsonLd(event, CANONICAL, 'https://communityfinder.example/photo.jpg')).toEqual(
-      {
-        '@context': 'https://schema.org',
-        '@type': 'Event',
-        name: 'Queer Craft Fair',
-        startDate: '2026-08-15T14:00:00-07:00',
-        endDate: '2026-08-15T18:00:00-07:00',
-        eventStatus: 'https://schema.org/EventScheduled',
-        eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
-        location: {
-          '@type': 'Place',
-          name: 'Columbia City Social Club',
-          address: '4800 Rainier Ave S, Seattle, WA 98118',
-        },
-        description: 'Thirty local makers.',
-        image: ['https://communityfinder.example/photo.jpg'],
-        url: CANONICAL,
-        offers: { '@type': 'Offer', price: 0, priceCurrency: 'USD', url: CANONICAL },
+    expect(
+      buildEventJsonLd(event, CANONICAL, ['https://communityfinder.example/photo.jpg']),
+    ).toEqual({
+      '@context': 'https://schema.org',
+      '@type': 'Event',
+      name: 'Queer Craft Fair',
+      startDate: '2026-08-15T14:00:00-07:00',
+      endDate: '2026-08-15T18:00:00-07:00',
+      eventStatus: 'https://schema.org/EventScheduled',
+      eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+      location: {
+        '@type': 'Place',
+        name: 'Columbia City Social Club',
+        address: '4800 Rainier Ave S, Seattle, WA 98118',
       },
-    );
+      description: 'Thirty local makers.',
+      image: ['https://communityfinder.example/photo.jpg'],
+      url: CANONICAL,
+      offers: { '@type': 'Offer', price: 0, priceCurrency: 'USD', url: CANONICAL },
+    });
   });
 
   it('describes a minimal event: no venue, no end, a cost that is not "Free"', () => {
@@ -72,6 +72,25 @@ describe('buildEventJsonLd', () => {
     expect(at('Free with RSVP')['offers']).toBeUndefined();
     expect(at('$10')['offers']).toBeUndefined();
     expect(at('')['offers']).toBeUndefined();
+  });
+
+  // CM3 §5.5: the main photo first, then the gallery's, in the order given.
+  it('lists every image it is given, in order', () => {
+    const images = [
+      'https://communityfinder.example/main.jpg',
+      'https://communityfinder.example/gallery-1.jpg',
+      'https://communityfinder.example/gallery-2.jpg',
+    ];
+    const jsonLd = buildEventJsonLd(
+      normalizeEvent({ id: 1, title: 'T', starts_at_us: 1 }),
+      CANONICAL,
+      images,
+    );
+    expect(jsonLd['image']).toEqual(images);
+    expect(
+      'image' in
+        buildEventJsonLd(normalizeEvent({ id: 1, title: 'T', starts_at_us: 1 }), CANONICAL, []),
+    ).toBe(false);
   });
 
   it('leaves out the location when there is none', () => {

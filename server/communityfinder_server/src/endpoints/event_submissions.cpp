@@ -8,6 +8,7 @@
 #include "business_logic/auth/session.h"
 #include "business_logic/events/submission_helper.h"
 #include "endpoints/endpoint_auth_helper.h"
+#include "endpoints/events_json.h"
 #include "util/error_codes.h"
 #include "util/error_response.h"
 
@@ -351,6 +352,8 @@ Json::Value GetMyEventSubmissions(
                     { "starts_at_us", Json::Value(date.startsAtUs) },
                     { "ends_at_us", date.endsAtUs ? Json::Value(*date.endsAtUs) : Json::Value(nullptr) },
                     { "state", Json::Value(date.state) },
+                    { "has_photo", Json::Value(date.hasPhoto) },
+                    { "video", VideoToJson(date.video) },
                 }));
             }
             items.push_back(Json::Value(Json::JsonObject{

@@ -93,6 +93,19 @@
   color: var(--mat-sys-error, #b3261e);
 }
 
+// CM3: green when the link reads, red when it doesn't.
+.submit-event__video-feedback {
+  color: var(--mat-sys-primary);
+}
+
+.submit-event__video-feedback--bad {
+  color: var(--mat-sys-error, #b3261e);
+}
+
+.submit-event__flyer .submit-event__hint {
+  margin-top: 0;
+}
+
 // The honeypot: kept off-screen rather than display: none, which some bots skip.
 .submit-event__website {
   position: absolute;

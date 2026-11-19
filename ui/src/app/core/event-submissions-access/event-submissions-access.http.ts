@@ -2,8 +2,11 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { catchError, map, Observable, throwError } from 'rxjs';
 import { HONUWARE_API_BASE } from '@honuware/ui/access';
+import { toVideoRef } from '../types/events.types';
 import {
   EventSubmissionsAccess,
+  FlyerImageType,
+  FlyerResult,
   MySubmission,
   MySubmissionDate,
   SubmissionDateState,
@@ -62,6 +65,21 @@ export class EventSubmissionsHttpAccess implements EventSubmissionsAccess {
       )
       .pipe(catchError((error) => throwError(() => toSubmissionProblem(error))));
   }
+
+  // The bytes as the body, as honuware's photo upload sends them.
+  attachFlyer(
+    submissionId: number,
+    imageData: ArrayBuffer,
+    imageType: FlyerImageType,
+  ): Observable<FlyerResult> {
+    return this.http
+      .post<FlyerResult>(
+        `${this.apiBase}/event_submissions/${submissionId}/photo/${imageType}`,
+        imageData,
+        { withCredentials: true },
+      )
+      .pipe(catchError((error) => throwError(() => toSubmissionProblem(error))));
+  }
 }
 
 type Raw = Record<string, unknown>;
@@ -83,6 +101,8 @@ function normalizeDate(value: unknown): MySubmissionDate {
     starts_at_us: Number(raw['starts_at_us']) || 0,
     ends_at_us: endsAtUs === null || endsAtUs === undefined ? null : Number(endsAtUs),
     state: toText(raw['state']) as SubmissionDateState,
+    has_photo: raw['has_photo'] === true,
+    video: toVideoRef(raw['video']),
   };
 }
 

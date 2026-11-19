@@ -13,6 +13,7 @@ import {
 } from '../../core/event-submissions-access/event-submissions-access';
 import { eventPagePath } from '../../core/utils/event-links';
 import { formatEventShortDate, formatEventTimeRange } from '../../core/utils/events-date.utils';
+import { videoProviderName } from '../../core/utils/video-links';
 import {
   DATE_STATE_LABELS,
   rejectReasonText,
@@ -86,6 +87,20 @@ export class MySubmissionsPage implements OnInit {
 
   eventPath(date: MySubmissionDate): string {
     return eventPagePath(date.event_id);
+  }
+
+  // What came with the date (CM3 §5.7): "With a photo · With a YouTube
+  // video", or ''. Only the fact: the photo stays private until the date is
+  // listed, so it isn't shown here.
+  extras(date: MySubmissionDate): string {
+    const extras: string[] = [];
+    if (date.has_photo) {
+      extras.push('With a photo');
+    }
+    if (date.video) {
+      extras.push(`With a ${videoProviderName(date.video.provider)} video`);
+    }
+    return extras.join(' · ');
   }
 
   // The reason, when a curator turned at least one date down.

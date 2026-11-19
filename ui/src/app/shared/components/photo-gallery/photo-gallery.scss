@@ -1,0 +1,156 @@
+.photo-gallery {
+  margin: 24px 0;
+}
+
+.photo-gallery__heading {
+  margin: 0 0 12px;
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+// Two across on a phone, more as the page widens; each tile 4:3.
+.photo-gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.photo-gallery__thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  overflow: hidden;
+  cursor: zoom-in;
+  background: var(--mat-sys-surface-container-high);
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 160ms ease;
+  }
+
+  &:hover img {
+    transform: scale(1.03);
+  }
+
+  &:focus-visible {
+    outline: 3px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+  }
+}
+
+.photo-gallery__removal {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+}
+
+// The viewer: the whole window, dimmed, the photo as large as it fits.
+.photo-gallery__viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 16px 16px;
+  background: rgb(0 0 0 / 88%);
+  color: #fff;
+  // A swipe is ours, not the page's scroll.
+  touch-action: pan-y pinch-zoom;
+}
+
+.photo-gallery__figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  max-height: calc(100% - 48px);
+  margin: 0;
+}
+
+.photo-gallery__full {
+  max-width: min(1600px, 100%);
+  max-height: calc(100vh - 160px);
+  object-fit: contain;
+}
+
+.photo-gallery__caption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  max-width: 60ch;
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+.photo-gallery__credit {
+  opacity: 0.75;
+  font-size: 0.85rem;
+}
+
+.photo-gallery__close,
+.photo-gallery__step {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #fff;
+  background: rgb(255 255 255 / 12%);
+
+  &:hover {
+    background: rgb(255 255 255 / 24%);
+  }
+
+  &:focus-visible {
+    outline: 3px solid #fff;
+    outline-offset: 2px;
+  }
+}
+
+.photo-gallery__close {
+  top: 8px;
+  right: 8px;
+}
+
+.photo-gallery__step {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.photo-gallery__step--previous {
+  left: 8px;
+}
+
+.photo-gallery__step--next {
+  right: 8px;
+}
+
+.photo-gallery__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 16px;
+  margin: 12px 0 0;
+  font-size: 0.85rem;
+
+  a {
+    color: #fff;
+  }
+}

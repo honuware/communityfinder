@@ -34,6 +34,9 @@
               @if (date.state === 'listed') {
                 <a [routerLink]="eventPath(date)">See it</a>
               }
+              @if (extras(date); as extras) {
+                <span class="my-submissions__extras">{{ extras }}</span>
+              }
             </li>
           }
         </ul>

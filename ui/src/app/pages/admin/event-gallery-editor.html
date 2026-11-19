@@ -1,0 +1,99 @@
+<section class="gallery-editor">
+  <h4 class="gallery-editor__title">
+    Gallery
+    @if (maxPhotos(); as max) {
+      <span class="gallery-editor__count">{{ rows().length }} of {{ max }} photos</span>
+    }
+  </h4>
+
+  @if (loading()) {
+    <mat-progress-spinner mode="indeterminate" diameter="28" />
+  } @else if (failed()) {
+    <p class="gallery-editor__error">The gallery couldn't be loaded. Please try again.</p>
+  } @else if (rows().length === 0) {
+    <p class="gallery-editor__hint">No gallery photos yet.</p>
+  } @else {
+    <ol class="gallery-editor__list">
+      @for (row of rows(); track row.id; let index = $index, first = $first, final = $last) {
+        <li class="gallery-editor__row" [attr.data-id]="row.id">
+          <img class="gallery-editor__thumb" [src]="thumbUrl(row)" [alt]="row.altText" />
+          <div class="gallery-editor__details">
+            <div class="gallery-editor__alt">{{ row.altText }}</div>
+            @if (row.caption) {
+              <div class="gallery-editor__caption">{{ row.caption }}</div>
+            }
+            @if (row.credit) {
+              <div class="gallery-editor__credit">{{ row.credit }}</div>
+            }
+          </div>
+          <div class="gallery-editor__actions">
+            <button
+              mat-icon-button
+              type="button"
+              class="gallery-editor__up"
+              aria-label="Move up"
+              [disabled]="first || busy()"
+              (click)="move(index, -1)"
+            >
+              <mat-icon>arrow_upward</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              type="button"
+              class="gallery-editor__down"
+              aria-label="Move down"
+              [disabled]="final || busy()"
+              (click)="move(index, 1)"
+            >
+              <mat-icon>arrow_downward</mat-icon>
+            </button>
+            <button
+              mat-button
+              type="button"
+              class="gallery-editor__remove"
+              [disabled]="busy()"
+              (click)="askToRemove(row)"
+            >
+              Remove
+            </button>
+          </div>
+          @if (confirmingRemoveId() === row.id) {
+            <div class="gallery-editor__confirm" role="alertdialog">
+              <p>Remove this photo from the gallery? It comes off the event's page right away.</p>
+              <button mat-flat-button type="button" (click)="remove(row)">Remove it</button>
+              <button mat-button type="button" (click)="cancelRemove()">Keep it</button>
+            </div>
+          }
+        </li>
+      }
+    </ol>
+  }
+
+  <form class="gallery-editor__add" [formGroup]="addForm" (ngSubmit)="add()">
+    <h5 class="gallery-editor__add-title">Add photo</h5>
+    <app-photo-policy-note />
+    <hw-photo-upload [tableName]="'event_gallery_photos'" [tableItemId]="0" [deferUpload]="true" />
+    <mat-form-field appearance="outline" class="gallery-editor__wide" subscriptSizing="dynamic">
+      <mat-label>Alt text</mat-label>
+      <input matInput formControlName="altText" [maxlength]="altTextMax" />
+      <mat-hint>What's in the photo, for people who can't see it. Never name attendees.</mat-hint>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="gallery-editor__wide">
+      <mat-label>Caption (optional)</mat-label>
+      <input matInput formControlName="caption" [maxlength]="captionMax" />
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="gallery-editor__wide">
+      <mat-label>Credit (optional)</mat-label>
+      <input matInput formControlName="credit" [maxlength]="creditMax" />
+    </mat-form-field>
+    <mat-checkbox formControlName="consent" class="gallery-editor__consent">
+      Everyone recognizable in this photo agreed to be shown
+    </mat-checkbox>
+    @if (addError()) {
+      <p class="gallery-editor__error">{{ addError() }}</p>
+    }
+    <div>
+      <button mat-stroked-button type="submit" [disabled]="adding()">Add photo</button>
+    </div>
+  </form>
+</section>
