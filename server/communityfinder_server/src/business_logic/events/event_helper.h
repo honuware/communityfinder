@@ -269,6 +269,22 @@ struct SeriesDetail {
     std::vector<GalleryPhoto> gallery;
 };
 
+// CM3 Phase 2 §9 — one row of the curator's event finder: the event as the
+// public shape assembles it (its venue, location text and series), plus its
+// status. The finder lists every status, since curators edit pending and
+// rejected events too.
+struct CuratorEventMatch {
+    PublicEvent event;
+    std::string status;
+};
+
+// The finder's size: 10 by default, at most 50.
+inline constexpr int64_t kCuratorFinderDefaultLimit = 10;
+inline constexpr int64_t kCuratorFinderMaxLimit = 50;
+
+// Less than 1 means the default; more than the maximum means the maximum.
+int64_t ClampCuratorFinderLimit(int64_t limit);
+
 // The clamp itself, separate so tests can pin it without a DB. `from` reaches
 // back the larger of kUpcomingLookBackDays and the past-events window.
 UpcomingWindow ClampUpcomingWindow(int64_t nowUs, int64_t fromUs, int64_t toUs,
@@ -347,6 +363,18 @@ public:
     // A series page by slug, any freshness status (a closed series keeps its
     // page); nullopt when there is no such series.
     std::optional<SeriesDetail> GetSeriesDetail(Transaction& transaction, std::string_view slug);
+
+    // CM3 Phase 2 §9 — the curator's event finder, over every status, at most
+    // ClampCuratorFinderLimit(limit) rows. `searchText` is trimmed.
+    //   - With search text: events whose title contains it, ignoring case.
+    //     Those not over yet (one still running counts) come first, soonest
+    //     first; then past ones, most recent first.
+    //   - Without: the next events that aren't over yet, soonest first (the
+    //     "Coming up" list).
+    // An event with no end is over kICalDefaultDurationUs after it starts, the
+    // rule the archive sweep uses.
+    std::vector<CuratorEventMatch> FindForCurators(
+        Transaction& transaction, std::string_view searchText, int64_t limit);
 
 private:
     DatabaseHelper databaseHelper_;

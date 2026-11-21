@@ -71,6 +71,14 @@
                 {
                   "replace": "src/environments/environment.ts",
                   "with": "src/environments/environment.local.ts"
+                },
+                {
+                  "replace": "src/app/core/app-access-providers.ts",
+                  "with": "src/app/core/app-access-providers.mock.ts"
+                },
+                {
+                  "replace": "src/app/core/guide-access/guide-access-provider.ts",
+                  "with": "src/app/core/guide-access/guide-access-provider.mock.ts"
                 }
               ]
             }

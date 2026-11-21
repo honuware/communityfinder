@@ -80,6 +80,14 @@ export class EventSubmissionsHttpAccess implements EventSubmissionsAccess {
       )
       .pipe(catchError((error) => throwError(() => toSubmissionProblem(error))));
   }
+
+  removeFlyer(submissionId: number): Observable<FlyerResult> {
+    return this.http
+      .delete<FlyerResult>(`${this.apiBase}/event_submissions/${submissionId}/photo`, {
+        withCredentials: true,
+      })
+      .pipe(catchError((error) => throwError(() => toSubmissionProblem(error))));
+  }
 }
 
 type Raw = Record<string, unknown>;

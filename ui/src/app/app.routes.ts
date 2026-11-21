@@ -1,12 +1,12 @@
 import { Routes } from '@angular/router';
 import {
-  AdminGuard,
   AuthGuard,
   NoAuthGuard,
   LoginComponent,
   RegisterComponent,
   VerifyComponent,
 } from '@honuware/ui/auth';
+import { AdminAreaGuard } from './core/guards/admin-area.guard';
 import { Home } from './pages/home/home';
 import { AccountPage } from './pages/account/account';
 import { ChangePasswordPage } from './pages/account/change-password';
@@ -37,12 +37,15 @@ export const routes: Routes = [
   // access and markdown renderer; anonymous.
   { path: 'guide', loadChildren: () => import('./pages/guide/guide.routes') },
 
-  // The admin CRUD editor (@honuware/ui/crud), lazy-loaded so the editor pages stay
-  // out of the initial bundle. AuthGuard sends anonymous visitors to /login; the
-  // nested AdminGuard sends signed-in non-admins home.
+  // The admin area (the dashboard, the Events pages, and @honuware/ui/crud's
+  // editor), lazy-loaded so its pages stay out of the initial bundle. AuthGuard
+  // sends anonymous visitors to /login. AdminAreaGuard lets in admins, events
+  // curators (CM3 Phase 2 §12.5) and guide curators (CM3 OQ24), and sends
+  // anyone else home. Each page inside carries its own narrower guard
+  // (admin.routes.ts).
   {
     path: 'admin',
-    canActivate: [AuthGuard, AdminGuard],
+    canActivate: [AuthGuard, AdminAreaGuard],
     loadChildren: () => import('./pages/admin/admin.routes'),
   },
 

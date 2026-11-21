@@ -166,6 +166,10 @@ export interface EventSubmissionsAccess {
     imageData: ArrayBuffer,
     imageType: FlyerImageType,
   ): Observable<FlyerResult>;
+  // DELETE /api/event_submissions/<id>/photo — your own, while a date waits:
+  // takes the photo off every waiting date (CM3 Phase 2 §11). `event_ids` are
+  // the dates that had one. NOTHING_PENDING.
+  removeFlyer(submissionId: number): Observable<FlyerResult>;
 }
 
 export const EVENT_SUBMISSIONS_ACCESS = new InjectionToken<EventSubmissionsAccess>(

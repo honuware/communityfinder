@@ -79,6 +79,10 @@ namespace DbSchema {
 	// permission names live in honuware's db_schema/permissions.h; this one is
 	// app-specific, so it sits with the table it gates.
 	inline constexpr std::string_view kPermissionManageEvents = "manage_events";
+	// CM3 Phase 2 §12.1 (OQ19): the seeded role that holds manage_events and
+	// nothing else, so a curator need not be a full admin. Lower case like the
+	// framework's role names (kRoleNameAdmin is "admin").
+	inline constexpr std::string_view kRoleNameCurator = "curator";
 
 	void MakeEventsTable(DatabaseInfo databaseInfo);
 

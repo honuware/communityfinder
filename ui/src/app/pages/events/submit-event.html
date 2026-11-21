@@ -46,6 +46,9 @@
           [class.submit-event__hint]="flyer.ok"
         >
           {{ flyer.message }}
+          @if (!flyer.ok) {
+            You can add it from <a routerLink="/account/submissions">My submissions</a>.
+          }
         </p>
       }
       @if (result.possible_duplicates.length) {

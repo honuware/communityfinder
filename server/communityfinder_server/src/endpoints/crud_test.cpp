@@ -1,3 +1,4 @@
+#include <set>
 #include <string>
 #include <utility>
 
@@ -11,9 +12,20 @@
 #include "business_logic/create_app_tables.h"
 #include "business_logic/create_framework_tables.h"
 #include "db_schema/config_secrets.h"
+#include "db_schema/event_gallery_photos.h"
+#include "db_schema/event_sources.h"
 #include "db_schema/event_submissions.h"
+#include "db_schema/events.h"
+#include "db_schema/guide_links.h"
+#include "db_schema/guide_pages.h"
+#include "db_schema/organizations.h"
 #include "db_schema/people.h"
+#include "db_schema/places.h"
 #include "db_schema/roles.h"
+#include "db_schema/series.h"
+#include "db_schema/service_listings.h"
+#include "db_schema/venue_profiles.h"
+#include "db_schema/venues.h"
 #include "endpoints/events_endpoint_test_support.h"
 #include "sql_util/table_helpers/people.h"
 #include "sql_util/table_helpers/role_assignments.h"
@@ -390,6 +402,87 @@ TEST(CommunityFinderCrudTest, AdminGetDbSchemaReturnsShape) {
                   std::string::npos);
         EXPECT_NE(resp.body.find(std::string(DbSchema::kRolesTable)),
                   std::string::npos);
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
+// The tables get_db_schema offers the caller's table picker (`root_tables`).
+std::set<std::string> RootTables(EndpointTestHelper& helper) {
+    crow::response resp = Handle(helper, crow::HTTPMethod::Get, "/api/get_db_schema");
+    EXPECT_EQ(resp.code, 200) << resp.body;
+    std::set<std::string> tables;
+    if (resp.code != 200) {
+        return tables;
+    }
+    Json::Value body = Json::Value::FromText(resp.body);
+    for (const Json::Value& table : body["root_tables"].GetArray()) {
+        tables.insert(table.Get<std::string>());
+    }
+    return tables;
+}
+
+// CM3 Phase 2 §12.5 and OQ24: the admin area lets in event curators and guide
+// curators, and Manage Data's table list is whatever get_db_schema offers. It
+// offers the public vocabularies plus the tables the caller's permissions
+// reach (admin_table_permissions), so each kind of curator gets their own
+// tables and never the other's private ones, or the framework's.
+TEST(CommunityFinderCrudTest, EachCuratorsTableListHoldsOnlyTheirOwnTables) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("CFCuratorTableLists", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        // Neither public (PopulateAllowedTables) nor the other curator's.
+        const std::set<std::string> eventsOnly = {
+            std::string(DbSchema::kEventsTable),
+            std::string(DbSchema::kSeriesTable),
+            std::string(DbSchema::kEventSourcesTable),
+            std::string(DbSchema::kEventSubmissionsTable),
+            std::string(DbSchema::kEventGalleryPhotosTable),
+        };
+        const std::set<std::string> guideOnly = {
+            std::string(DbSchema::kVenueProfilesTable),
+            std::string(DbSchema::kOrganizationsTable),
+            std::string(DbSchema::kPlacesTable),
+            std::string(DbSchema::kServiceListingsTable),
+            std::string(DbSchema::kGuidePagesTable),
+            std::string(DbSchema::kGuideLinksTable),
+        };
+        const std::set<std::string> frameworkOnly = {
+            std::string(DbSchema::kPeopleTable),
+            std::string(DbSchema::kRolesTable),
+        };
+        auto expectHasAll = [](const std::set<std::string>& tables,
+                               const std::set<std::string>& wanted, std::string_view who) {
+            for (const std::string& table : wanted) {
+                EXPECT_TRUE(tables.count(table)) << who << " should see " << table;
+            }
+        };
+        auto expectHasNone = [](const std::set<std::string>& tables,
+                                const std::set<std::string>& unwanted, std::string_view who) {
+            for (const std::string& table : unwanted) {
+                EXPECT_FALSE(tables.count(table)) << who << " should not see " << table;
+            }
+        };
+
+        EventsEndpointTest::SignIn(transaction, testDb, helper, "events@example.com", true);
+        const std::set<std::string> eventsCurator = RootTables(helper);
+        expectHasAll(eventsCurator, eventsOnly, "an events curator");
+        EXPECT_TRUE(eventsCurator.count(std::string(DbSchema::kVenuesTable)));
+        expectHasNone(eventsCurator, guideOnly, "an events curator");
+        expectHasNone(eventsCurator, frameworkOnly, "an events curator");
+
+        int64_t guideCuratorId = EventsEndpointTest::SignIn(
+            transaction, testDb, helper, "guide@example.com", false);
+        helper.GrantPermissionToPerson(
+            transaction, guideCuratorId, DbSchema::kPermissionManageGuide);
+        const std::set<std::string> guideCurator = RootTables(helper);
+        expectHasAll(guideCurator, guideOnly, "a guide curator");
+        EXPECT_TRUE(guideCurator.count(std::string(DbSchema::kVenuesTable)));
+        expectHasNone(guideCurator, eventsOnly, "a guide curator");
+        expectHasNone(guideCurator, frameworkOnly, "a guide curator");
     });
     Auth::ServerConfig::Shutdown();
 }

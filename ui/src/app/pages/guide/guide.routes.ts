@@ -1,7 +1,7 @@
+import { Provider } from '@angular/core';
 import { Routes } from '@angular/router';
 import { provideMarkdown } from 'ngx-markdown';
-import { environment } from '../../../environments/environment';
-import { provideGuideAccess } from '../../core/guide-access/guide-access.providers';
+import { provideGuideAppAccess } from '../../core/guide-access/guide-access-provider';
 import { GuideVocabulariesService } from '../../core/services/guide-vocabularies.service';
 import { GraveyardPage } from './graveyard-page';
 import { GuideArticlePage } from './guide-article';
@@ -25,14 +25,16 @@ import { VenueProfilePage } from './venue-profile';
 // bundle (GD3 OQ3, OQ7 (d)).
 //
 // In each group the literal paths come before the :slug ones (the knottyyoga
-// route-ordering hazard). `useMock` is a parameter so specs can mount the
-// real routes over the mock data.
-export function guideRoutes(useMock: boolean): Routes {
+// route-ordering hazard). The data access is a parameter so specs can mount
+// the real routes over the mock data; the app's comes from
+// guide-access-provider.ts, which the `local` build swaps for the demo's (CM3
+// Phase 2 §14).
+export function guideRoutes(guideAccess: Provider): Routes {
   return [
     {
       path: '',
       component: GuideShell,
-      providers: [provideGuideAccess(useMock), GuideVocabulariesService, provideMarkdown()],
+      providers: [guideAccess, GuideVocabulariesService, provideMarkdown()],
       children: [
         { path: '', component: GuideHomePage },
         { path: 'venues', component: VenueDirectoryPage },
@@ -57,4 +59,4 @@ export function guideRoutes(useMock: boolean): Routes {
   ];
 }
 
-export default guideRoutes(environment.useMock);
+export default guideRoutes(provideGuideAppAccess());

@@ -1,7 +1,15 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, of, throwError } from 'rxjs';
-import { CommunityAccess, HealthInfo, SiteInfo } from './community-access';
+import {
+  CommunityAccess,
+  HealthInfo,
+  PHOTO_REMOVAL_EMAIL_MAX,
+  PHOTO_REMOVAL_MESSAGE_MAX,
+  PHOTO_REMOVAL_RATE_LIMITED,
+  PhotoRemovalRequest,
+  SiteInfo,
+} from './community-access';
 import {
   buildEventsMockData,
   MockEventRecord,
@@ -57,6 +65,61 @@ function notFound(detail: string): Observable<never> {
   );
 }
 
+function refused(status: number, errorCode: string, field: string, detail: string) {
+  return throwError(
+    () =>
+      new HttpErrorResponse({
+        status,
+        statusText: status === 429 ? 'Too Many Requests' : 'Bad Request',
+        error: { status, detail, error_code: errorCode, ...(field ? { field } : {}) },
+      }),
+  );
+}
+
+// The server's main checks on a photo-removal request
+// (CheckPhotoRemovalRequest), in its order, with its messages; null when it
+// passes. Lengths are UTF-8 bytes, as the server counts them.
+function photoRemovalProblem(request: PhotoRemovalRequest): Observable<never> | null {
+  const path = request.page_path.trim();
+  const message = request.message.trim();
+  const email = request.reply_email.trim();
+  if (!path) {
+    return refused(400, 'REQUIRED', 'page_path', 'Which page is the photo on?');
+  }
+  if (!path.startsWith('/') || path.startsWith('//')) {
+    return refused(400, 'BAD_PAGE', 'page_path', "The page must be one of this site's.");
+  }
+  if (!request.page_title.trim()) {
+    return refused(400, 'REQUIRED', 'page_title', 'Which page is the photo on?');
+  }
+  if (utf8Length(message) > PHOTO_REMOVAL_MESSAGE_MAX) {
+    return refused(
+      400,
+      'TOO_LONG',
+      'message',
+      `Please keep your message under ${PHOTO_REMOVAL_MESSAGE_MAX} characters.`,
+    );
+  }
+  if (!request.photo.trim() && !message) {
+    return refused(400, 'REQUIRED', 'message', 'Tell us which photo: its number or what it shows.');
+  }
+  if (utf8Length(email) > PHOTO_REMOVAL_EMAIL_MAX) {
+    return refused(400, 'TOO_LONG', 'reply_email', 'That email address is too long.');
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return refused(400, 'BAD_EMAIL', 'reply_email', "That doesn't look like an email address.");
+  }
+  return null;
+}
+
+function utf8Length(text: string): number {
+  return new TextEncoder().encode(text).length;
+}
+
+// The server's per-visitor limit: three accepted requests an hour.
+const PHOTO_REMOVALS_PER_HOUR = 3;
+const HOUR_US = 3_600 * 1_000_000;
+
 // The server's public statuses (EV4 OQ3): approved, and archived.
 function isPublicStatus(status: EventStatus): boolean {
   return status === 'approved' || status === 'archived';
@@ -103,6 +166,34 @@ export class CommunityMockAccess implements CommunityAccess {
       website_url: 'http://localhost:4201/',
       logo_url: '',
     });
+  }
+
+  // What offline "sent": nothing leaves the browser. The honeypot is quietly
+  // dropped, as the server drops it.
+  readonly photoRemovalRequests: PhotoRemovalRequest[] = [];
+  private photoRemovalTimesUs: number[] = [];
+
+  requestPhotoRemoval(request: PhotoRemovalRequest): Observable<void> {
+    if (request.website) {
+      return of(undefined);
+    }
+    const problem = photoRemovalProblem(request);
+    if (problem) {
+      return problem;
+    }
+    const now = nowUs();
+    this.photoRemovalTimesUs = this.photoRemovalTimesUs.filter((at) => at > now - HOUR_US);
+    if (this.photoRemovalTimesUs.length >= PHOTO_REMOVALS_PER_HOUR) {
+      return refused(
+        429,
+        PHOTO_REMOVAL_RATE_LIMITED,
+        '',
+        "You've sent several requests in the last hour. Please try again later, or email us.",
+      );
+    }
+    this.photoRemovalTimesUs.push(now);
+    this.photoRemovalRequests.push(structuredClone(request));
+    return of(undefined);
   }
 
   getUpcomingEvents(query: UpcomingEventsQuery = {}): Observable<UpcomingEvents> {

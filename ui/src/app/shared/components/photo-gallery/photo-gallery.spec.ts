@@ -1,6 +1,12 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { provideRouter } from '@angular/router';
+import { of } from 'rxjs';
+import { vi } from 'vitest';
+import { COMMUNITY_ACCESS } from '../../../core/community-access/community-access';
 import { GalleryPhoto } from '../../../core/types/events.types';
-import { SiteConfigService } from '../../../core/services/site-config.service';
+import { PhotoRemovalForm } from '../photo-removal-form/photo-removal-form';
 import { PhotoGallery } from './photo-gallery';
 
 const PHOTOS: GalleryPhoto[] = [
@@ -15,7 +21,15 @@ const PHOTOS: GalleryPhoto[] = [
 ];
 
 function render(photos: GalleryPhoto[] = PHOTOS) {
-  TestBed.configureTestingModule({ imports: [PhotoGallery] });
+  const access = { requestPhotoRemoval: vi.fn(() => of(undefined)) };
+  TestBed.configureTestingModule({
+    imports: [PhotoGallery],
+    providers: [
+      provideNoopAnimations(),
+      provideRouter([]),
+      { provide: COMMUNITY_ACCESS, useValue: access },
+    ],
+  });
   const fixture = TestBed.createComponent(PhotoGallery);
   fixture.componentRef.setInput('photos', photos);
   fixture.componentRef.setInput('title', 'Leather Night');
@@ -36,11 +50,15 @@ function render(photos: GalleryPhoto[] = PHOTOS) {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
     fixture.detectChanges();
   };
-  return { fixture, element, thumbs, viewer, openAt, key };
+  return { fixture, element, thumbs, viewer, openAt, key, access };
 }
 
 function text(element: Element | null | undefined): string {
   return element?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+function button(within: Element, label: string): HTMLButtonElement {
+  return Array.from(within.querySelectorAll('button')).find((entry) => text(entry) === label)!;
 }
 
 function swipe(target: HTMLElement, fromX: number, toX: number, fromY = 100, toY = 100): void {
@@ -168,29 +186,79 @@ describe('PhotoGallery', () => {
     expect(text(viewer()!.querySelector('.photo-gallery__position'))).toBe('1 of 1');
   });
 
-  it('asks for a removal at the site’s contact address, naming the page and the photo', async () => {
-    const { element, viewer, openAt } = render();
-    const contact = TestBed.inject(SiteConfigService).config.contactEmail;
-    const general = new URL(
-      element.querySelector('.photo-gallery__removal a')!.getAttribute('href')!,
-    );
-    expect(text(element.querySelector('.photo-gallery__removal a'))).toBe(
-      'Ask us to remove a photo',
-    );
-    expect(general.protocol).toBe('mailto:');
-    expect(general.pathname).toBe(contact);
-    expect(general.searchParams.get('subject')).toBe('Photo removal: Leather Night');
-    expect(general.searchParams.get('body')).toContain(
-      'Please remove a photo on https://communityfinder.example/events/103.',
-    );
+  // CM3 Phase 2 §12: a short form in the page, not a mailto.
+  describe('asking for a removal', () => {
+    it('opens the form under the grid, naming no photo; Cancel brings the button back', async () => {
+      const { fixture, element } = render();
+      const ask = element.querySelector<HTMLButtonElement>('.photo-gallery__removal-button')!;
+      expect(text(ask)).toBe('Ask us to remove a photo');
+      ask.focus();
+      ask.click();
+      fixture.detectChanges();
+      const form = fixture.debugElement.query(By.directive(PhotoRemovalForm));
+      expect(form.componentInstance.photo()).toBe('');
+      expect(form.componentInstance.pageTitle()).toBe('Leather Night');
+      expect(element.querySelector('.photo-gallery__removal-button')).toBeNull();
 
-    await openAt(0);
-    const one = new URL(
-      viewer()!.querySelector('.photo-gallery__removal-link')!.getAttribute('href')!,
-    );
-    expect(one.searchParams.get('body')).toContain(
-      'Please remove photo 1 of 3 ("The main room before doors.") on https://communityfinder.example/events/103.',
-    );
+      button(form.nativeElement, 'Cancel').click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(element.querySelector('app-photo-removal-form')).toBeNull();
+      expect(document.activeElement).toBe(element.querySelector('.photo-gallery__removal-button'));
+    });
+
+    it('opens it in the viewer for the photo on screen, and sends which one', async () => {
+      const { fixture, viewer, openAt, access } = render();
+      await openAt(0);
+      viewer()!.querySelector<HTMLButtonElement>('.photo-gallery__removal-link')!.click();
+      fixture.detectChanges();
+      const form = fixture.debugElement.query(By.directive(PhotoRemovalForm));
+      expect(viewer()!.contains(form.nativeElement)).toBe(true);
+      expect(form.componentInstance.photo()).toBe('photo 1 of 3 ("The main room before doors.")');
+      button(form.nativeElement, 'Send').click();
+      fixture.detectChanges();
+      expect(access.requestPhotoRemoval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          page_title: 'Leather Night',
+          photo: 'photo 1 of 3 ("The main room before doors.")',
+        }),
+      );
+    });
+
+    it('holds the photo still while the form is open, and Escape closes the form first', async () => {
+      const { fixture, viewer, openAt, key } = render();
+      await openAt(1);
+      viewer()!.querySelector<HTMLButtonElement>('.photo-gallery__removal-link')!.click();
+      fixture.detectChanges();
+      expect(viewer()!.querySelector('.photo-gallery__step')).toBeNull();
+      key('ArrowRight');
+      expect(fixture.componentInstance.openIndex()).toBe(1);
+      // Typed in the message, an arrow moves the caret, not the photo.
+      const message = viewer()!.querySelector('textarea')!;
+      message.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+      expect(fixture.componentInstance.openIndex()).toBe(1);
+      // The backdrop doesn't throw the request away.
+      viewer()!.click();
+      fixture.detectChanges();
+      expect(viewer()).not.toBeNull();
+
+      key('Escape');
+      expect(viewer()).not.toBeNull();
+      expect(viewer()!.querySelector('app-photo-removal-form')).toBeNull();
+      key('Escape');
+      expect(viewer()).toBeNull();
+    });
+
+    it('closes the viewer’s form when the viewer closes', async () => {
+      const { fixture, viewer, openAt, element } = render();
+      await openAt(0);
+      viewer()!.querySelector<HTMLButtonElement>('.photo-gallery__removal-link')!.click();
+      fixture.detectChanges();
+      viewer()!.querySelector<HTMLButtonElement>('.photo-gallery__close')!.click();
+      fixture.detectChanges();
+      expect(element.querySelector('app-photo-removal-form')).toBeNull();
+      expect(element.querySelector('.photo-gallery__removal-button')).not.toBeNull();
+    });
   });
 
   it('closes when the page moves on to another gallery', async () => {

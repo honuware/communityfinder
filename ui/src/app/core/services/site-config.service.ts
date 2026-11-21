@@ -13,9 +13,10 @@ export interface SiteConfig {
   logoUrl: string;
   logoAltText: string;
   taglineLines: string[];
-  // Where a visitor writes to us: for now, a request to remove a photo (CM3
-  // OQ8, until CM1's report flag). App-static: the address the site's mail
-  // already comes from (the server's mail_sender_address default).
+  // Where a visitor writes to us when the photo-removal form can't send (CM3
+  // Phase 2 §12; the form replaced OQ8's mailto). App-static: the address
+  // the site's mail already comes from (the server's mail_sender_address
+  // default).
   contactEmail: string;
 }
 
@@ -57,7 +58,7 @@ export class SiteConfigService {
       catchError((err) => {
         console.warn('[SiteConfig] /api/site_info failed; using fallback branding', err);
         return of(void 0);
-      })
+      }),
     );
   }
 

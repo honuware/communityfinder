@@ -1423,5 +1423,94 @@ TEST(EventHelperTest, DetailGalleryIsTheEventsOwnElseItsSeries) {
     });
 }
 
+// CM3 Phase 2 §9 — the curator's event finder.
+std::vector<std::string> FinderTitles(const std::vector<CuratorEventMatch>& matches) {
+    std::vector<std::string> titles;
+    for (const CuratorEventMatch& match : matches) titles.push_back(match.event.title);
+    return titles;
+}
+
+TEST(EventHelperTest, ClampCuratorFinderLimitDefaultsAndCaps) {
+    EXPECT_EQ(ClampCuratorFinderLimit(0), kCuratorFinderDefaultLimit);
+    EXPECT_EQ(ClampCuratorFinderLimit(-5), kCuratorFinderDefaultLimit);
+    EXPECT_EQ(ClampCuratorFinderLimit(1), 1);
+    EXPECT_EQ(ClampCuratorFinderLimit(10), 10);
+    EXPECT_EQ(ClampCuratorFinderLimit(kCuratorFinderMaxLimit), kCuratorFinderMaxLimit);
+    EXPECT_EQ(ClampCuratorFinderLimit(kCuratorFinderMaxLimit + 1), kCuratorFinderMaxLimit);
+}
+
+TEST(EventHelperTest, FindForCuratorsTellsEventsApartByDateVenueSeriesAndStatus) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("FindForCuratorsTellsEventsApartByDateVenueSeriesAndStatus", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        const int64_t now = NowUs(transaction);
+
+        // Three dates of one series, all titled alike (Mason's Board Game
+        // Night), plus an unrelated event the search mustn't find.
+        auto add = [&](std::string_view key, int64_t startsAtUs, std::string_view title,
+                       std::optional<int64_t> venueId, std::optional<std::string> locationText) {
+            IngestItem item = Item(world.feed, key, startsAtUs);
+            item.title = std::string(title);
+            item.venueId = venueId;
+            item.locationText = locationText;
+            item.seriesSlug = "t4t";
+            return IngestOne(transaction, helper, item).eventId;
+        };
+        int64_t nextWeek = add("next-week", now + 7 * kUsPerDay, "Board Game Night", world.theCuff, std::nullopt);
+        int64_t tomorrow = add("tomorrow", now + kUsPerDay, "Board Game Night", std::nullopt,
+                               std::string("Volunteer Park"));
+        int64_t lastWeek = add("last-week", now - 7 * kUsPerDay, "Board Game Night", world.sunsetTavern,
+                               std::nullopt);
+        IngestOne(transaction, helper, Item(world.feed, "other", now + kUsPerDay));
+        Approve(transaction, helper, tomorrow);
+        ASSERT_TRUE(helper.ReviewEvent(transaction, lastWeek, ReviewAction::Reject, kReviewerPersonId, "no").ok);
+
+        // Trimmed, any case.
+        std::vector<CuratorEventMatch> matches = helper.FindForCurators(transaction, "  board GAME ", 10);
+        ASSERT_EQ(matches.size(), 3u);
+        EXPECT_EQ(matches[0].event.id, tomorrow);
+        EXPECT_EQ(matches[0].status, "approved");
+        EXPECT_EQ(matches[0].event.locationText, "Volunteer Park");
+        EXPECT_EQ(matches[0].event.venueName, "");
+        EXPECT_EQ(matches[1].event.id, nextWeek);
+        EXPECT_EQ(matches[1].status, "pending");
+        EXPECT_EQ(matches[1].event.venueName, "The Cuff");
+        // The past comes last, in every status.
+        EXPECT_EQ(matches[2].event.id, lastWeek);
+        EXPECT_EQ(matches[2].status, "rejected");
+        EXPECT_EQ(matches[2].event.venueName, "Sunset Tavern");
+        for (const CuratorEventMatch& match : matches) {
+            EXPECT_EQ(match.event.seriesTitle, "T4T") << match.event.id;
+            EXPECT_GT(match.event.startsAtUs, 0) << match.event.id;
+        }
+
+        EXPECT_EQ(helper.FindForCurators(transaction, "board game", 1).size(), 1u);
+    });
+}
+
+TEST(EventHelperTest, FindForCuratorsWithoutASearchListsWhatIsComingUp) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("FindForCuratorsWithoutASearchListsWhatIsComingUp", [&](Transaction& transaction) {
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        World world = MakeWorld(transaction, databaseHelper);
+        EventHelper helper(databaseHelper);
+        const int64_t now = NowUs(transaction);
+
+        IngestOne(transaction, helper, Item(world.feed, "in-two-days", now + 2 * kUsPerDay));
+        IngestOne(transaction, helper, Item(world.feed, "tomorrow", now + kUsPerDay));
+        IngestOne(transaction, helper, Item(world.feed, "yesterday", now - kUsPerDay));
+
+        for (std::string_view blank : { "", "   " }) {
+            EXPECT_EQ(FinderTitles(helper.FindForCurators(transaction, blank, 0)),
+                      std::vector<std::string>({ "Event tomorrow", "Event in-two-days" }))
+                << "[" << blank << "]";
+        }
+        EXPECT_EQ(FinderTitles(helper.FindForCurators(transaction, "", 1)),
+                  std::vector<std::string>({ "Event tomorrow" }));
+    });
+}
+
 }  // namespace
 }  // namespace Events

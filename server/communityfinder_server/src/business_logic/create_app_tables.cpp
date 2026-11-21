@@ -50,6 +50,7 @@
 #include "sql_util/database_access/db_and_table_operations.h"
 #include "sql_util/database_common.h"
 #include "sql_util/table_helpers/permissions.h"
+#include "sql_util/table_helpers/role_permissions.h"
 #include "sql_util/table_helpers/roles.h"
 #include "util/types.h"
 
@@ -940,6 +941,23 @@ void PopulateAppPermissions(
         kManageGuideTables);
     // EV4's run_scheduled_jobs, which gates the job endpoints, is honuware's:
     // PopulateFrameworkTables seeds it and grants it to Administrator (§9).
+
+    // CM3 Phase 2 §12.1 (OQ19): the Curator role, holding manage_events and
+    // nothing else, looked up by name like the Administrator grant above. Give
+    // a person this role (Roles, in the admin) to let them curate events
+    // without being an admin; photo-removal requests reach them too.
+    TableHelpers::Roles rolesHelper(databaseHelper);
+    const int64_t curatorRoleId = rolesHelper.AddRole(
+        transaction, DbSchema::kRoleNameCurator,
+        "Curates events: reviews submissions, and edits events, series, venues, "
+        "their photo galleries, and the shared vocabularies. Gets photo-removal "
+        "requests.");
+    const int64_t manageEventsId = std::stoll(
+        TableHelpers::Permissions(databaseHelper)
+            .GetPermission(transaction, DbSchema::kPermissionManageEvents)
+            .at(std::string(DbSchema::kPermissionsId)));
+    TableHelpers::RolePermissions(databaseHelper)
+        .AddRolePermission(transaction, curatorRoleId, manageEventsId);
 }
 
 // Tables whose rows can carry photos through the framework pipeline

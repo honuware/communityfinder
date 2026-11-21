@@ -110,6 +110,26 @@ target_sources(communityfinder_test_cases PUBLIC
     admin_event_gallery_settings_test.cpp
 )
 
+# CM3 Phase 2 — the curator's event finder (§9).
+target_sources(communityfinder_core PRIVATE
+    admin_event_search.h
+    admin_event_search.cpp
+)
+
+target_sources(communityfinder_test_cases PUBLIC
+    admin_event_search_test.cpp
+)
+
+# CM3 Phase 2 — photo-removal requests, the public form (§12.3).
+target_sources(communityfinder_core PRIVATE
+    photo_removal_requests.h
+    photo_removal_requests.cpp
+)
+
+target_sources(communityfinder_test_cases PUBLIC
+    photo_removal_requests_test.cpp
+)
+
 target_sources(communityfinder_test_cases PUBLIC
     guide_endpoint_test_support.h
     guide_endpoint_test_support.cpp

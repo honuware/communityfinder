@@ -49,9 +49,15 @@ export interface GalleryRow {
 // taken back out), so the message can say so.
 const UPLOAD_FAILED = { uploadFailed: true } as const;
 
+// Characters, not UTF-16 units, as the database counts them.
+function characters(text: string): number {
+  return [...text].length;
+}
+
 // The Gallery section of the event editor (CM3 §5.6), for an event that's
 // been saved. Its photos in order, each with its alt text, caption and
-// credit; move one up or down (generic CRUD rewrites sort_order); remove one
+// credit; edit those words in place (Phase 2 §10); move one up or down
+// (generic CRUD rewrites sort_order); remove one
 // after a confirm in the page (its photo, then its row). "Add photo" takes
 // the alt text, an optional caption and credit, the consent box, and a photo
 // held back (hw-photo-upload's deferUpload): the row is made first through
@@ -95,6 +101,10 @@ export class EventGalleryEditor {
   readonly confirmingRemoveId = signal<number | null>(null);
   readonly adding = signal(false);
   readonly addError = signal('');
+  // CM3 Phase 2 §10 (OQ12): one row's words open for editing in place.
+  readonly editingId = signal<number | null>(null);
+  readonly savingEdit = signal(false);
+  readonly editError = signal('');
 
   // Limits as the template's maxlength reads them.
   readonly altTextMax = GALLERY_ALT_TEXT_MAX;
@@ -108,6 +118,12 @@ export class EventGalleryEditor {
     consent: new FormControl(false, { nonNullable: true }),
   });
 
+  readonly editForm = new FormGroup({
+    altText: new FormControl('', { nonNullable: true }),
+    caption: new FormControl('', { nonNullable: true }),
+    credit: new FormControl('', { nonNullable: true }),
+  });
+
   private readonly upload = viewChild(PhotoUploadComponent);
 
   constructor() {
@@ -116,6 +132,7 @@ export class EventGalleryEditor {
       untracked(() => {
         this.confirmingRemoveId.set(null);
         this.addError.set('');
+        this.editingId.set(null);
         this.load(eventId);
       });
     });
@@ -182,7 +199,81 @@ export class EventGalleryEditor {
       });
   }
 
+  // Opens the row's alt text, caption and credit in place. One row at a time:
+  // opening another drops what was typed in the first.
+  startEdit(row: GalleryRow): void {
+    this.confirmingRemoveId.set(null);
+    this.editError.set('');
+    this.editForm.setValue({ altText: row.altText, caption: row.caption, credit: row.credit });
+    this.editingId.set(row.id);
+  }
+
+  cancelEdit(): void {
+    this.editingId.set(null);
+    this.editError.set('');
+  }
+
+  // Only the words that changed go, trimmed, through generic CRUD. Alt text
+  // can't be blank (the database's CHECK says so too); nothing changed closes
+  // without a write. A failed save says so and keeps what was typed.
+  saveEdit(row: GalleryRow): void {
+    const typed = this.editForm.getRawValue();
+    const words = {
+      altText: typed.altText.trim(),
+      caption: typed.caption.trim(),
+      credit: typed.credit.trim(),
+    };
+    const problem = !words.altText
+      ? 'Describe the photo for people who can’t see it.'
+      : characters(words.altText) > GALLERY_ALT_TEXT_MAX
+        ? `Keep the alt text to ${GALLERY_ALT_TEXT_MAX} characters.`
+        : characters(words.caption) > GALLERY_CAPTION_MAX
+          ? `Keep the caption to ${GALLERY_CAPTION_MAX} characters.`
+          : characters(words.credit) > GALLERY_CREDIT_MAX
+            ? `Keep the credit to ${GALLERY_CREDIT_MAX} characters.`
+            : '';
+    if (problem) {
+      this.editError.set(problem);
+      return;
+    }
+    const changes: Record<string, string> = {};
+    if (words.altText !== row.altText) changes['alt_text'] = words.altText;
+    if (words.caption !== row.caption) changes['caption'] = words.caption;
+    if (words.credit !== row.credit) changes['credit'] = words.credit;
+    if (Object.keys(changes).length === 0) {
+      this.cancelEdit();
+      return;
+    }
+    this.editError.set('');
+    this.savingEdit.set(true);
+    this.crud
+      .updateItem({
+        table_name: GALLERY_TABLE,
+        column_name: 'id',
+        column_value: String(row.id),
+        value: changes,
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.savingEdit.set(false);
+          this.editingId.set(null);
+          this.rows.update((rows) =>
+            rows.map((candidate) =>
+              candidate.id === row.id ? { ...candidate, ...words } : candidate,
+            ),
+          );
+          this.toast.success('Photo details saved.');
+        },
+        error: () => {
+          this.savingEdit.set(false);
+          this.editError.set("The changes couldn't be saved. Please try again.");
+        },
+      });
+  }
+
   askToRemove(row: GalleryRow): void {
+    this.editingId.set(null);
     this.confirmingRemoveId.set(row.id);
   }
 

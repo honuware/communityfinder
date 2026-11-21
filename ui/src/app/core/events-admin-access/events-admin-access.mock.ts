@@ -6,9 +6,12 @@ import { SubmissionProblem } from '../event-submissions-access/event-submissions
 import { GallerySettingsMockStore } from '../mock/gallery-settings-mock-store';
 import { PastEventSettingsMockStore } from '../mock/past-event-settings-mock-store';
 import { SubmissionSettingsMockStore } from '../mock/submission-settings-mock-store';
-import { dataResultsToRecords } from '../types/events.types';
+import { dataResultsToRecords, EventStatus } from '../types/events.types';
+import { CALENDAR_DEFAULT_DURATION_US } from '../utils/event-links';
 import { nowUs } from '../utils/events-date.utils';
 import {
+  clampCuratorFinderLimit,
+  CuratorEventMatch,
   EventsAdminAccess,
   GALLERY_ALT_TEXT_MAX,
   GALLERY_CAPTION_MAX,
@@ -204,6 +207,61 @@ export class EventsAdminMockAccess implements EventsAdminAccess {
     );
   }
 
+  // EventHelper::FindForCurators over the CRUD store: every status; with a
+  // search, the titles containing it (any case), those not yet over first,
+  // soonest first, then the rest, latest first; without, the next ones not yet
+  // over. An event with no end is over two hours after it starts.
+  findEvents(search: string, limit?: number): Observable<CuratorEventMatch[]> {
+    const text = search.trim().toLocaleLowerCase();
+    const count = clampCuratorFinderLimit(limit);
+    return forkJoin({
+      events: this.allRows('events'),
+      venues: this.allRows('venues'),
+      series: this.allRows('series'),
+    }).pipe(
+      map(({ events, venues, series }) => {
+        const now = nowUs();
+        const venueNames = new Map(venues.map((row) => [row['id'], row['name'] ?? '']));
+        const seriesTitles = new Map(series.map((row) => [row['id'], row['title'] ?? '']));
+        const notOver = (row: Record<string, string>) =>
+          (row['ends_at_us']
+            ? Number(row['ends_at_us'])
+            : Number(row['starts_at_us']) + CALENDAR_DEFAULT_DURATION_US) >= now;
+        const soonestFirst = (a: Record<string, string>, b: Record<string, string>) =>
+          Number(a['starts_at_us']) - Number(b['starts_at_us']) ||
+          Number(a['id']) - Number(b['id']);
+        const latestFirst = (a: Record<string, string>, b: Record<string, string>) =>
+          Number(b['starts_at_us']) - Number(a['starts_at_us']) ||
+          Number(a['id']) - Number(b['id']);
+        const matches = events.filter((row) =>
+          (row['title'] ?? '').toLocaleLowerCase().includes(text),
+        );
+        const chosen = text
+          ? [
+              ...matches.filter(notOver).sort(soonestFirst),
+              ...matches.filter((row) => !notOver(row)).sort(latestFirst),
+            ]
+          : events.filter(notOver).sort(soonestFirst);
+        return chosen.slice(0, count).map((row): CuratorEventMatch => ({
+          id: Number(row['id']),
+          title: row['title'] ?? '',
+          starts_at_us: Number(row['starts_at_us']),
+          ends_at_us: row['ends_at_us'] ? Number(row['ends_at_us']) : null,
+          venue_name: venueNames.get(row['venue_id']) ?? '',
+          location_text: row['location_text'] ?? '',
+          series_title: seriesTitles.get(row['series_id']) ?? '',
+          status: (row['status'] ?? 'pending') as EventStatus,
+        }));
+      }),
+    );
+  }
+
+  private allRows(table: string): Observable<Record<string, string>[]> {
+    return this.crud
+      .getFilteredTableRows(table, 'id', true, FINDER_PAGE_SIZE, 0, [])
+      .pipe(map(dataResultsToRecords));
+  }
+
   private decide(eventId: string, status: string, decision: ReviewDecision): Observable<void> {
     return this.crud.updateItem({
       table_name: 'events',
@@ -267,6 +325,9 @@ export class EventsAdminMockAccess implements EventsAdminAccess {
     return this.crud.getRowByValues(table, filters).pipe(map(dataResultsToRecords));
   }
 }
+
+// Every row the demo has, for the finder: its tables are far smaller.
+const FINDER_PAGE_SIZE = 1000;
 
 function statusFor(action: ReviewAction): 'approved' | 'rejected' {
   return action === 'approve' ? 'approved' : 'rejected';

@@ -10,7 +10,7 @@ import { AuthService } from '@honuware/ui/auth';
 import { SimpleDateComponent } from '@honuware/ui/controls';
 import { provideHonuwareAccessMock } from '@honuware/ui/testing';
 import { provideCommunityAccess } from '../../core/community-access/community-access.providers';
-import { PhotoUploadComponent } from '@honuware/ui/photos';
+import { ImageTooLargeError, PhotoUploadComponent } from '@honuware/ui/photos';
 import {
   EVENT_SUBMISSIONS_ACCESS,
   FlyerImageType,
@@ -21,7 +21,11 @@ import {
 } from '../../core/event-submissions-access/event-submissions-access';
 import { pacificWallClockToUs } from '../../core/utils/events-date.utils';
 import { VIDEO_ERROR_HOST_NOT_SUPPORTED, videoErrorMessage } from '../../core/utils/video-links';
-import { FLYER_TYPE_MESSAGE, MAX_SUBMISSION_DATES } from './submit-event-form';
+import {
+  FLYER_TYPE_MESSAGE,
+  FLYER_UNREADABLE_MESSAGE,
+  MAX_SUBMISSION_DATES,
+} from './submit-event-form';
 import { SubmitEventPage } from './submit-event';
 import routes from './events.routes';
 
@@ -129,9 +133,25 @@ function flyerPicker(harness: RouterTestingHarness): PhotoUploadComponent {
     .componentInstance as PhotoUploadComponent;
 }
 
-function chooseFlyer(harness: RouterTestingHarness, name: string, type: string): File {
+// jsdom has no canvas to shrink a flyer on, so the picker's prepare step
+// (CM3 Phase 2 §13.3; @honuware/ui's own specs cover it) is stood in for: it
+// hands back these bytes as the JPEG, or fails with `failure`.
+const PREPARED_FLYER = [9, 8, 7];
+
+function chooseFlyer(
+  harness: RouterTestingHarness,
+  name: string,
+  type: string,
+  failure?: unknown,
+): File {
   const file = new File([new Uint8Array([1, 2, 3, 4, 5])], name, { type });
-  flyerPicker(harness).pendingFile = file;
+  const picker = flyerPicker(harness);
+  picker.pendingFile = file;
+  vi.spyOn(picker, 'preparePendingPhoto').mockReturnValue(
+    failure
+      ? throwError(() => failure)
+      : of({ buffer: new Uint8Array(PREPARED_FLYER).buffer, imageType: 'jpeg' as const }),
+  );
   return file;
 }
 
@@ -417,20 +437,26 @@ describe('SubmitEventPage', () => {
       expect(flyerPicker(harness).deferUpload).toBe(true);
     });
 
-    it('goes up once the submission is in, and the thanks say so', async () => {
+    it('goes up shrunk, as a JPEG, once the submission is in, and the thanks say so', async () => {
       const { access, harness, page, element } = await open();
       fillIn(page);
       chooseFlyer(harness, 'flyer.png', 'image/png');
+      // Taken now: the thanks panel takes the picker away.
+      const prepare = vi.mocked(flyerPicker(harness).preparePendingPhoto);
       page.send();
-      // The page reads the file (a promise) before it sends it.
       await vi.waitFor(() => expect(page.sent()).not.toBeNull());
       harness.detectChanges();
 
       expect(access.attachFlyer).toHaveBeenCalledTimes(1);
       const [submissionId, bytes, type] = access.attachFlyer.mock.calls[0];
       expect(submissionId).toBe(7);
-      expect(Array.from(new Uint8Array(bytes))).toEqual([1, 2, 3, 4, 5]);
-      expect(type).toBe('png');
+      // What the prepare step made of it (CM3 Phase 2 §13.3), not the file.
+      expect(Array.from(new Uint8Array(bytes))).toEqual(PREPARED_FLYER);
+      expect(type).toBe('jpeg');
+      // Prepared first, then the submission, then the flyer.
+      expect(prepare.mock.invocationCallOrder[0]).toBeLessThan(
+        access.submit.mock.invocationCallOrder[0],
+      );
       expect(access.submit.mock.invocationCallOrder[0]).toBeLessThan(
         access.attachFlyer.mock.invocationCallOrder[0],
       );
@@ -446,6 +472,33 @@ describe('SubmitEventPage', () => {
       page.send();
       await vi.waitFor(() => expect(page.sent()).not.toBeNull());
       expect(access.attachFlyer.mock.calls[0][2]).toBe('jpeg');
+    });
+
+    // CM3 Phase 2 §13.3 (OQ13): no more "sent, but its flyer couldn't be
+    // added" for a flyer that's simply too big.
+    it('refuses a flyer still over the upload limit after shrinking, before sending', async () => {
+      const { access, harness, page, element } = await open();
+      fillIn(page);
+      const tooLarge = new ImageTooLargeError(12 * 1024 * 1024, 10 * 1024 * 1024);
+      chooseFlyer(harness, 'flyer.png', 'image/png', tooLarge);
+      page.send();
+      harness.detectChanges();
+      expect(access.submit).not.toHaveBeenCalled();
+      expect(page.sending()).toBe(false);
+      expect(text(element.querySelector('[data-field="flyer"]'))).toBe(
+        'This image is 12 MB even after shrinking, and the limit is 10 MB. Try a smaller image.',
+      );
+      expect(element.querySelector('form')).not.toBeNull();
+    });
+
+    it('refuses a flyer the browser can’t read, before sending', async () => {
+      const { access, harness, page, element } = await open();
+      fillIn(page);
+      chooseFlyer(harness, 'flyer.jpg', 'image/jpeg', new Error('Failed to load image'));
+      page.send();
+      harness.detectChanges();
+      expect(access.submit).not.toHaveBeenCalled();
+      expect(text(element.querySelector('[data-field="flyer"]'))).toBe(FLYER_UNREADABLE_MESSAGE);
     });
 
     it('refuses anything but a JPEG or PNG before sending, and keeps the form', async () => {
@@ -476,9 +529,12 @@ describe('SubmitEventPage', () => {
         "Thanks, it's waiting for review.",
       );
       const outcome = element.querySelector('.submit-event__flyer-outcome')!;
+      // CM3 Phase 2 §11: and where to add it later.
       expect(text(outcome)).toBe(
-        "Your event was sent, but its flyer couldn't be added. The flyer is too large.",
+        "Your event was sent, but its flyer couldn't be added. The flyer is too large. " +
+          'You can add it from My submissions.',
       );
+      expect(outcome.querySelector('a')?.getAttribute('href')).toBe('/account/submissions');
       expect(outcome.classList).toContain('submit-event__error');
     });
 

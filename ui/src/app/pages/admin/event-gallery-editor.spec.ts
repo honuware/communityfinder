@@ -191,6 +191,139 @@ describe('EventGalleryEditor', () => {
     });
   });
 
+  // CM3 Phase 2 §10 (OQ12): a photo's words are edited where it was added.
+  describe('editing the words', () => {
+    async function storedWords(crud: HonuwareAccessMocks['crud'], id: number) {
+      const stored = dataResultsToRecords(
+        await firstValueFrom(crud.getRow(TABLE, 'id', String(id))),
+      )[0];
+      return { alt: stored['alt_text'], caption: stored['caption'], credit: stored['credit'] };
+    }
+
+    function editForm(element: HTMLElement, id: number): HTMLFormElement {
+      return row(element, id).querySelector('.gallery-editor__edit-form') as HTMLFormElement;
+    }
+
+    it('opens the row’s alt text, caption and credit in place', () => {
+      const { fixture, element, editor } = create();
+      button(row(element, 1), 'Edit').click();
+      fixture.detectChanges();
+      expect(editForm(element, 1)).not.toBeNull();
+      expect(editForm(element, 2)).toBeNull();
+      expect(editor.editForm.getRawValue()).toEqual({
+        altText: 'The bar lit in deep red, with a mirror ball over the dance floor',
+        caption: 'The main room before doors.',
+        credit: 'Photo: The Lantern Room',
+      });
+      expect(button(row(element, 1), 'Edit').disabled).toBe(true);
+    });
+
+    it('saves each field, trimmed, sending only what changed', async () => {
+      const { fixture, element, editor, crud, success } = create();
+      const update = vi.spyOn(crud, 'updateItem');
+      for (const [field, column, typed, saved] of [
+        ['altText', 'alt_text', '  The bar, from the door  ', 'The bar, from the door'],
+        ['caption', 'caption', ' Before doors. ', 'Before doors.'],
+        ['credit', 'credit', ' Photo: the venue ', 'Photo: the venue'],
+      ] as const) {
+        update.mockClear();
+        button(row(element, 1), 'Edit').click();
+        fixture.detectChanges();
+        editor.editForm.controls[field].setValue(typed);
+        button(editForm(element, 1), 'Save').click();
+        fixture.detectChanges();
+        expect(update).toHaveBeenCalledTimes(1);
+        expect(update).toHaveBeenCalledWith({
+          table_name: TABLE,
+          column_name: 'id',
+          column_value: '1',
+          value: { [column]: saved },
+        });
+        expect(editForm(element, 1)).toBeNull();
+      }
+      expect(await storedWords(crud, 1)).toEqual({
+        alt: 'The bar, from the door',
+        caption: 'Before doors.',
+        credit: 'Photo: the venue',
+      });
+      expect(text(row(element, 1).querySelector('.gallery-editor__alt'))).toBe(
+        'The bar, from the door',
+      );
+      expect(text(row(element, 1).querySelector('.gallery-editor__caption'))).toBe('Before doors.');
+      expect(text(row(element, 1).querySelector('.gallery-editor__credit'))).toBe(
+        'Photo: the venue',
+      );
+      expect(success).toHaveBeenCalledWith('Photo details saved.');
+    });
+
+    it('clears a caption, and closes without writing when nothing changed', () => {
+      const { fixture, element, editor, crud } = create();
+      const update = vi.spyOn(crud, 'updateItem');
+      button(row(element, 1), 'Edit').click();
+      fixture.detectChanges();
+      // Only spaces added: trimmed, it's the same, so nothing is sent.
+      editor.editForm.controls.credit.setValue(' Photo: The Lantern Room ');
+      button(editForm(element, 1), 'Save').click();
+      fixture.detectChanges();
+      expect(update).not.toHaveBeenCalled();
+      expect(editForm(element, 1)).toBeNull();
+
+      button(row(element, 1), 'Edit').click();
+      fixture.detectChanges();
+      editor.editForm.controls.caption.setValue('   ');
+      button(editForm(element, 1), 'Save').click();
+      fixture.detectChanges();
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ value: { caption: '' } }));
+      expect(row(element, 1).querySelector('.gallery-editor__caption')).toBeNull();
+    });
+
+    it('Cancel leaves the row as it was', () => {
+      const { fixture, element, editor, crud } = create();
+      const update = vi.spyOn(crud, 'updateItem');
+      button(row(element, 2), 'Edit').click();
+      fixture.detectChanges();
+      editor.editForm.controls.altText.setValue('Something else entirely');
+      button(editForm(element, 2), 'Cancel').click();
+      fixture.detectChanges();
+      expect(update).not.toHaveBeenCalled();
+      expect(editForm(element, 2)).toBeNull();
+      expect(editor.rows().find((entry) => entry.id === 2)?.altText).not.toBe(
+        'Something else entirely',
+      );
+    });
+
+    it('refuses blank alt text before sending anything', () => {
+      const { fixture, element, editor, crud } = create();
+      const update = vi.spyOn(crud, 'updateItem');
+      button(row(element, 1), 'Edit').click();
+      fixture.detectChanges();
+      editor.editForm.controls.altText.setValue('   ');
+      button(editForm(element, 1), 'Save').click();
+      fixture.detectChanges();
+      expect(update).not.toHaveBeenCalled();
+      expect(text(editForm(element, 1).querySelector('.gallery-editor__error'))).toBe(
+        'Describe the photo for people who can’t see it.',
+      );
+    });
+
+    it('says so when a save fails, and keeps what was typed', () => {
+      const { fixture, element, editor, crud } = create();
+      vi.spyOn(crud, 'updateItem').mockReturnValue(throwError(() => new Error('offline')));
+      button(row(element, 1), 'Edit').click();
+      fixture.detectChanges();
+      editor.editForm.controls.caption.setValue('A new caption');
+      button(editForm(element, 1), 'Save').click();
+      fixture.detectChanges();
+      expect(text(editForm(element, 1).querySelector('.gallery-editor__error'))).toBe(
+        "The changes couldn't be saved. Please try again.",
+      );
+      expect(editor.editForm.controls.caption.value).toBe('A new caption');
+      expect(text(row(element, 1).querySelector('.gallery-editor__caption'))).toBe(
+        'The main room before doors.',
+      );
+    });
+  });
+
   describe('removing', () => {
     it('asks in the page first, and can be called off', () => {
       const { fixture, element, crud } = create();

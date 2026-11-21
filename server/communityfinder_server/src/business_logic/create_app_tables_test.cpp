@@ -671,6 +671,33 @@ std::string SchedulerAccountCount(Transaction& transaction) {
         std::string(App::kSchedulerServiceAccountEmail));
 }
 
+// CM3 Phase 2 §12.1 (OQ19): the Curator role exists, holds manage_events and
+// nothing else (so no Users, Roles or settings), and starts with nobody in it.
+TEST(CreateAppTablesTest, SeedsTheCuratorRoleHoldingOnlyManageEvents) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("CuratorRole", [&](Transaction& transaction) {
+        SeedAsRecreateDatabaseDoes(transaction, testDb);
+
+        EXPECT_EQ(transaction.RunSqlStatementReturningOneValue(
+                      "SELECT count(*) FROM roles WHERE name = $1",
+                      std::string(DbSchema::kRoleNameCurator)),
+                  "1");
+        EXPECT_EQ(PermissionsOfRole(transaction, DbSchema::kRoleNameCurator),
+                  std::vector<std::string>{ std::string(DbSchema::kPermissionManageEvents) });
+        EXPECT_EQ(transaction.RunSqlStatementReturningOneValue(
+                      "SELECT count(*) FROM role_assignments ra "
+                      "JOIN roles r ON r.id = ra.role_id WHERE r.name = $1",
+                      std::string(DbSchema::kRoleNameCurator)),
+                  "0");
+        // The Administrator grant is untouched: still exactly one.
+        const std::vector<std::string> adminPermissions =
+            PermissionsOfRole(transaction, DbSchema::kRoleNameAdmin);
+        EXPECT_EQ(std::count(adminPermissions.begin(), adminPermissions.end(),
+                             std::string(DbSchema::kPermissionManageEvents)),
+                  1);
+    });
+}
+
 // EV4 §2.1: run_scheduled_jobs exists and Administrator holds it, so an admin
 // can run a job by hand. It gates endpoints, not tables, so it opens nothing in
 // the generic CRUD editor. Since §9 honuware's seed provides it; this checks the

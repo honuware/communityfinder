@@ -677,6 +677,32 @@ std::optional<SeriesDetail> EventHelper::GetSeriesDetail(
     return detail;
 }
 
+int64_t ClampCuratorFinderLimit(int64_t limit) {
+    if (limit < 1) return kCuratorFinderDefaultLimit;
+    return std::min(limit, kCuratorFinderMaxLimit);
+}
+
+std::vector<CuratorEventMatch> EventHelper::FindForCurators(
+    Transaction& transaction, std::string_view searchText, int64_t limit) {
+    const std::string search = StringTrim(searchText);
+    const int64_t nowUs = NowUs(transaction);
+    const int64_t clamped = ClampCuratorFinderLimit(limit);
+    const KeyValueTableArray rows = search.empty()
+        ? events_.GetNotEndedBy(transaction, nowUs, kICalDefaultDurationUs, clamped)
+        : events_.FindByTitle(transaction, search, nowUs, kICalDefaultDurationUs, clamped);
+
+    std::vector<PublicEvent> assembled = AssemblePublicEvents(transaction, rows);
+    std::vector<CuratorEventMatch> matches;
+    matches.reserve(rows.size());
+    for (size_t i = 0; i < rows.size(); ++i) {
+        CuratorEventMatch match;
+        match.event = std::move(assembled[i]);
+        match.status = Column(rows[i], DbSchema::kEventsStatus);
+        matches.push_back(std::move(match));
+    }
+    return matches;
+}
+
 std::vector<PublicSeries> EventHelper::AssemblePublicSeries(
     Transaction& transaction, const KeyValueTableArray& rows) {
     if (rows.empty()) {

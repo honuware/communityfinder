@@ -253,6 +253,13 @@ public:
                         return PostEventSubmissionPhoto(helper, req, resp, submissionId, imageType);
                     });
                 });
+        CROW_ROUTE(webApp->GetApp(), "/api/event_submissions/<int>/photo")
+            .methods(crow::HTTPMethod::Delete)(
+                [=](const crow::request& req, crow::response& resp, int64_t submissionId) {
+                    Handle(webApp, req, resp, [&](EndpointAuthHelper& helper) {
+                        return DeleteEventSubmissionPhoto(helper, req, resp, submissionId);
+                    });
+                });
     }
 } g_setupRouting;
 
@@ -476,6 +483,48 @@ Json::Value PostEventSubmissionPhoto(
         result = Json::Value(Json::JsonObject{
             { "submission_id", Json::Value(submissionId) },
             { "event_ids", IdArray(flyer.eventIds) },
+        });
+        resp.code = 200;
+    });
+
+    return result;
+}
+
+Json::Value DeleteEventSubmissionPhoto(
+    EndpointAuthHelper& endpointAuthHelper,
+    const crow::request& /*req*/,
+    crow::response& resp,
+    int64_t submissionId) {
+    auto tp = endpointAuthHelper.GetTransactionProvider();
+    if (!tp) {
+        resp = ErrorResponse::InternalError("Database unavailable");
+        return {};
+    }
+
+    Json::Value result;
+    tp->RunInTransaction([&](Transaction& transaction) {
+        Auth::Session& session = endpointAuthHelper.GetSession();
+        if (!session.IsLoggedIn()) {
+            resp = ErrorResponse::NotAuthenticated("Sign in to remove a flyer");
+            return;
+        }
+
+        Events::SubmissionHelper helper(endpointAuthHelper.GetDatabaseHelper());
+        Events::FlyerResult removed =
+            helper.RemoveFlyer(transaction, submissionId, session.GetPersonId());
+        if (!removed.ok) {
+            if (removed.errorCode == Events::kSubmissionErrorNotYours) {
+                resp = ErrorResponse::NotFound("Submission not found");
+            } else {
+                resp = ErrorWithCode(ErrorCodes::kValidationError, removed.errorMessage,
+                                     removed.errorCode);
+            }
+            return;
+        }
+
+        result = Json::Value(Json::JsonObject{
+            { "submission_id", Json::Value(submissionId) },
+            { "event_ids", IdArray(removed.eventIds) },
         });
         resp.code = 200;
     });

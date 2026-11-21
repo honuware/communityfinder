@@ -1,11 +1,16 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { ToastService } from '@honuware/ui/foundation';
+import { ImageTooLargeError, PhotoUploadComponent } from '@honuware/ui/photos';
+import { provideHonuwareAccessMock } from '@honuware/ui/testing';
+import { FLYER_UNREADABLE_MESSAGE } from '../events/submit-event-form';
 import {
   EVENT_SUBMISSIONS_ACCESS,
+  EventSubmissionsAccess,
   MySubmission,
   MySubmissionDate,
   SubmissionDateState,
@@ -67,18 +72,26 @@ const MINE: MySubmission[] = [
   submission(1, [date(11, 'past')], { reject_reason: 'expired' }),
 ];
 
-function render(mine: MySubmission[] | Error = MINE, withdraw = vi.fn()) {
+function render(
+  mine: MySubmission[] | Error = MINE,
+  overrides: Partial<Record<keyof EventSubmissionsAccess, ReturnType<typeof vi.fn>>> = {},
+) {
   const access = {
     getStatus: vi.fn(() => of(true)),
     submit: vi.fn(),
     getMine: vi.fn(() => (mine instanceof Error ? throwError(() => mine) : of(mine))),
-    withdraw,
+    withdraw: vi.fn(),
+    attachFlyer: vi.fn(),
+    removeFlyer: vi.fn(),
+    ...overrides,
   };
   TestBed.configureTestingModule({
     imports: [MySubmissionsPage],
     providers: [
       provideRouter([]),
       provideNoopAnimations(),
+      // The flyer picker's own photo access, which a held-back pick never calls.
+      provideHonuwareAccessMock({}),
       { provide: EVENT_SUBMISSIONS_ACCESS, useValue: access },
     ],
   });
@@ -176,7 +189,7 @@ describe('MySubmissionsPage', () => {
 
   it('confirms in the page, then withdraws and updates in place', () => {
     const withdraw = vi.fn(() => of({ submission_id: 5, withdrawn_event_ids: [51, 52] }));
-    const { fixture, element } = render(MINE, withdraw);
+    const { fixture, element } = render(MINE, { withdraw });
     const success = vi.spyOn(TestBed.inject(ToastService), 'success');
     card(element, 5).querySelector<HTMLButtonElement>('.my-submissions__withdraw')!.click();
     fixture.detectChanges();
@@ -197,7 +210,7 @@ describe('MySubmissionsPage', () => {
 
   it('keeps it when the confirm is turned down', () => {
     const withdraw = vi.fn();
-    const { fixture, page, element } = render(MINE, withdraw);
+    const { fixture, page, element } = render(MINE, { withdraw });
     page.askToWithdraw(MINE[0]);
     fixture.detectChanges();
     Array.from(card(element, 5).querySelectorAll('button'))
@@ -219,7 +232,7 @@ describe('MySubmissionsPage', () => {
         detail: 'Nothing in this submission is waiting for review',
       })),
     );
-    const { fixture, page, element } = render(MINE, withdraw);
+    const { fixture, page, element } = render(MINE, { withdraw });
     const error = vi.spyOn(TestBed.inject(ToastService), 'error');
     page.withdraw(MINE[0]);
     fixture.detectChanges();
@@ -239,5 +252,239 @@ describe('MySubmissionsPage', () => {
     expect(text(element.querySelector('.my-submissions__empty'))).toBe(
       "Your submissions couldn't be loaded. Please try again.",
     );
+  });
+
+  // CM3 Phase 2 §11 (OQ14): the flyer, added, replaced or removed while a
+  // date waits.
+  describe('the flyer', () => {
+    // Submission 6: one waiting date with the flyer on it, and one listed.
+    const WITH_FLYER = submission(6, [
+      date(61, 'waiting', 0, { has_photo: true }),
+      date(62, 'listed', 7, { has_photo: true }),
+    ]);
+
+    function picker(fixture: ComponentFixture<MySubmissionsPage>): PhotoUploadComponent {
+      return fixture.debugElement.query(By.directive(PhotoUploadComponent))
+        .componentInstance as PhotoUploadComponent;
+    }
+
+    // jsdom has no canvas to shrink a flyer on, so the picker's prepare step
+    // (CM3 Phase 2 §13.3; @honuware/ui's own specs cover it) is stood in for:
+    // it hands back these bytes as the JPEG, or fails with `failure`.
+    const PREPARED_FLYER = [9, 8, 7];
+
+    function choose(
+      fixture: ComponentFixture<MySubmissionsPage>,
+      name: string,
+      type: string,
+      failure?: unknown,
+    ) {
+      const flyerPicker = picker(fixture);
+      flyerPicker.pendingFile = new File([new Uint8Array([1, 2, 3, 4])], name, { type });
+      vi.spyOn(flyerPicker, 'preparePendingPhoto').mockReturnValue(
+        failure
+          ? throwError(() => failure)
+          : of({ buffer: new Uint8Array(PREPARED_FLYER).buffer, imageType: 'jpeg' as const }),
+      );
+    }
+
+    function buttonIn(within: Element, label: string): HTMLButtonElement {
+      return Array.from(within.querySelectorAll('button')).find((entry) => text(entry) === label)!;
+    }
+
+    it('offers to add one only while a date waits, and to replace or remove one once it’s on', () => {
+      const { element } = render([...MINE, WITH_FLYER]);
+      expect(text(card(element, 5).querySelector('.my-submissions__flyer-add'))).toBe(
+        'Add a flyer',
+      );
+      expect(card(element, 5).querySelector('.my-submissions__flyer-remove')).toBeNull();
+      expect(text(card(element, 6).querySelector('.my-submissions__flyer-add'))).toBe(
+        'Replace the flyer',
+      );
+      expect(text(card(element, 6).querySelector('.my-submissions__flyer-remove'))).toBe(
+        'Remove the flyer',
+      );
+      for (const id of [4, 3, 2, 1]) {
+        expect(card(element, id).querySelector('.my-submissions__flyer-add')).toBeNull();
+        expect(card(element, id).querySelector('.my-submissions__flyer-remove')).toBeNull();
+      }
+    });
+
+    it('adds one with the picker, and says each waiting date has a photo', async () => {
+      const attachFlyer = vi.fn(() => of({ submission_id: 5, event_ids: [51, 52] }));
+      const { fixture, element } = render(MINE, { attachFlyer });
+      const success = vi.spyOn(TestBed.inject(ToastService), 'success');
+      card(element, 5).querySelector<HTMLButtonElement>('.my-submissions__flyer-add')!.click();
+      fixture.detectChanges();
+      const panel = card(element, 5).querySelector('.my-submissions__flyer')!;
+      expect(panel.querySelector('hw-photo-upload')).not.toBeNull();
+      choose(fixture, 'flyer.png', 'image/png');
+      buttonIn(panel, 'Add it').click();
+      await vi.waitFor(() => expect(attachFlyer).toHaveBeenCalledTimes(1));
+      // Shrunk and re-encoded as a JPEG first, as the submit form does.
+      expect(attachFlyer).toHaveBeenCalledWith(5, expect.any(ArrayBuffer), 'jpeg');
+      const sent = (attachFlyer.mock.calls[0] as unknown[])[1] as ArrayBuffer;
+      expect(Array.from(new Uint8Array(sent))).toEqual(PREPARED_FLYER);
+      fixture.detectChanges();
+      expect(card(element, 5).querySelector('.my-submissions__flyer')).toBeNull();
+      const extras = Array.from(card(element, 5).querySelectorAll('.my-submissions__extras'));
+      expect(extras.map((entry) => text(entry))).toEqual(['With a photo', 'With a photo']);
+      expect(text(card(element, 5).querySelector('.my-submissions__flyer-add'))).toBe(
+        'Replace the flyer',
+      );
+      expect(success).toHaveBeenCalledWith('Your flyer is attached.');
+    });
+
+    it('replaces one the same way', async () => {
+      const attachFlyer = vi.fn(() => of({ submission_id: 6, event_ids: [61] }));
+      const { fixture, element } = render([WITH_FLYER], { attachFlyer });
+      card(element, 6).querySelector<HTMLButtonElement>('.my-submissions__flyer-add')!.click();
+      fixture.detectChanges();
+      choose(fixture, 'new-flyer.jpg', 'image/jpeg');
+      buttonIn(card(element, 6).querySelector('.my-submissions__flyer')!, 'Replace it').click();
+      await vi.waitFor(() =>
+        expect(attachFlyer).toHaveBeenCalledWith(6, expect.any(ArrayBuffer), 'jpeg'),
+      );
+    });
+
+    it('refuses anything but a JPEG or PNG, and asks for a file, before sending', () => {
+      const attachFlyer = vi.fn();
+      const { fixture, element } = render(MINE, { attachFlyer });
+      card(element, 5).querySelector<HTMLButtonElement>('.my-submissions__flyer-add')!.click();
+      fixture.detectChanges();
+      const panel = () => card(element, 5).querySelector('.my-submissions__flyer')!;
+      buttonIn(panel(), 'Add it').click();
+      fixture.detectChanges();
+      expect(text(panel().querySelector('.my-submissions__error'))).toBe(
+        'Choose the flyer to add.',
+      );
+      choose(fixture, 'flyer.svg', 'image/svg+xml');
+      buttonIn(panel(), 'Add it').click();
+      fixture.detectChanges();
+      expect(text(panel().querySelector('.my-submissions__error'))).toBe(
+        'The flyer must be a JPEG or PNG image.',
+      );
+      expect(attachFlyer).not.toHaveBeenCalled();
+    });
+
+    it('says a flyer is still too big after shrinking, or can’t be read, and sends nothing', () => {
+      const attachFlyer = vi.fn();
+      const { fixture, element } = render(MINE, { attachFlyer });
+      card(element, 5).querySelector<HTMLButtonElement>('.my-submissions__flyer-add')!.click();
+      fixture.detectChanges();
+      const panel = () => card(element, 5).querySelector('.my-submissions__flyer')!;
+
+      choose(
+        fixture,
+        'flyer.png',
+        'image/png',
+        new ImageTooLargeError(12 * 1024 * 1024, 10 * 1024 * 1024),
+      );
+      buttonIn(panel(), 'Add it').click();
+      fixture.detectChanges();
+      expect(text(panel().querySelector('.my-submissions__error'))).toBe(
+        'This image is 12 MB even after shrinking, and the limit is 10 MB. Try a smaller image.',
+      );
+
+      choose(fixture, 'flyer.jpg', 'image/jpeg', new Error('Failed to load image'));
+      buttonIn(panel(), 'Add it').click();
+      fixture.detectChanges();
+      expect(text(panel().querySelector('.my-submissions__error'))).toBe(FLYER_UNREADABLE_MESSAGE);
+      expect(attachFlyer).not.toHaveBeenCalled();
+      expect(card(element, 5).querySelector('.my-submissions__flyer')).not.toBeNull();
+    });
+
+    it('keeps the picker open with the server’s word when the flyer is refused', async () => {
+      const attachFlyer = vi.fn(() =>
+        throwError(() => ({
+          status: 400,
+          error_code: 'IMAGE_TOO_LARGE',
+          field: '',
+          date_index: null,
+          detail: 'The flyer is too large.',
+        })),
+      );
+      const { fixture, element } = render(MINE, { attachFlyer });
+      card(element, 5).querySelector<HTMLButtonElement>('.my-submissions__flyer-add')!.click();
+      fixture.detectChanges();
+      choose(fixture, 'flyer.png', 'image/png');
+      buttonIn(card(element, 5).querySelector('.my-submissions__flyer')!, 'Add it').click();
+      await vi.waitFor(() => expect(attachFlyer).toHaveBeenCalled());
+      fixture.detectChanges();
+      const panel = card(element, 5).querySelector('.my-submissions__flyer')!;
+      expect(text(panel.querySelector('.my-submissions__error'))).toBe('The flyer is too large.');
+      expect(card(element, 5).querySelector('.my-submissions__extras')).toBeNull();
+    });
+
+    it('Cancel closes the picker and sends nothing', () => {
+      const attachFlyer = vi.fn();
+      const { fixture, element } = render(MINE, { attachFlyer });
+      card(element, 5).querySelector<HTMLButtonElement>('.my-submissions__flyer-add')!.click();
+      fixture.detectChanges();
+      buttonIn(card(element, 5).querySelector('.my-submissions__flyer')!, 'Cancel').click();
+      fixture.detectChanges();
+      expect(card(element, 5).querySelector('.my-submissions__flyer')).toBeNull();
+      expect(attachFlyer).not.toHaveBeenCalled();
+    });
+
+    it('asks in the page before removing one, then takes it off the waiting date only', () => {
+      const removeFlyer = vi.fn(() => of({ submission_id: 6, event_ids: [61] }));
+      const { fixture, element } = render([WITH_FLYER], { removeFlyer });
+      const success = vi.spyOn(TestBed.inject(ToastService), 'success');
+      card(element, 6).querySelector<HTMLButtonElement>('.my-submissions__flyer-remove')!.click();
+      fixture.detectChanges();
+      const confirm = card(element, 6).querySelector('[role="alertdialog"]')!;
+      expect(text(confirm.querySelector('p'))).toBe(
+        'Remove the flyer? It comes off your 1 waiting date. Anything already listed keeps its photo.',
+      );
+      expect(removeFlyer).not.toHaveBeenCalled();
+      buttonIn(confirm, 'Remove it').click();
+      fixture.detectChanges();
+      expect(removeFlyer).toHaveBeenCalledWith(6);
+      const extras = Array.from(card(element, 6).querySelectorAll('.my-submissions__date')).map(
+        (row) => text(row.querySelector('.my-submissions__extras')),
+      );
+      expect(extras).toEqual(['', 'With a photo']);
+      expect(text(card(element, 6).querySelector('.my-submissions__flyer-add'))).toBe(
+        'Add a flyer',
+      );
+      expect(card(element, 6).querySelector('.my-submissions__flyer-remove')).toBeNull();
+      expect(success).toHaveBeenCalledWith('Flyer removed.');
+    });
+
+    it('keeps the flyer when the confirm is turned down, or the removal is refused', () => {
+      const removeFlyer = vi.fn(() =>
+        throwError(() => ({
+          status: 400,
+          error_code: 'NOTHING_PENDING',
+          field: '',
+          date_index: null,
+          detail: 'Nothing in this submission is waiting for review.',
+        })),
+      );
+      const { fixture, page, element } = render([WITH_FLYER], { removeFlyer });
+      const error = vi.spyOn(TestBed.inject(ToastService), 'error');
+      card(element, 6).querySelector<HTMLButtonElement>('.my-submissions__flyer-remove')!.click();
+      fixture.detectChanges();
+      buttonIn(card(element, 6).querySelector('[role="alertdialog"]')!, 'Keep it').click();
+      fixture.detectChanges();
+      expect(removeFlyer).not.toHaveBeenCalled();
+      expect(card(element, 6).querySelector('[role="alertdialog"]')).toBeNull();
+
+      page.removeFlyer(WITH_FLYER);
+      fixture.detectChanges();
+      expect(error).toHaveBeenCalledWith('Nothing in this submission is waiting for review.');
+      expect(card(element, 6).querySelector('.my-submissions__flyer-remove')).not.toBeNull();
+    });
+
+    it('opens one panel at a time', () => {
+      const { fixture, element } = render([...MINE, WITH_FLYER]);
+      card(element, 5).querySelector<HTMLButtonElement>('.my-submissions__flyer-add')!.click();
+      fixture.detectChanges();
+      card(element, 6).querySelector<HTMLButtonElement>('.my-submissions__withdraw')!.click();
+      fixture.detectChanges();
+      expect(element.querySelectorAll('.my-submissions__flyer').length).toBe(0);
+      expect(element.querySelectorAll('[role="alertdialog"]').length).toBe(1);
+    });
   });
 });

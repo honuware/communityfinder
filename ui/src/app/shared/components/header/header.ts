@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { Subject, takeUntil } from 'rxjs';
 import { AuthService, AuthData } from '@honuware/ui/auth';
 import { PhotoUrlBuilder } from '@honuware/ui/access';
+import { canUseAdminArea } from '../../../core/guards/admin-area.guard';
 import { SiteConfigService } from '../../../core/services/site-config.service';
 
 // The app shell header: the community display name on the left; on the right,
@@ -42,11 +43,12 @@ export class Header implements OnDestroy {
     const data = this.authData();
     return data.isAuth ? data : null;
   });
+  // The admin area's links (the dashboard and Manage Data): for admins, events
+  // curators (CM3 Phase 2 §12.5) and guide curators (CM3 OQ24).
+  readonly canUseAdmin = computed(() => canUseAdminArea(this.authData()));
 
   constructor() {
-    this.auth.authData$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((data) => this.authData.set(data));
+    this.auth.authData$.pipe(takeUntil(this.destroy$)).subscribe((data) => this.authData.set(data));
   }
 
   ngOnDestroy(): void {

@@ -544,9 +544,81 @@ describe('ManageEventsPage', () => {
       const tab = element.querySelector('.mat-mdc-tab-body-active')!;
       expect(text(tab.querySelector('mat-label'))).toBe('Find an event to edit');
       expect(text(tab)).toContain(
-        'Search for an event by its title, or press Edit on one in the queue.',
+        'Search for an event by its title, pick one coming up, or press Edit on one in the queue.',
       );
       expect(editEditor(harness)).toBeUndefined();
+    });
+
+    // CM3 Phase 2 §9 (Mason's new item 2).
+    it('lists the next ten coming up, each with its day, time, place and status', async () => {
+      const { harness, page, element } = await open();
+      page.selectedTab.set(EDIT_EVENT_TAB);
+      harness.detectChanges();
+      const tab = element.querySelector('.mat-mdc-tab-body-active')!;
+      expect(text(tab.querySelector('.manage-events__coming-up-heading'))).toBe('Coming up');
+      const rows = Array.from(tab.querySelectorAll('.manage-events__coming-up-item'));
+      expect(rows.length).toBe(10);
+      expect(page.comingUp().length).toBe(10);
+      const starts = page.comingUp().map((match) => match.starts_at_us);
+      expect([...starts].sort((a, b) => a - b)).toEqual(starts);
+      // "Thu, Aug 13 · 6:00 PM · The Lantern Room · Approved"
+      const bear = page.comingUp().find((match) => match.title === 'Bear Happy Hour')!;
+      expect(page.matchLine(bear)).toMatch(
+        /^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2} · 6:00 PM · The Lantern Room · Approved$/,
+      );
+      const bearRow = rows.find((row) => text(row).startsWith('Bear Happy Hour'))!;
+      expect(text(bearRow.querySelector('.manage-events__match-line'))).toBe(page.matchLine(bear));
+    });
+
+    it('opens a coming-up event in the editor and marks it as the one open', async () => {
+      const { harness, page, element } = await open();
+      page.selectedTab.set(EDIT_EVENT_TAB);
+      harness.detectChanges();
+      const first = page.comingUp()[0];
+      const row = element.querySelector('.manage-events__coming-up-item') as HTMLButtonElement;
+      row.click();
+      harness.detectChanges();
+      expect(editEditor(harness)?.editingId()).toBe(String(first.id));
+      expect(row.getAttribute('aria-current')).toBe('true');
+    });
+
+    it('shows a search result once per date, each with its own line', async () => {
+      const { harness, page } = await open();
+      page.searchControl.setValue('bear happy');
+      // Past the search's debounce. debounceTime checks Date.now(), which the
+      // spec's fake clock holds still, so move it along with the real wait.
+      vi.setSystemTime(new Date(NOW_US / 1000 + 1000));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      harness.detectChanges();
+      const options = page.searchOptions();
+      expect(options.length).toBeGreaterThanOrEqual(3);
+      expect(options.every((option) => option.title === 'Bear Happy Hour')).toBe(true);
+      const lines = options.map((option) => page.matchLine(option));
+      expect(new Set(lines).size).toBe(options.length);
+      for (const line of lines) {
+        expect(line).toContain('The Lantern Room');
+      }
+    });
+
+    it('refreshes what’s coming up after a save', async () => {
+      const { harness, page } = await open();
+      const before = page.comingUp().map((match) => match.id);
+      const editor = newEditor(harness)!;
+      editor.form.setValue({
+        ...EMPTY_EVENT_FORM,
+        title: 'Right Now Social',
+        startDate: '2026-08-12',
+        startTime: '15:30',
+        venueId: '3',
+      });
+      editor.save();
+      harness.detectChanges();
+      const added = page.pending().find((item) => item.title === 'Right Now Social')!;
+      expect(added).toBeDefined();
+      expect(before).not.toContain(added.id);
+      expect(page.comingUp().find((match) => match.id === added.id)).toMatchObject({
+        status: 'pending',
+      });
     });
 
     it('opens ?edit=<id> in Edit Event', async () => {
@@ -562,7 +634,7 @@ describe('ManageEventsPage', () => {
       const { harness, page } = await open();
       page.searchControl.setValue('Leather');
       page.onSearchSelected({
-        option: { value: { value: LEATHER_NIGHT, display: 'Leather Night' } },
+        option: { value: { id: Number(LEATHER_NIGHT), title: 'Leather Night' } },
       } as MatAutocompleteSelectedEvent);
       harness.detectChanges();
       expect(page.selectedTab()).toBe(EDIT_EVENT_TAB);

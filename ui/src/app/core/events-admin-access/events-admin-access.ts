@@ -162,6 +162,32 @@ export function galleryProblemMessage(problem: GalleryProblem): string {
   }
 }
 
+// GET /api/admin/events/search (CM3 Phase 2 §9): one row of the curator's
+// event finder, enough to tell one date of a series from the next. Every
+// status is included, since curators edit pending and rejected events too.
+export interface CuratorEventMatch {
+  id: number;
+  title: string;
+  starts_at_us: number;
+  ends_at_us: number | null;
+  // The venue's name; '' when the event has none (then location_text, if any).
+  venue_name: string;
+  location_text: string;
+  series_title: string;
+  status: EventStatus;
+}
+
+// The finder's limit: 10 when none is asked for, never more than 50.
+export const CURATOR_FINDER_DEFAULT_LIMIT = 10;
+export const CURATOR_FINDER_MAX_LIMIT = 50;
+
+export function clampCuratorFinderLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit) || limit < 1) {
+    return CURATOR_FINDER_DEFAULT_LIMIT;
+  }
+  return Math.min(Math.floor(limit), CURATOR_FINDER_MAX_LIMIT);
+}
+
 // The curator's bespoke events actions the generic CrudAccess doesn't cover:
 // reviewing a pending event or a whole submission (EV1 §5.5, EV3 §4.2), the
 // submission settings (EV3 §4.5–4.6), the past-event settings (EV4 §10.3),
@@ -197,6 +223,10 @@ export interface EventsAdminAccess {
   getGallerySettings(): Observable<GallerySettings>;
   // PUT /api/admin/event_gallery_settings; replies with the setting as saved.
   saveGallerySettings(maxPhotos: number): Observable<GallerySettings>;
+  // GET /api/admin/events/search. With search text: titles containing it, in
+  // any case, the ones not yet over first (soonest first), then the rest
+  // (latest first). Without: the next ones not yet over, soonest first.
+  findEvents(search: string, limit?: number): Observable<CuratorEventMatch[]>;
 }
 
 export const EVENTS_ADMIN_ACCESS = new InjectionToken<EventsAdminAccess>('EVENTS_ADMIN_ACCESS');

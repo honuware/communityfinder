@@ -112,7 +112,14 @@ int RunPopulateSampleData() {
               << report.listingsAlreadyThere << " already there.\n"
               << "Sample events: " << report.eventsCreated << " created, "
               << report.eventsUpdated << " moved or updated, " << report.eventsUnchanged
-              << " unchanged; " << report.eventsApproved << " approved.\n";
+              << " unchanged; " << report.eventsApproved << " approved.\n"
+              << "Sample media: " << report.photosAdded << " photos, " << report.galleryPhotosAdded
+              << " gallery photos and " << report.videosAdded << " videos added; "
+              << report.mediaAlreadyThere << " already there.\n";
+    if (report.gallerySkippedNoReviewer) {
+        std::cout << "No administrator to record the gallery's consent against, so the sample "
+                     "gallery was left out. Run again once an administrator exists.\n";
+    }
     if (!report.missingVocabulary.empty()) {
         std::cout << "Not in this database, so left off:";
         for (const std::string& item : report.missingVocabulary) std::cout << " " << item << ";";

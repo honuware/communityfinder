@@ -162,6 +162,16 @@ describe('EventSubmissionsHttpAccess', () => {
     expect(await result).toEqual({ submission_id: 9, event_ids: [41] });
   });
 
+  it('removes a flyer with a DELETE to the same address, without the type', async () => {
+    const { access, http } = setUp();
+    const result = firstValueFrom(access.removeFlyer(9));
+    const request = http.expectOne('/api/event_submissions/9/photo');
+    expect(request.request.method).toBe('DELETE');
+    expect(request.request.withCredentials).toBe(true);
+    request.flush({ submission_id: 9, event_ids: [41, 42] });
+    expect(await result).toEqual({ submission_id: 9, event_ids: [41, 42] });
+  });
+
   it('withdraws with an empty body', async () => {
     const { access, http } = setUp();
     const result = firstValueFrom(access.withdraw(9));

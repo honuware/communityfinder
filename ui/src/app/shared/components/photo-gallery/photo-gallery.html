@@ -21,9 +21,25 @@
         </li>
       }
     </ul>
-    <p class="photo-gallery__removal">
-      <a [href]="galleryRemovalHref()">Ask us to remove a photo</a>
-    </p>
+    @if (removalForm() === 'gallery') {
+      <app-photo-removal-form
+        class="photo-gallery__removal-form"
+        [pageTitle]="title()"
+        [pageUrl]="pageUrl()"
+        (closed)="closeRemovalForm()"
+      />
+    } @else {
+      <p class="photo-gallery__removal">
+        <button
+          #galleryRemovalButton
+          type="button"
+          class="photo-gallery__removal-button"
+          (click)="openRemovalForm('gallery')"
+        >
+          Ask us to remove a photo
+        </button>
+      </p>
+    }
 
     @if (current(); as photo) {
       <div
@@ -60,7 +76,7 @@
           }
         </figure>
 
-        @if (thumbs().length > 1) {
+        @if (thumbs().length > 1 && removalForm() !== 'photo') {
           <button
             type="button"
             class="photo-gallery__step photo-gallery__step--previous"
@@ -79,12 +95,27 @@
           </button>
         }
 
-        <p class="photo-gallery__footer">
-          <span class="photo-gallery__position" aria-live="polite">{{ position() }}</span>
-          <a class="photo-gallery__removal-link" [href]="photoRemovalHref()">
-            Ask us to remove this photo
-          </a>
-        </p>
+        @if (removalForm() === 'photo') {
+          <app-photo-removal-form
+            class="photo-gallery__viewer-form"
+            [pageTitle]="title()"
+            [photo]="currentDescription()"
+            [pageUrl]="pageUrl()"
+            (closed)="closeRemovalForm()"
+          />
+        } @else {
+          <p class="photo-gallery__footer">
+            <span class="photo-gallery__position" aria-live="polite">{{ position() }}</span>
+            <button
+              #photoRemovalButton
+              type="button"
+              class="photo-gallery__removal-link"
+              (click)="openRemovalForm('photo')"
+            >
+              Ask us to remove this photo
+            </button>
+          </p>
+        }
       </div>
     }
   </section>

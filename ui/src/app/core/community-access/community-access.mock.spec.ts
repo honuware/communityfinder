@@ -283,3 +283,57 @@ describe('CommunityMockAccess (events)', () => {
     });
   });
 });
+
+// CM3 Phase 2 §12: the server's checks and its per-visitor limit, offline.
+describe('CommunityMockAccess (photo-removal requests)', () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ['Date'] }));
+  afterEach(() => vi.useRealTimers());
+
+  const REQUEST = {
+    page_path: '/events/103',
+    page_title: 'Leather Night',
+    photo: 'photo 2 of 3',
+    message: '',
+    reply_email: '',
+    website: '',
+  };
+
+  it('keeps what was sent, and limits a visitor to three an hour', async () => {
+    const access = mockAt(NOW_US);
+    for (let i = 0; i < 3; i++) {
+      await firstValueFrom(access.requestPhotoRemoval(REQUEST));
+    }
+    expect(access.photoRemovalRequests.length).toBe(3);
+    await expect(firstValueFrom(access.requestPhotoRemoval(REQUEST))).rejects.toMatchObject({
+      status: 429,
+      error: { error_code: 'RATE_LIMITED' },
+    });
+    vi.setSystemTime(new Date((NOW_US + 3_600 * 1_000_000 + 1) / 1000));
+    await firstValueFrom(access.requestPhotoRemoval(REQUEST));
+    expect(access.photoRemovalRequests.length).toBe(4);
+  });
+
+  it('drops the honeypot quietly', async () => {
+    const access = mockAt(NOW_US);
+    await firstValueFrom(
+      access.requestPhotoRemoval({ ...REQUEST, website: 'http://spam.example' }),
+    );
+    expect(access.photoRemovalRequests).toEqual([]);
+  });
+
+  it('runs the server’s checks, naming the field', async () => {
+    const access = mockAt(NOW_US);
+    for (const [change, field, code] of [
+      [{ page_path: 'https://elsewhere.example/' }, 'page_path', 'BAD_PAGE'],
+      [{ page_title: ' ' }, 'page_title', 'REQUIRED'],
+      [{ photo: '', message: '' }, 'message', 'REQUIRED'],
+      [{ message: 'x'.repeat(2001) }, 'message', 'TOO_LONG'],
+      [{ reply_email: 'not an address' }, 'reply_email', 'BAD_EMAIL'],
+    ] as const) {
+      await expect(
+        firstValueFrom(access.requestPhotoRemoval({ ...REQUEST, ...change })),
+      ).rejects.toMatchObject({ status: 400, error: { field, error_code: code } });
+    }
+    expect(access.photoRemovalRequests).toEqual([]);
+  });
+});

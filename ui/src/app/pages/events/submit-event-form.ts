@@ -1,3 +1,4 @@
+import { ImageTooLargeError } from '@honuware/ui/photos';
 import {
   FlyerImageType,
   SubmissionRelationship,
@@ -199,3 +200,18 @@ export function flyerImageType(file: { type: string; name: string }): FlyerImage
 }
 
 export const FLYER_TYPE_MESSAGE = 'The flyer must be a JPEG or PNG image.';
+
+// CM3 Phase 2 §13.3: a flyer is shrunk and re-encoded as a JPEG before it's
+// sent, as every upload is (@honuware/ui's prepare step), and checked against
+// the upload limit. Why that failed, in words for the form: honuware's own
+// for one still too big, which says both sizes.
+export const FLYER_UNREADABLE_MESSAGE = "The flyer couldn't be read. Try another JPEG or PNG.";
+
+export function flyerPreparationProblem(error: unknown): string {
+  return error instanceof ImageTooLargeError ? error.message : FLYER_UNREADABLE_MESSAGE;
+}
+
+// The flyer couldn't be got ready, so nothing was sent; carries why.
+export class FlyerNotReady {
+  constructor(readonly reason: unknown) {}
+}

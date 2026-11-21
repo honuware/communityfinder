@@ -1,9 +1,10 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { catchError, Observable, throwError } from 'rxjs';
+import { catchError, map, Observable, throwError } from 'rxjs';
 import { HONUWARE_API_BASE } from '@honuware/ui/access';
 import { toSubmissionProblem } from '../event-submissions-access/event-submissions-access';
 import {
+  CuratorEventMatch,
   EventsAdminAccess,
   GallerySettings,
   NewGalleryPhoto,
@@ -109,5 +110,21 @@ export class EventsAdminHttpAccess implements EventsAdminAccess {
         { withCredentials: true },
       )
       .pipe(catchError((error) => throwError(() => toSubmissionProblem(error))));
+  }
+
+  findEvents(search: string, limit?: number): Observable<CuratorEventMatch[]> {
+    let params = new HttpParams();
+    if (search.trim()) {
+      params = params.set('q', search.trim());
+    }
+    if (limit !== undefined) {
+      params = params.set('limit', String(limit));
+    }
+    return this.http
+      .get<{ items: CuratorEventMatch[] }>(`${this.apiBase}/admin/events/search`, {
+        params,
+        withCredentials: true,
+      })
+      .pipe(map((response) => response.items));
   }
 }

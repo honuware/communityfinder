@@ -681,5 +681,96 @@ TEST(EventsTest, NonCanonicalVideoUrlThrows) {
     });
 }
 
+// CM3 Phase 2 §9 — the curator's event finder. A fixed "now" well clear of the
+// events' times, and a two-hour no-end duration, as the ICS default.
+constexpr int64_t kFinderNowUs = 1'800'000'000'000'000;
+constexpr int64_t kFinderHourUs = 3'600LL * 1'000'000LL;
+constexpr int64_t kFinderDefaultDurationUs = 2 * kFinderHourUs;
+
+KeyValueTable EndingAt(KeyValueTable values, int64_t endsAtUs) {
+    values[std::string(DbSchema::kEventsEndsAtUs)] = StringFromInt(endsAtUs);
+    return values;
+}
+
+TEST(EventsTest, FindByTitleMatchesAnywhereInTheTitleInAnyCase) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("FindByTitleMatchesAnywhereInTheTitleInAnyCase", [&](Transaction& transaction) {
+        Events events(testDb.GetDatabaseHelper());
+        events.AddEvent(transaction, MakeEvent("Board Game Night", kFinderNowUs + kFinderHourUs));
+        events.AddEvent(transaction, MakeEvent("Drag Brunch", kFinderNowUs + 2 * kFinderHourUs));
+
+        for (std::string_view search : { "game", "GAME", "Board Game Night", "rd ga" }) {
+            EXPECT_EQ(TitlesOf(events.FindByTitle(transaction, search, kFinderNowUs,
+                                                  kFinderDefaultDurationUs, 10)),
+                      std::vector<std::string>({ "Board Game Night" }))
+                << search;
+        }
+        EXPECT_TRUE(events.FindByTitle(transaction, "karaoke", kFinderNowUs,
+                                       kFinderDefaultDurationUs, 10).empty());
+    });
+}
+
+TEST(EventsTest, FindByTitleTakesLikeCharactersLiterally) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("FindByTitleTakesLikeCharactersLiterally", [&](Transaction& transaction) {
+        Events events(testDb.GetDatabaseHelper());
+        for (std::string_view title : { "100% Pop", "100 Pop", "Pop_Up", "PopXUp", "Back\\Slash", "Back Slash" }) {
+            events.AddEvent(transaction, MakeEvent(title, kFinderNowUs + kFinderHourUs));
+        }
+        auto find = [&](std::string_view search) {
+            return TitlesOf(events.FindByTitle(transaction, search, kFinderNowUs,
+                                               kFinderDefaultDurationUs, 10));
+        };
+        EXPECT_EQ(find("%"), std::vector<std::string>({ "100% Pop" }));
+        EXPECT_EQ(find("_"), std::vector<std::string>({ "Pop_Up" }));
+        EXPECT_EQ(find("\\"), std::vector<std::string>({ "Back\\Slash" }));
+    });
+}
+
+TEST(EventsTest, FindByTitleListsWhatHasNotEndedSoonestFirstThenThePastNewestFirst) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("FindByTitleListsWhatHasNotEndedSoonestFirstThenThePastNewestFirst", [&](Transaction& transaction) {
+        Events events(testDb.GetDatabaseHelper());
+        // Every status counts: curators edit pending and rejected events too.
+        events.AddEvent(transaction, WithStatus(MakeEvent("Night next week", kFinderNowUs + 7 * 24 * kFinderHourUs),
+                                                DbSchema::kEventsStatusRejected));
+        events.AddEvent(transaction, MakeEvent("Night tomorrow", kFinderNowUs + 24 * kFinderHourUs));
+        // Started an hour ago, ends in an hour: still running, so first.
+        events.AddEvent(transaction, EndingAt(MakeEvent("Night running", kFinderNowUs - kFinderHourUs),
+                                              kFinderNowUs + kFinderHourUs));
+        // No end: over two hours after it started, so three hours ago is past.
+        events.AddEvent(transaction, MakeEvent("Night three hours ago", kFinderNowUs - 3 * kFinderHourUs));
+        events.AddEvent(transaction, WithStatus(MakeEvent("Night last month", kFinderNowUs - 30 * 24 * kFinderHourUs),
+                                                DbSchema::kEventsStatusApproved));
+
+        EXPECT_EQ(TitlesOf(events.FindByTitle(transaction, "night", kFinderNowUs,
+                                              kFinderDefaultDurationUs, 10)),
+                  std::vector<std::string>({ "Night running", "Night tomorrow", "Night next week",
+                                             "Night three hours ago", "Night last month" }));
+        EXPECT_EQ(TitlesOf(events.FindByTitle(transaction, "night", kFinderNowUs,
+                                              kFinderDefaultDurationUs, 2)),
+                  std::vector<std::string>({ "Night running", "Night tomorrow" }));
+    });
+}
+
+TEST(EventsTest, GetNotEndedByListsWhatIsComingSoonestFirstInEveryStatus) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("GetNotEndedByListsWhatIsComingSoonestFirstInEveryStatus", [&](Transaction& transaction) {
+        Events events(testDb.GetDatabaseHelper());
+        events.AddEvent(transaction, MakeEvent("In two days", kFinderNowUs + 48 * kFinderHourUs));
+        events.AddEvent(transaction, WithStatus(MakeEvent("Tomorrow", kFinderNowUs + 24 * kFinderHourUs),
+                                                DbSchema::kEventsStatusRejected));
+        // No end, started an hour ago: two-hour default, so still on.
+        events.AddEvent(transaction, MakeEvent("Started an hour ago", kFinderNowUs - kFinderHourUs));
+        events.AddEvent(transaction, EndingAt(MakeEvent("Ended a minute ago", kFinderNowUs - kFinderHourUs),
+                                              kFinderNowUs - 60'000'000));
+
+        EXPECT_EQ(TitlesOf(events.GetNotEndedBy(transaction, kFinderNowUs, kFinderDefaultDurationUs, 10)),
+                  std::vector<std::string>({ "Started an hour ago", "Tomorrow", "In two days" }));
+        EXPECT_EQ(TitlesOf(events.GetNotEndedBy(transaction, kFinderNowUs, kFinderDefaultDurationUs, 1)),
+                  std::vector<std::string>({ "Started an hour ago" }));
+    });
+}
+
 }  // namespace
 }  // namespace TableHelpers

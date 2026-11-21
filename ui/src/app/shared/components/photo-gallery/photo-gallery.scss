@@ -53,6 +53,41 @@
   font-size: 0.85rem;
 }
 
+// The two removal buttons read as links, as the mailto links they replace
+// did (Phase 2 §12).
+.photo-gallery__removal-button,
+.photo-gallery__removal-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mat-sys-primary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+}
+
+.photo-gallery__removal-form {
+  margin-top: 12px;
+}
+
+// Over the viewer, at the foot of the window, scrolling if the screen is
+// short; the photo stays visible above it.
+.photo-gallery__viewer-form {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  justify-content: center;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
 // The viewer: the whole window, dimmed, the photo as large as it fits.
 .photo-gallery__viewer {
   position: fixed;
@@ -150,7 +185,7 @@
   margin: 12px 0 0;
   font-size: 0.85rem;
 
-  a {
+  .photo-gallery__removal-link {
     color: #fff;
   }
 }

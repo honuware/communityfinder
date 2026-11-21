@@ -1,16 +1,24 @@
-import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
+import { catchError, switchMap, throwError } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ToastService } from '@honuware/ui/foundation';
+import { PhotoUploadComponent } from '@honuware/ui/photos';
 import {
   EVENT_SUBMISSIONS_ACCESS,
   MySubmission,
   MySubmissionDate,
   toSubmissionProblem,
 } from '../../core/event-submissions-access/event-submissions-access';
+import {
+  FLYER_TYPE_MESSAGE,
+  FlyerNotReady,
+  flyerImageType,
+  flyerPreparationProblem,
+} from '../events/submit-event-form';
 import { eventPagePath } from '../../core/utils/event-links';
 import { formatEventShortDate, formatEventTimeRange } from '../../core/utils/events-date.utils';
 import { videoProviderName } from '../../core/utils/video-links';
@@ -24,11 +32,19 @@ import {
 // us, newest first, each date with its state. A date that wasn't listed says
 // why and carries the curator's message; a listed one links to its page.
 // While any date is still waiting, the submission can be withdrawn, after a
-// confirm in the page (not a browser pop-up), and it updates in place. What's
-// listed stays the curators' (OQ5): nothing here edits an event.
+// confirm in the page (not a browser pop-up), and it updates in place. Its
+// flyer can be added, replaced or removed then too (CM3 Phase 2 §11): it goes
+// on, or comes off, every waiting date. What's listed stays the curators'
+// (OQ5): nothing here edits a listed event or its photo.
 @Component({
   selector: 'app-my-submissions',
-  imports: [RouterLink, MatButtonModule, MatCardModule, MatProgressSpinnerModule],
+  imports: [
+    RouterLink,
+    MatButtonModule,
+    MatCardModule,
+    MatProgressSpinnerModule,
+    PhotoUploadComponent,
+  ],
   templateUrl: './my-submissions.html',
   styleUrl: './my-submissions.scss',
 })
@@ -43,6 +59,15 @@ export class MySubmissionsPage implements OnInit {
   // The submission whose withdraw is waiting on the in-page confirm.
   readonly confirmingId = signal<number | null>(null);
   readonly withdrawingId = signal<number | null>(null);
+  // The submission whose flyer picker is open, or whose flyer removal is
+  // waiting on the in-page confirm. One panel at a time, page-wide.
+  readonly flyerOpenId = signal<number | null>(null);
+  readonly confirmingFlyerRemoveId = signal<number | null>(null);
+  readonly flyerBusyId = signal<number | null>(null);
+  readonly flyerError = signal('');
+
+  // Only one picker is ever open, so there's at most one.
+  private readonly flyerPicker = viewChild(PhotoUploadComponent);
 
   ngOnInit(): void {
     this.access
@@ -118,16 +143,101 @@ export class MySubmissionsPage implements OnInit {
     return submission.dates.filter((date) => date.state === 'waiting').length;
   }
 
+  // A waiting date has a photo: the flyer, or one a curator put on it.
+  hasFlyer(submission: MySubmission): boolean {
+    return submission.dates.some((date) => date.state === 'waiting' && date.has_photo);
+  }
+
+  openFlyer(submission: MySubmission): void {
+    this.closePanels();
+    this.flyerOpenId.set(submission.id);
+  }
+
+  cancelFlyer(): void {
+    this.closePanels();
+  }
+
+  // As the submit form sends it: the same JPEG-or-PNG check, then shrunk and
+  // re-encoded as a JPEG and checked against the upload limit (CM3 Phase 2
+  // §13.3), before anything goes.
+  attachFlyer(submission: MySubmission): void {
+    const picker = this.flyerPicker();
+    const flyer = picker?.pendingFile ?? null;
+    const problem = !flyer
+      ? 'Choose the flyer to add.'
+      : !flyerImageType(flyer)
+        ? FLYER_TYPE_MESSAGE
+        : '';
+    if (problem || !picker) {
+      this.flyerError.set(problem);
+      return;
+    }
+    this.flyerError.set('');
+    this.flyerBusyId.set(submission.id);
+    picker
+      .preparePendingPhoto()
+      .pipe(
+        catchError((error: unknown) => throwError(() => new FlyerNotReady(error))),
+        switchMap((prepared) => this.access.attachFlyer(submission.id, prepared!.buffer, 'jpeg')),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (result) => {
+          this.flyerBusyId.set(null);
+          this.closePanels();
+          this.setHasPhoto(submission.id, result.event_ids, true);
+          this.toast.success('Your flyer is attached.');
+        },
+        error: (error: unknown) => {
+          this.flyerBusyId.set(null);
+          this.flyerError.set(
+            error instanceof FlyerNotReady
+              ? flyerPreparationProblem(error.reason)
+              : toSubmissionProblem(error).detail,
+          );
+        },
+      });
+  }
+
+  askToRemoveFlyer(submission: MySubmission): void {
+    this.closePanels();
+    this.confirmingFlyerRemoveId.set(submission.id);
+  }
+
+  cancelRemoveFlyer(): void {
+    this.closePanels();
+  }
+
+  removeFlyer(submission: MySubmission): void {
+    this.closePanels();
+    this.flyerBusyId.set(submission.id);
+    this.access
+      .removeFlyer(submission.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          this.flyerBusyId.set(null);
+          this.setHasPhoto(submission.id, result.event_ids, false);
+          this.toast.success('Flyer removed.');
+        },
+        error: (error: unknown) => {
+          this.flyerBusyId.set(null);
+          this.toast.error(toSubmissionProblem(error).detail);
+        },
+      });
+  }
+
   askToWithdraw(submission: MySubmission): void {
+    this.closePanels();
     this.confirmingId.set(submission.id);
   }
 
   cancelWithdraw(): void {
-    this.confirmingId.set(null);
+    this.closePanels();
   }
 
   withdraw(submission: MySubmission): void {
-    this.confirmingId.set(null);
+    this.closePanels();
     this.withdrawingId.set(submission.id);
     this.access
       .withdraw(submission.id)
@@ -155,5 +265,29 @@ export class MySubmissionsPage implements OnInit {
           this.toast.error(toSubmissionProblem(error).detail);
         },
       });
+  }
+
+  private closePanels(): void {
+    this.confirmingId.set(null);
+    this.flyerOpenId.set(null);
+    this.confirmingFlyerRemoveId.set(null);
+    this.flyerError.set('');
+  }
+
+  // The dates the server named now have (or no longer have) a photo.
+  private setHasPhoto(submissionId: number, eventIds: number[], hasPhoto: boolean): void {
+    const changed = new Set(eventIds);
+    this.submissions.update((submissions) =>
+      submissions.map((candidate) =>
+        candidate.id !== submissionId
+          ? candidate
+          : {
+              ...candidate,
+              dates: candidate.dates.map((date) =>
+                changed.has(date.event_id) ? { ...date, has_photo: hasPhoto } : date,
+              ),
+            },
+      ),
+    );
   }
 }

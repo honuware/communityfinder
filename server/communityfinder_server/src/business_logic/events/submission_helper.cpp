@@ -639,6 +639,37 @@ FlyerResult SubmissionHelper::AttachFlyer(
     return result;
 }
 
+FlyerResult SubmissionHelper::RemoveFlyer(
+    Transaction& transaction, int64_t submissionId, int64_t personId) {
+    FlyerResult result;
+    // Locked first, as in AttachFlyer, so a curator's decision can't land
+    // between the pending check and the delete.
+    KeyValueTable submission = submissions_.GetSubmissionForUpdate(transaction, submissionId);
+    if (submission.empty()
+        || OptionalIdColumn(submission, DbSchema::kEventSubmissionsSubmittedByPersonId) != personId) {
+        result.errorCode = std::string(kSubmissionErrorNotYours);
+        result.errorMessage = "Submission not found.";
+        return result;
+    }
+    const std::vector<KeyValueTable> pending =
+        PendingOf(events_.GetEventsBySubmission(transaction, submissionId));
+    if (pending.empty()) {
+        result.errorCode = std::string(kSubmissionErrorNothingPending);
+        result.errorMessage = "Nothing in this submission is waiting for review.";
+        return result;
+    }
+
+    Images::ImageHelper imageHelper(databaseHelper_);
+    for (const KeyValueTable& date : pending) {
+        const int64_t eventId = std::stoll(Column(date, DbSchema::kEventsId));
+        if (imageHelper.DeletePhotoForItem(transaction, DbSchema::kEventsTable, eventId)) {
+            result.eventIds.push_back(eventId);
+        }
+    }
+    result.ok = true;
+    return result;
+}
+
 DateReviewResult SubmissionHelper::ReviewDate(
     Transaction& transaction,
     int64_t eventId,

@@ -27,13 +27,39 @@ export interface SiteInfo {
   logo_url: string;
 }
 
+// CM3 Phase 2 §12: a visitor's request to take a photo down. `page_path` is
+// the page's path on this site ("/events/12"); `photo` says which ("photo 2
+// of 4"), or '' when the message says; `website` is the honeypot, always ''
+// from a person.
+export interface PhotoRemovalRequest {
+  page_path: string;
+  page_title: string;
+  photo: string;
+  message: string;
+  reply_email: string;
+  website: string;
+}
+
+// The server's limits (photo_removal_request_helper.h), so the form can say
+// so before sending.
+export const PHOTO_REMOVAL_MESSAGE_MAX = 2000;
+export const PHOTO_REMOVAL_EMAIL_MAX = 254;
+export const PHOTO_REMOVAL_RATE_LIMITED = 'RATE_LIMITED';
+
 // The CommunityFinder app-specific access seam. @honuware/ui provides the generic
 // CrudAccess / AuthAccess / PhotoAccess; this adds the framework calls the library
 // doesn't wrap — GET /api/health and GET /api/site_info — and the public events
-// domain (EV2 §2.3). All of these are anonymous reads.
+// domain (EV2 §2.3). All of these are anonymous; all but the photo-removal
+// request are reads.
 export interface CommunityAccess {
   getHealth(): Observable<HealthInfo>;
   getSiteInfo(): Observable<SiteInfo>;
+
+  // POST /api/photo_removal_requests — public, rate-limited per visitor. It
+  // emails the site and its curators. Errors with an HttpErrorResponse: a
+  // 400 names the `field` and `error_code`, a 429 is RATE_LIMITED, a 503 is
+  // nothing sent.
+  requestPhotoRemoval(request: PhotoRemovalRequest): Observable<void>;
 
   // GET /api/events/upcoming — public (approved or archived) events in the
   // window (default now → +42 days, at most 92, back no further than the

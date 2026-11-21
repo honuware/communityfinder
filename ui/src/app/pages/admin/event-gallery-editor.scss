@@ -56,6 +56,23 @@
   gap: 4px;
 }
 
+// The row's words, open for editing: a full-width form under the row.
+.gallery-editor__edit-form {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+}
+
+.gallery-editor__edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .gallery-editor__confirm {
   display: flex;
   flex-basis: 100%;

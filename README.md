@@ -219,12 +219,19 @@ Database connection: host=localhost port=5432 dbname=communityfinder user=docker
 Database connection: host=localhost port=5432 dbname=communityfinder user=docker sslmode=disable sslrootcert=<unset>
 Sample data: … listings created, 0 already there.
 Sample events: … created, 0 moved or updated, 0 unchanged; … approved.
+Sample media: 5 photos, 3 gallery photos and 2 videos added; 0 already there.
 [database_helper] event=populate_sample_data_done
 ```
 
 and exits with code 0. **If the `populate_sample_data` lines are missing,** the
 helper didn't get `--populate_sample_data`, and the site will have no events.
 Add it in step 6, re-run the sync script, and run the helper again.
+
+The media line is the sample photos (generated art, never people), one event's
+three-photo gallery, and a demo video on one event and one series. The gallery
+records consent against the first administrator. If the database has no
+administrator yet, the helper says the gallery was left out; run it again once
+one exists.
 
 **Re-run the helper after pulling schema changes.** The dev database isn't
 migrated, so after a change adds tables or columns, an old database fails in

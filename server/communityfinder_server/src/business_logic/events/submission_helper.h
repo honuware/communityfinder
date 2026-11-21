@@ -285,6 +285,14 @@ public:
         std::string_view imageType,
         const std::vector<char>& imageBytes);
 
+    // CM3 Phase 2 §11 — "Remove the flyer" on My submissions, AttachFlyer's
+    // undo: every date still pending loses its photo; decided dates keep
+    // theirs. The same checks as AttachFlyer: NOT_YOURS (another person's, or
+    // no such submission) and NOTHING_PENDING. Removing when no flyer is there
+    // succeeds and changes nothing. `eventIds` lists the pending dates that
+    // had a photo and no longer do.
+    FlyerResult RemoveFlyer(Transaction& transaction, int64_t submissionId, int64_t personId);
+
     // EventHelper::ReviewEvent, plus — for a submitted date — the decision's
     // reason and message stored on its submission, and the notice when this
     // was the submission's last pending date. The reason and message are

@@ -1,0 +1,84 @@
+<section class="photo-removal" [attr.aria-labelledby]="headingId">
+  <h3 class="photo-removal__heading" [id]="headingId">{{ heading() }}</h3>
+
+  @switch (state()) {
+    @case ('sent') {
+      <p class="photo-removal__sent" role="status">
+        Thanks. Your request has gone to the people who look after this site. If the photo shouldn't
+        be up, we'll take it down.
+      </p>
+      <div class="photo-removal__actions">
+        <button mat-button type="button" (click)="close()">Close</button>
+      </div>
+    }
+    @case ('failed') {
+      <p class="photo-removal__failed" role="alert">
+        {{ failure() }} Please email us at <a [href]="mailtoHref()">{{ contactEmail }}</a> instead.
+      </p>
+      <div class="photo-removal__actions">
+        <button mat-button type="button" (click)="tryAgain()">Try again</button>
+        <button mat-button type="button" (click)="close()">Close</button>
+      </div>
+    }
+    @default {
+      <form class="photo-removal__form" [formGroup]="form" (ngSubmit)="send()" novalidate>
+        @if (photo()) {
+          <p class="photo-removal__which">About {{ photo() }} on {{ pageTitle() }}.</p>
+        }
+        <p class="photo-removal__hint">
+          We'll look at it soon and take it down if it shouldn't be up. You don't need an account.
+        </p>
+        <mat-form-field appearance="outline" class="photo-removal__wide" subscriptSizing="dynamic">
+          <mat-label>{{
+            photo()
+              ? 'Anything we should know (optional)'
+              : 'Which photo, and anything we should know'
+          }}</mat-label>
+          <textarea
+            #messageField
+            matInput
+            formControlName="message"
+            rows="3"
+            [attr.maxlength]="messageMax"
+            [attr.aria-invalid]="errorFor('message') ? 'true' : null"
+          ></textarea>
+          @if (!photo()) {
+            <mat-hint>Its number, or what it shows.</mat-hint>
+          }
+        </mat-form-field>
+        @if (errorFor('message'); as message) {
+          <p class="photo-removal__error" data-field="message">{{ message }}</p>
+        }
+        <mat-form-field appearance="outline" class="photo-removal__wide">
+          <mat-label>Your email, if you'd like to hear back (optional)</mat-label>
+          <input
+            matInput
+            type="email"
+            formControlName="replyEmail"
+            autocomplete="email"
+            [attr.maxlength]="emailMax"
+            [attr.aria-invalid]="errorFor('reply_email') ? 'true' : null"
+          />
+        </mat-form-field>
+        @if (errorFor('reply_email'); as message) {
+          <p class="photo-removal__error" data-field="reply_email">{{ message }}</p>
+        }
+        <!-- The honeypot: hidden from people and skipped by the keyboard. -->
+        <div class="photo-removal__trap" aria-hidden="true">
+          <label>
+            Website
+            <input type="text" formControlName="website" tabindex="-1" autocomplete="off" />
+          </label>
+        </div>
+        <div class="photo-removal__actions">
+          <button mat-flat-button type="submit" [disabled]="state() === 'sending'">
+            {{ state() === 'sending' ? 'Sending…' : 'Send' }}
+          </button>
+          <button mat-button type="button" [disabled]="state() === 'sending'" (click)="close()">
+            Cancel
+          </button>
+        </div>
+      </form>
+    }
+  }
+</section>

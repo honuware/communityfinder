@@ -92,7 +92,7 @@ int64_t AddEvent(Transaction& transaction, DatabaseHelper databaseHelper, const 
     Events::IngestItem item;
     item.sourceId = world.feed;
     item.externalKey = spec.externalKey;
-    item.title = "Event " + spec.externalKey;
+    item.title = spec.title.empty() ? "Event " + spec.externalKey : spec.title;
     item.startsAtUs = spec.startsAtUs;
     item.venueId = spec.venueId;
     item.seriesSlug = spec.seriesSlug;

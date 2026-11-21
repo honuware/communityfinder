@@ -83,6 +83,40 @@ describe('Header', () => {
     ]);
   });
 
+  // CM3 Phase 2 §12.5: a curator who isn't an admin gets the admin links too.
+  it('offers the admin area to a curator, as to an admin', () => {
+    configure({
+      authData$: of({ ...user, permissions: ['manage_events'] }),
+    } as unknown as AuthService);
+    const fixture = TestBed.createComponent(Header);
+    fixture.detectChanges();
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('.app-header__chip')!
+      .click();
+    fixture.detectChanges();
+    const hrefs = Array.from(document.querySelectorAll('.mat-mdc-menu-item')).map((item) =>
+      item.getAttribute('href'),
+    );
+    expect(hrefs).toEqual(['/account', '/account/submissions', '/admin', '/admin/tables', null]);
+  });
+
+  // CM3 OQ24: so does someone who curates only the guide.
+  it('offers the admin area to a guide curator', () => {
+    configure({
+      authData$: of({ ...user, permissions: ['manage_guide'] }),
+    } as unknown as AuthService);
+    const fixture = TestBed.createComponent(Header);
+    fixture.detectChanges();
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('.app-header__chip')!
+      .click();
+    fixture.detectChanges();
+    const hrefs = Array.from(document.querySelectorAll('.mat-mdc-menu-item')).map((item) =>
+      item.getAttribute('href'),
+    );
+    expect(hrefs).toEqual(['/account', '/account/submissions', '/admin', '/admin/tables', null]);
+  });
+
   it('shows only the first name when logged in', () => {
     configure({ authData$: of(user) } as unknown as AuthService);
     const fixture = TestBed.createComponent(Header);

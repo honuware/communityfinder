@@ -2,7 +2,7 @@
   <h1 class="admin-dashboard__title">Admin Dashboard</h1>
 
   <div class="admin-dashboard__grid">
-    @for (tile of tiles; track tile.title) {
+    @for (tile of tiles(); track tile.title) {
       <a class="admin-dashboard__tile" [routerLink]="tile.link">
         <mat-card class="admin-dashboard__card" appearance="outlined">
           <mat-icon class="admin-dashboard__icon">{{ tile.icon }}</mat-icon>

@@ -50,6 +50,15 @@
             <button
               mat-button
               type="button"
+              class="gallery-editor__edit"
+              [disabled]="busy() || editingId() === row.id"
+              (click)="startEdit(row)"
+            >
+              Edit
+            </button>
+            <button
+              mat-button
+              type="button"
               class="gallery-editor__remove"
               [disabled]="busy()"
               (click)="askToRemove(row)"
@@ -57,6 +66,43 @@
               Remove
             </button>
           </div>
+          @if (editingId() === row.id) {
+            <form
+              class="gallery-editor__edit-form"
+              [formGroup]="editForm"
+              (ngSubmit)="saveEdit(row)"
+              aria-label="Edit this photo's words"
+            >
+              <mat-form-field
+                appearance="outline"
+                class="gallery-editor__wide"
+                subscriptSizing="dynamic"
+              >
+                <mat-label>Alt text</mat-label>
+                <input matInput formControlName="altText" [maxlength]="altTextMax" />
+                <mat-hint
+                  >What's in the photo, for people who can't see it. Never name attendees.</mat-hint
+                >
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="gallery-editor__wide">
+                <mat-label>Caption (optional)</mat-label>
+                <input matInput formControlName="caption" [maxlength]="captionMax" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="gallery-editor__wide">
+                <mat-label>Credit (optional)</mat-label>
+                <input matInput formControlName="credit" [maxlength]="creditMax" />
+              </mat-form-field>
+              @if (editError()) {
+                <p class="gallery-editor__error">{{ editError() }}</p>
+              }
+              <div class="gallery-editor__edit-actions">
+                <button mat-flat-button type="submit" [disabled]="savingEdit()">Save</button>
+                <button mat-button type="button" [disabled]="savingEdit()" (click)="cancelEdit()">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          }
           @if (confirmingRemoveId() === row.id) {
             <div class="gallery-editor__confirm" role="alertdialog">
               <p>Remove this photo from the gallery? It comes off the event's page right away.</p>

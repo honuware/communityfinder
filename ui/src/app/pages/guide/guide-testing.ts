@@ -5,6 +5,7 @@ import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { HONUWARE_API_BASE } from '@honuware/ui/access';
 import { afterEach, beforeEach, vi } from 'vitest';
+import { provideGuideAccess } from '../../core/guide-access/guide-access.providers';
 import { guideRoutes } from './guide.routes';
 
 // Shared set-up for the guide page specs: the real /guide routes over the
@@ -32,7 +33,7 @@ export function useGuideTestClock(): void {
 export function configureGuide(providers: Provider[] = []): void {
   TestBed.configureTestingModule({
     providers: [
-      provideRouter([{ path: 'guide', children: guideRoutes(true) }]),
+      provideRouter([{ path: 'guide', children: guideRoutes(provideGuideAccess(true)) }]),
       provideNoopAnimations(),
       { provide: HONUWARE_API_BASE, useValue: '/api' },
       ...providers,

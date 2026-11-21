@@ -1,6 +1,8 @@
 #include "business_logic/populate_sample_data.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <stdexcept>
@@ -8,9 +10,13 @@
 #include <string_view>
 #include <vector>
 
+#include "business_logic/events/event_gallery_helper.h"
 #include "business_logic/events/event_helper.h"
 #include "business_logic/events/event_ical.h"
+#include "business_logic/events/gallery_settings.h"
+#include "business_logic/images/image_helper.h"
 #include "db_schema/categories.h"
+#include "db_schema/event_gallery_photos.h"
 #include "db_schema/event_sources.h"
 #include "db_schema/events.h"
 #include "db_schema/freshness.h"
@@ -644,6 +650,132 @@ const std::vector<SeriesSpec>& SampleSeries() {
     return series;
 }
 
+// ---- the media (CM3, OQ22) ----
+
+// Generated art, the server's twin of the offline demo's demo-photo-art.ts:
+// a gradient and a few translucent shapes in the site's palette. Never people,
+// so no consent question arises from the pictures themselves. Seeded by a
+// fixed key, so a picture is the same on every run.
+constexpr std::string_view kArtPalette[] = {
+    "#6b2d5c", "#ff6f59", "#2a9d8f", "#f4a261", "#264653", "#fdf6ec",
+};
+
+constexpr std::string_view kArtSvgTemplate =
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}\" height=\"{height}\" "
+    "viewBox=\"0 0 {width} {height}\"><defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" "
+    "x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"{from}\"/><stop offset=\"1\" "
+    "stop-color=\"{to}\"/></linearGradient></defs><rect width=\"{width}\" height=\"{height}\" "
+    "fill=\"url(#g)\"/>{shapes}</svg>";
+constexpr std::string_view kArtCircleTemplate =
+    "<circle cx=\"{x}\" cy=\"{y}\" r=\"{size}\" fill=\"{fill}\" fill-opacity=\"{opacity}\"/>";
+constexpr std::string_view kArtRectTemplate =
+    "<rect x=\"{left}\" y=\"{top}\" width=\"{width}\" height=\"{size}\" rx=\"{corner}\" "
+    "fill=\"{fill}\" fill-opacity=\"{opacity}\" transform=\"rotate({angle} {x} {y})\"/>";
+
+// mulberry32, as the demo uses, seeded with an FNV-1a hash of the key.
+class ArtRandom {
+public:
+    explicit ArtRandom(std::string_view key) {
+        uint32_t hash = 2'166'136'261u;
+        for (char c : key) {
+            hash = (hash ^ static_cast<unsigned char>(c)) * 16'777'619u;
+        }
+        state_ = hash;
+    }
+
+    double Next() {
+        state_ += 0x6d2b79f5u;
+        uint32_t t = state_;
+        t = (t ^ (t >> 15)) * (t | 1u);
+        t ^= t + (t ^ (t >> 7)) * (t | 61u);
+        return static_cast<double>(t ^ (t >> 14)) / 4'294'967'296.0;
+    }
+
+    int Below(int bound) { return static_cast<int>(Next() * bound); }
+    int ColourIndex() { return Below(static_cast<int>(std::size(kArtPalette))); }
+    std::string_view Colour() { return kArtPalette[ColourIndex()]; }
+
+private:
+    uint32_t state_ = 0;
+};
+
+std::vector<char> SampleArt(std::string_view key, int width, int height) {
+    ArtRandom random(key);
+    const int fromIndex = random.ColourIndex();
+    int toIndex = random.ColourIndex();
+    if (toIndex == fromIndex) {
+        // Never a flat field: the colour two along instead.
+        toIndex = (fromIndex + 2) % static_cast<int>(std::size(kArtPalette));
+    }
+    const std::string_view from = kArtPalette[fromIndex];
+    const std::string_view to = kArtPalette[toIndex];
+    std::string shapes;
+    const int shapeCount = 3 + random.Below(3);
+    for (int index = 0; index < shapeCount; ++index) {
+        const int x = random.Below(width + 1);
+        const int y = random.Below(height + 1);
+        const int size = static_cast<int>((0.15 + random.Next() * 0.35) * std::min(width, height));
+        // Hundredths, 0.35 to 0.79.
+        const int hundredths = 35 + random.Below(45);
+        const std::string opacity = "0." + std::to_string(hundredths);
+        const std::string fill(random.Colour());
+        if (random.Next() < 0.5) {
+            shapes += FormatString(kArtCircleTemplate, {
+                { "x", std::to_string(x) }, { "y", std::to_string(y) },
+                { "size", std::to_string(size) }, { "fill", fill }, { "opacity", opacity },
+            });
+        } else {
+            shapes += FormatString(kArtRectTemplate, {
+                { "left", std::to_string(x - size) }, { "top", std::to_string(y - size / 2) },
+                { "width", std::to_string(size * 2) }, { "size", std::to_string(size) },
+                { "corner", std::to_string(size / 4) }, { "fill", fill }, { "opacity", opacity },
+                { "angle", std::to_string(random.Below(91) - 45) },
+                { "x", std::to_string(x) }, { "y", std::to_string(y) },
+            });
+        }
+    }
+    const std::string svg = FormatString(kArtSvgTemplate, {
+        { "width", std::to_string(width) }, { "height", std::to_string(height) },
+        { "from", std::string(from) }, { "to", std::string(to) }, { "shapes", shapes },
+    });
+    return std::vector<char>(svg.begin(), svg.end());
+}
+
+// The hero's shape (1200×630) for a main photo; the gallery's full view
+// (1600×1200) for a gallery photo.
+constexpr int kMainArtWidth = 1200;
+constexpr int kMainArtHeight = 630;
+constexpr int kGalleryArtWidth = 1600;
+constexpr int kGalleryArtHeight = 1200;
+
+// Events (by sample key) and series (by slug) that get a main photo. A series'
+// photo shows on each of its dates that has none of its own.
+constexpr std::string_view kEventsWithPhotos[] = {
+    "drag-revue", "leather-night", "queer-craft-fair", "film-night",
+};
+constexpr std::string_view kSeriesWithPhoto = "board-game-night";
+
+// The one gallery: a craft fair, three pictures of shapes. The alt text says
+// what the art shows, as a curator's would; the credit says it's sample art.
+constexpr std::string_view kGalleryEventKey = "queer-craft-fair";
+constexpr std::string_view kSampleGalleryCredit = "Sample art";
+struct GalleryArtSpec {
+    std::string_view altText;
+    std::string_view caption;
+};
+constexpr GalleryArtSpec kSampleGallery[] = {
+    { "Overlapping circles and rounded blocks in plum, coral and teal on a warm gradient.",
+      "The stalls, as abstract art." },
+    { "Tilted rounded rectangles in gold and ink across a teal-to-plum gradient.",
+      "Prints and zines, more or less." },
+    { "Translucent coral and cream circles scattered over a deep blue field.",
+      "The button station, in spirit." },
+};
+
+// The demo video on one event and one series.
+constexpr std::string_view kEventWithVideo = "chorus-fall-concert";
+constexpr std::string_view kSeriesWithVideo = "bear-happy-hour";
+
 std::string Column(const KeyValueTable& row, std::string_view column) {
     auto it = row.find(std::string(column));
     return it != row.end() ? it->second : std::string();
@@ -673,10 +805,18 @@ public:
     void AddSceneLinks(std::string_view sceneSlug, const std::vector<LinkSpec>& links);
     void AddSeries(const SeriesSpec& spec);
     void AddEvents(const std::vector<EventSpec>& specs, int64_t reviewerPersonId);
+    // After AddEvents: the photos, the gallery and the videos (CM3, OQ22).
+    void AddMedia(int64_t reviewerPersonId);
 
     std::vector<EventSpec> SampleEvents();
 
 private:
+    int64_t EventIdFor(std::string_view key) const;
+    int64_t SeriesIdFor(std::string_view slug);
+    void AddMainPhoto(std::string_view table, int64_t id, std::string_view artKey);
+    void AddGallery(int64_t eventId, int64_t reviewerPersonId);
+    void AddVideo(std::string_view table, int64_t id);
+
     void LoadVocabulary();
     int64_t SceneTagId(std::string_view slug);
     int64_t NeighborhoodId(std::string_view slug);
@@ -700,6 +840,7 @@ private:
     std::map<std::string, int64_t, std::less<>> neighborhoodIds_;
     std::map<std::string, int64_t, std::less<>> categoryIds_;
     std::map<std::string, int64_t, std::less<>> venueIds_;  // by profile slug
+    std::map<std::string, int64_t, std::less<>> eventIdsByKey_;  // by sample key
 };
 
 void Set(KeyValueTable& row, std::string_view column, std::string_view value) {
@@ -1195,6 +1336,7 @@ void SampleDataWriter::AddEvents(const std::vector<EventSpec>& specs, int64_t re
     TableHelpers::Events events(databaseHelper_);
     for (size_t index = 0; index < result.items.size(); ++index) {
         const Events::IngestItemResult& item = result.items[index];
+        eventIdsByKey_[specs[index].key] = item.eventId;
         if (item.outcome == Events::kIngestOutcomeCreated) {
             ++report_.eventsCreated;
         } else if (item.outcome == Events::kIngestOutcomeUpdated
@@ -1217,6 +1359,112 @@ void SampleDataWriter::AddEvents(const std::vector<EventSpec>& specs, int64_t re
     }
 }
 
+int64_t SampleDataWriter::EventIdFor(std::string_view key) const {
+    auto it = eventIdsByKey_.find(key);
+    if (it == eventIdsByKey_.end()) {
+        throw std::runtime_error("No sample event with key " + std::string(key));
+    }
+    return it->second;
+}
+
+int64_t SampleDataWriter::SeriesIdFor(std::string_view slug) {
+    const int64_t id = IdColumn(TableHelpers::Series(databaseHelper_).GetSeriesBySlug(transaction_, slug),
+                                DbSchema::kSeriesId);
+    if (id == 0) {
+        throw std::runtime_error("No sample series " + std::string(slug));
+    }
+    return id;
+}
+
+// Stored the way a real upload is, through the photo pipeline. A row that
+// already has a photo (from an earlier run, or a curator's) keeps it.
+void SampleDataWriter::AddMainPhoto(std::string_view table, int64_t id, std::string_view artKey) {
+    Images::ImageHelper images(databaseHelper_);
+    if (images.HasPhoto(transaction_, table, id)) {
+        ++report_.mediaAlreadyThere;
+        return;
+    }
+    const Images::UploadResult upload = images.UploadAndAssociatePhoto(
+        transaction_, table, id, SampleArt(artKey, kMainArtWidth, kMainArtHeight), "svg");
+    if (!upload.success) {
+        throw std::runtime_error("The sample photo for " + std::string(artKey) +
+                                 " didn't store: " + upload.errorMessage);
+    }
+    ++report_.photosAdded;
+}
+
+// The gallery goes in whole or not at all: an event with any gallery rows,
+// sample or not, is left alone.
+void SampleDataWriter::AddGallery(int64_t eventId, int64_t reviewerPersonId) {
+    if (!TableHelpers::EventGalleryPhotos(databaseHelper_).GetGalleryForEvent(transaction_, eventId).empty()) {
+        ++report_.mediaAlreadyThere;
+        return;
+    }
+    // The consent record needs someone. The column would take 0, but that
+    // would record consent from nobody.
+    if (reviewerPersonId == 0) {
+        report_.gallerySkippedNoReviewer = true;
+        return;
+    }
+    Events::EventGalleryHelper gallery(databaseHelper_);
+    Images::ImageHelper images(databaseHelper_);
+    int index = 0;
+    for (const GalleryArtSpec& spec : kSampleGallery) {
+        Events::NewGalleryPhoto photo;
+        photo.eventId = eventId;
+        photo.altText = std::string(spec.altText);
+        photo.caption = std::string(spec.caption);
+        photo.credit = std::string(kSampleGalleryCredit);
+        photo.consentConfirmed = true;
+        const Events::AddGalleryPhotoResult added = gallery.AddGalleryPhoto(
+            transaction_, photo, reviewerPersonId, Events::kEventGalleryMaxPhotosRange.defaultValue);
+        if (!added.ok) {
+            throw std::runtime_error("The sample gallery photo didn't add: " + added.errorCode);
+        }
+        const std::string artKey = "gallery/" + std::string(kGalleryEventKey) + "/" + std::to_string(++index);
+        const Images::UploadResult upload = images.UploadAndAssociatePhoto(
+            transaction_, DbSchema::kEventGalleryPhotosTable, added.id,
+            SampleArt(artKey, kGalleryArtWidth, kGalleryArtHeight), "svg");
+        if (!upload.success) {
+            throw std::runtime_error("The sample gallery photo didn't store: " + upload.errorMessage);
+        }
+        ++report_.galleryPhotosAdded;
+    }
+}
+
+// A row with a video already keeps it. Ingest never touches video_url, so a
+// re-run's date moves leave the event's video in place.
+void SampleDataWriter::AddVideo(std::string_view table, int64_t id) {
+    const std::string url(kSampleVideoUrl);
+    if (table == DbSchema::kEventsTable) {
+        TableHelpers::Events events(databaseHelper_);
+        if (!Column(events.GetEvent(transaction_, id), DbSchema::kEventsVideoUrl).empty()) {
+            ++report_.mediaAlreadyThere;
+            return;
+        }
+        events.UpdateEvent(transaction_, id, { { std::string(DbSchema::kEventsVideoUrl), url } });
+    } else {
+        TableHelpers::Series series(databaseHelper_);
+        if (!Column(series.GetSeries(transaction_, id), DbSchema::kSeriesVideoUrl).empty()) {
+            ++report_.mediaAlreadyThere;
+            return;
+        }
+        series.UpdateSeries(transaction_, id, { { std::string(DbSchema::kSeriesVideoUrl), url } });
+    }
+    ++report_.videosAdded;
+}
+
+void SampleDataWriter::AddMedia(int64_t reviewerPersonId) {
+    for (std::string_view key : kEventsWithPhotos) {
+        AddMainPhoto(DbSchema::kEventsTable, EventIdFor(key), "events/" + std::string(key));
+    }
+    AddMainPhoto(DbSchema::kSeriesTable, SeriesIdFor(kSeriesWithPhoto),
+                 "series/" + std::string(kSeriesWithPhoto));
+    AddGallery(EventIdFor(kGalleryEventKey), reviewerPersonId);
+    AddVideo(DbSchema::kEventsTable, EventIdFor(kEventWithVideo));
+    AddVideo(DbSchema::kSeriesTable, SeriesIdFor(kSeriesWithVideo));
+}
+
 }  // namespace
 
 SampleDataReport PopulateSampleData(
@@ -1235,5 +1483,6 @@ SampleDataReport PopulateSampleData(
     for (const auto& [sceneSlug, links] : SampleSceneLinks()) writer.AddSceneLinks(sceneSlug, links);
     for (const SeriesSpec& series : SampleSeries()) writer.AddSeries(series);
     writer.AddEvents(writer.SampleEvents(), reviewerPersonId);
+    writer.AddMedia(reviewerPersonId);
     return report;
 }

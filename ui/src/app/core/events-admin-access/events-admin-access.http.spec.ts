@@ -166,4 +166,33 @@ describe('EventsAdminHttpAccess', () => {
       field: 'archived_events_visible_days',
     });
   });
+
+  // CM3 Phase 2 §9: the curator's event finder.
+  it('finds events by the trimmed search, and lists what’s coming up without one', async () => {
+    const { access, http } = setUp();
+    const match = {
+      id: 107,
+      title: 'Bear Happy Hour',
+      starts_at_us: 1,
+      ends_at_us: null,
+      venue_name: 'The Lantern Room',
+      location_text: '',
+      series_title: 'Bear Happy Hour',
+      status: 'approved' as const,
+    };
+    const found = firstValueFrom(access.findEvents('  bear ', 5));
+    const search = http.expectOne((request) => request.url === '/api/admin/events/search');
+    expect(search.request.method).toBe('GET');
+    expect(search.request.withCredentials).toBe(true);
+    expect(search.request.params.get('q')).toBe('bear');
+    expect(search.request.params.get('limit')).toBe('5');
+    search.flush({ items: [match] });
+    expect(await found).toEqual([match]);
+
+    const comingUp = firstValueFrom(access.findEvents(''));
+    const list = http.expectOne((request) => request.url === '/api/admin/events/search');
+    expect(list.request.params.keys()).toEqual([]);
+    list.flush({ items: [] });
+    expect(await comingUp).toEqual([]);
+  });
 });

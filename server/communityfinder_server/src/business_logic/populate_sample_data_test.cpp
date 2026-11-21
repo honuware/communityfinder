@@ -10,8 +10,12 @@
 #include "business_logic/create_framework_tables.h"
 #include "business_logic/events/event_helper.h"
 #include "business_logic/events/event_ical.h"
+#include "business_logic/events/photo_visibility.h"
+#include "business_logic/events/video_link.h"
 #include "business_logic/guide/guide_helper.h"
+#include "db_schema/event_gallery_photos.h"
 #include "db_schema/events.h"
+#include "db_schema/series.h"
 #include "sql_util/database_access/transaction.h"
 #include "test/src/util/database_test_helper.h"
 
@@ -41,6 +45,17 @@ int64_t NowUs(Transaction& transaction) {
 
 int CountRows(Transaction& transaction, const std::string& sql) {
     return std::stoi(transaction.RunSqlStatementReturningOneValue(sql));
+}
+
+// CM3 (OQ22): four events and one series get a photo; one event a gallery of
+// three; one event and one series the video.
+constexpr int kSamplePhotoCount = 4 + 1;
+constexpr int kSampleGalleryPhotoCount = 3;
+constexpr int kSampleVideoCount = 2;
+
+int64_t SampleEventId(Transaction& transaction, const std::string& key) {
+    return std::stoll(transaction.RunSqlStatementReturningOneValue(
+        "SELECT id FROM events WHERE external_key = $1", "sample-" + key));
 }
 
 }  // namespace
@@ -165,5 +180,105 @@ TEST(PopulateSampleDataTest, ALaterRunMovesTheEventsAlongAndApprovesThemAgain) {
         EXPECT_EQ(CountRows(transaction,
                             "SELECT COUNT(*) FROM events WHERE starts_at_us <= now_us()"),
                   0);
+    });
+}
+
+// --- CM3 (OQ22): photos, a gallery and the video ------------------------------
+
+TEST(PopulateSampleDataTest, AddsPhotosAGalleryAndTheVideoThatThePagesShow) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("SampleMedia", [&](Transaction& transaction) {
+        Seed(transaction, testDb);
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+
+        SampleDataReport report = PopulateSampleData(transaction, databaseHelper, kReviewerPersonId);
+
+        EXPECT_EQ(report.photosAdded, kSamplePhotoCount);
+        EXPECT_EQ(report.galleryPhotosAdded, kSampleGalleryPhotoCount);
+        EXPECT_EQ(report.videosAdded, kSampleVideoCount);
+        EXPECT_EQ(report.mediaAlreadyThere, 0);
+        EXPECT_FALSE(report.gallerySkippedNoReviewer);
+
+        Events::EventHelper events(databaseHelper);
+        // The craft fair: its own photo, and a public gallery of three with
+        // the consent recorded against the reviewer.
+        const int64_t fairId = SampleEventId(transaction, "queer-craft-fair");
+        std::optional<Events::EventDetail> fair = events.GetEventDetail(transaction, fairId);
+        ASSERT_TRUE(fair.has_value());
+        EXPECT_EQ(fair->status, DbSchema::kEventsStatusApproved);
+        ASSERT_TRUE(fair->event.photo.has_value());
+        EXPECT_EQ(fair->event.photo->table, DbSchema::kEventsTable);
+        ASSERT_EQ(fair->gallery.size(), static_cast<size_t>(kSampleGalleryPhotoCount));
+        for (const Events::GalleryPhoto& photo : fair->gallery) {
+            EXPECT_FALSE(photo.altText.empty());
+            EXPECT_EQ(photo.credit, "Sample art");
+            EXPECT_TRUE(Events::IsPhotoRowPublic(databaseHelper, transaction,
+                                                 DbSchema::kEventGalleryPhotosTable, photo.id));
+        }
+        EXPECT_EQ(CountRows(transaction,
+                            "SELECT COUNT(*) FROM event_gallery_photos WHERE consent_confirmed_by_person_id = "
+                                + std::to_string(kReviewerPersonId)),
+                  kSampleGalleryPhotoCount);
+        // Stored as SVG, the way a real vector upload is.
+        EXPECT_EQ(CountRows(transaction,
+                            "SELECT COUNT(*) FROM source_photos s "
+                            "JOIN photo_instances p ON p.photo_instance_id = s.photo_instance_id "
+                            "WHERE p.type = 'svg'"),
+                  kSamplePhotoCount + kSampleGalleryPhotoCount);
+
+        // A Board Game Night date shows its series' photo.
+        std::optional<Events::EventDetail> boardGames =
+            events.GetEventDetail(transaction, SampleEventId(transaction, "board-game-night-1"));
+        ASSERT_TRUE(boardGames.has_value());
+        ASSERT_TRUE(boardGames->event.photo.has_value());
+        EXPECT_EQ(boardGames->event.photo->table, DbSchema::kSeriesTable);
+
+        // The video passed the columns' CHECK and reads back as YouTube's.
+        std::optional<Events::EventDetail> concert =
+            events.GetEventDetail(transaction, SampleEventId(transaction, "chorus-fall-concert"));
+        ASSERT_TRUE(concert.has_value());
+        ASSERT_TRUE(concert->event.video.has_value());
+        EXPECT_EQ(concert->event.video->provider, Events::kVideoProviderYoutube);
+        EXPECT_EQ(concert->event.video->id, "lVhJ_A8XUgc");
+        std::optional<Events::SeriesDetail> bears = events.GetSeriesDetail(transaction, "bear-happy-hour");
+        ASSERT_TRUE(bears.has_value());
+        ASSERT_TRUE(bears->series.video.has_value());
+        EXPECT_EQ(bears->series.video->id, "lVhJ_A8XUgc");
+    });
+}
+
+TEST(PopulateSampleDataTest, ARerunLeavesThePhotosGalleryAndVideosAlone) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("SampleMediaRerun", [&](Transaction& transaction) {
+        Seed(transaction, testDb);
+        PopulateSampleData(transaction, testDb.GetDatabaseHelper(), kReviewerPersonId);
+        const int sourcePhotos = CountRows(transaction, "SELECT COUNT(*) FROM source_photos");
+
+        SampleDataReport again = PopulateSampleData(transaction, testDb.GetDatabaseHelper(), kReviewerPersonId);
+
+        EXPECT_EQ(again.photosAdded, 0);
+        EXPECT_EQ(again.galleryPhotosAdded, 0);
+        EXPECT_EQ(again.videosAdded, 0);
+        // Each photo, the gallery, and each video.
+        EXPECT_EQ(again.mediaAlreadyThere, kSamplePhotoCount + 1 + kSampleVideoCount);
+        EXPECT_EQ(CountRows(transaction, "SELECT COUNT(*) FROM event_gallery_photos"),
+                  kSampleGalleryPhotoCount);
+        EXPECT_EQ(CountRows(transaction, "SELECT COUNT(*) FROM source_photos"), sourcePhotos);
+    });
+}
+
+TEST(PopulateSampleDataTest, WithNoAdministratorTheGalleryIsSkippedAndSaysSo) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("SampleMediaNoReviewer", [&](Transaction& transaction) {
+        Seed(transaction, testDb);
+
+        SampleDataReport report = PopulateSampleData(transaction, testDb.GetDatabaseHelper(), 0);
+
+        EXPECT_TRUE(report.gallerySkippedNoReviewer);
+        EXPECT_EQ(report.galleryPhotosAdded, 0);
+        EXPECT_EQ(CountRows(transaction, "SELECT COUNT(*) FROM event_gallery_photos"), 0);
+        // The rest needs no one's consent.
+        EXPECT_EQ(report.photosAdded, kSamplePhotoCount);
+        EXPECT_EQ(report.videosAdded, kSampleVideoCount);
     });
 }

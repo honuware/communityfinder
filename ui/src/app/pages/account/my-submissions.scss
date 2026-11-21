@@ -73,6 +73,32 @@
   white-space: pre-line;
 }
 
+.my-submissions__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+// The flyer picker, open in place (CM3 Phase 2 §11).
+.my-submissions__flyer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+
+  .my-submissions__hint {
+    margin: 0;
+  }
+}
+
+.my-submissions__error {
+  margin: 0;
+  color: var(--mat-sys-error, #b3261e);
+}
+
 .my-submissions__confirm {
   display: flex;
   flex-wrap: wrap;

@@ -51,7 +51,49 @@
         }
 
         @if (canWithdraw(submission)) {
-          @if (confirmingId() === submission.id) {
+          @if (flyerOpenId() === submission.id) {
+            <div class="my-submissions__flyer" role="group" aria-label="Your flyer">
+              <p class="my-submissions__hint">
+                A JPEG or PNG. It goes on every date still waiting for review, and is shown on the
+                event's page once a curator approves it. Only send artwork you're allowed to share,
+                and no photos of people who haven't agreed to be shown.
+              </p>
+              <hw-photo-upload [tableName]="'events'" [tableItemId]="0" [deferUpload]="true" />
+              @if (flyerError()) {
+                <p class="my-submissions__error">{{ flyerError() }}</p>
+              }
+              <div class="my-submissions__actions">
+                <button
+                  mat-flat-button
+                  type="button"
+                  [disabled]="flyerBusyId() === submission.id"
+                  (click)="attachFlyer(submission)"
+                >
+                  {{ hasFlyer(submission) ? 'Replace it' : 'Add it' }}
+                </button>
+                <button
+                  mat-button
+                  type="button"
+                  [disabled]="flyerBusyId() === submission.id"
+                  (click)="cancelFlyer()"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          } @else if (confirmingFlyerRemoveId() === submission.id) {
+            <div class="my-submissions__confirm" role="alertdialog">
+              <p>
+                Remove the flyer? It comes off your {{ waitingCount(submission) }} waiting
+                {{ waitingCount(submission) === 1 ? 'date' : 'dates' }}. Anything already listed
+                keeps its photo.
+              </p>
+              <button mat-flat-button type="button" (click)="removeFlyer(submission)">
+                Remove it
+              </button>
+              <button mat-button type="button" (click)="cancelRemoveFlyer()">Keep it</button>
+            </div>
+          } @else if (confirmingId() === submission.id) {
             <div class="my-submissions__confirm" role="alertdialog">
               <p>
                 Withdraw this submission? Its {{ waitingCount(submission) }} waiting
@@ -64,15 +106,37 @@
               <button mat-button type="button" (click)="cancelWithdraw()">Keep it</button>
             </div>
           } @else {
-            <button
-              mat-stroked-button
-              type="button"
-              class="my-submissions__withdraw"
-              [disabled]="withdrawingId() === submission.id"
-              (click)="askToWithdraw(submission)"
-            >
-              Withdraw
-            </button>
+            <div class="my-submissions__actions">
+              <button
+                mat-stroked-button
+                type="button"
+                class="my-submissions__flyer-add"
+                [disabled]="flyerBusyId() === submission.id"
+                (click)="openFlyer(submission)"
+              >
+                {{ hasFlyer(submission) ? 'Replace the flyer' : 'Add a flyer' }}
+              </button>
+              @if (hasFlyer(submission)) {
+                <button
+                  mat-button
+                  type="button"
+                  class="my-submissions__flyer-remove"
+                  [disabled]="flyerBusyId() === submission.id"
+                  (click)="askToRemoveFlyer(submission)"
+                >
+                  Remove the flyer
+                </button>
+              }
+              <button
+                mat-stroked-button
+                type="button"
+                class="my-submissions__withdraw"
+                [disabled]="withdrawingId() === submission.id"
+                (click)="askToWithdraw(submission)"
+              >
+                Withdraw
+              </button>
+            </div>
           }
         }
       </mat-card>

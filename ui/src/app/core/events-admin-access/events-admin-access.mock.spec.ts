@@ -7,7 +7,7 @@ import { HONUWARE_MOCK_OPTIONS } from '../mock/honuware-mock';
 import { PastEventSettingsMockStore } from '../mock/past-event-settings-mock-store';
 import { dataResultsToRecords } from '../types/events.types';
 import { pacificWallClockToUs } from '../utils/events-date.utils';
-import { EVENTS_ADMIN_ACCESS } from './events-admin-access';
+import { CuratorEventMatch, EVENTS_ADMIN_ACCESS } from './events-admin-access';
 import { provideEventsAdminAccess } from './events-admin-access.providers';
 
 // Wed Aug 12, 2026, 3:00 PM Pacific: the mock dataset's reference week.
@@ -30,6 +30,21 @@ function setUp() {
 
 async function row(crud: CrudAccess, table: string, id: number) {
   return dataResultsToRecords(await firstValueFrom(crud.getRow(table, 'id', String(id))))[0];
+}
+
+// The finder's order: what isn't over (soonest first), then what is (latest
+// first). Without an end, an event is over two hours after it starts.
+function expectFinderOrder(found: CuratorEventMatch[]): void {
+  const over = (match: CuratorEventMatch) =>
+    (match.ends_at_us ?? match.starts_at_us + 2 * 3_600 * 1_000_000) < NOW_US;
+  const firstOver = found.findIndex(over);
+  const upcoming = firstOver === -1 ? found : found.slice(0, firstOver);
+  const past = firstOver === -1 ? [] : found.slice(firstOver);
+  expect(past.every(over)).toBe(true);
+  const upcomingStarts = upcoming.map((match) => match.starts_at_us);
+  expect([...upcomingStarts].sort((a, b) => a - b)).toEqual(upcomingStarts);
+  const pastStarts = past.map((match) => match.starts_at_us);
+  expect([...pastStarts].sort((a, b) => b - a)).toEqual(pastStarts);
 }
 
 describe('EventsAdminMockAccess', () => {
@@ -193,6 +208,80 @@ describe('EventsAdminMockAccess', () => {
       const settings = await firstValueFrom(access.getPastEventSettings());
       expect(settings.archived_events_visible_days.value).toBe(365);
       expect(settings.events_show_past_by_default.value).toBe(false);
+    });
+  });
+
+  // CM3 Phase 2 §9: EventHelper::FindForCurators over the demo's store.
+  describe('the event finder', () => {
+    it('finds each date of a series, in any case, with its venue and series', async () => {
+      const { access, crud } = setUp();
+      const inStore = dataResultsToRecords(
+        await firstValueFrom(crud.getFilteredTableRows('events', 'id', true, 1000, 0, [])),
+      ).filter((event) => event['title'] === 'Bear Happy Hour');
+      const found = await firstValueFrom(access.findEvents('  bEAR happy '));
+      expect(found.length).toBe(inStore.length);
+      expect(found.length).toBeGreaterThanOrEqual(3);
+      expect(new Set(found.map((match) => match.starts_at_us)).size).toBe(found.length);
+      expectFinderOrder(found);
+      for (const match of found) {
+        expect(match).toMatchObject({
+          venue_name: 'The Lantern Room',
+          series_title: 'Bear Happy Hour',
+        });
+      }
+      // Last week's date (118) is archived, over, and last; the others are
+      // listed and coming up.
+      expect(found.at(-1)).toMatchObject({ id: 118, status: 'archived' });
+      expect(found.slice(0, -1).every((match) => match.status === 'approved')).toBe(true);
+    });
+
+    it('lists what’s coming up in every status when there’s no search, ten by default', async () => {
+      const { access, crud } = setUp();
+      const comingUp = await firstValueFrom(access.findEvents(''));
+      expect(comingUp.length).toBe(10);
+      for (const match of comingUp) {
+        expect(match.starts_at_us + 2 * 3_600 * 1_000_000).toBeGreaterThanOrEqual(NOW_US);
+      }
+      const starts = comingUp.map((match) => match.starts_at_us);
+      expect([...starts].sort((a, b) => a - b)).toEqual(starts);
+      // Pending ones too: Open Mic, once it's moved to start first and end
+      // after now.
+      const firstStart = Math.min(comingUp[0].starts_at_us, NOW_US);
+      await firstValueFrom(
+        crud.updateItem({
+          table_name: 'events',
+          column_name: 'id',
+          column_value: String(OPEN_MIC),
+          value: {
+            starts_at_us: String(firstStart - 60_000_000),
+            ends_at_us: String(NOW_US + 3_600_000_000),
+          },
+        }),
+      );
+      const next = await firstValueFrom(access.findEvents('', 1));
+      expect(next).toEqual([expect.objectContaining({ id: OPEN_MIC, status: 'pending' })]);
+    });
+
+    it('puts what’s over after what isn’t, the latest first, and caps the limit', async () => {
+      const { access, crud } = setUp();
+      const before = await firstValueFrom(access.findEvents('Bear Happy Hour'));
+      const first = before[0];
+      expect(first.starts_at_us + 2 * 3_600 * 1_000_000).toBeGreaterThanOrEqual(NOW_US);
+      // Push the soonest date long into the past: it goes last.
+      await firstValueFrom(
+        crud.updateItem({
+          table_name: 'events',
+          column_name: 'id',
+          column_value: String(first.id),
+          value: { starts_at_us: String(NOW_US - 365 * 24 * 3_600_000_000), ends_at_us: '' },
+        }),
+      );
+      const found = await firstValueFrom(access.findEvents('bear happy hour'));
+      expect(found.length).toBe(before.length);
+      expect(found.at(-1)?.id).toBe(first.id);
+      expectFinderOrder(found);
+      expect((await firstValueFrom(access.findEvents('', 500))).length).toBeLessThanOrEqual(50);
+      expect((await firstValueFrom(access.findEvents('', 2))).length).toBe(2);
     });
   });
 });

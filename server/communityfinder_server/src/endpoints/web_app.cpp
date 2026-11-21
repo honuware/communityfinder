@@ -49,6 +49,10 @@
 #include "admin_event_gallery_photos.h"
 #include "admin_event_gallery_settings.h"
 
+// CM3 Phase 2 — the curator's event finder.
+#include "admin_event_search.h"
+#include "photo_removal_requests.h"
+
 namespace Endpoints {
 
 // Anchor every endpoint's translation unit into the final link.
@@ -118,6 +122,12 @@ void RegisterAllEndpoints() {
     // The flyer route rides PostEventSubmission's.
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostAdminEventGalleryPhoto);
     anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetAdminEventGallerySettings);
+
+    // CM3 Phase 2 — the curator's event finder (§9).
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::GetAdminEventSearch);
+
+    // CM3 Phase 2 — photo-removal requests, the public form (§12.3).
+    anchor = reinterpret_cast<AnchorFunc>(&Endpoints::PostPhotoRemovalRequest);
 }
 
 }  // namespace Endpoints

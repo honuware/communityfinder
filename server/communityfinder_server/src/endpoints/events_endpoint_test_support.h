@@ -43,6 +43,9 @@ struct EventSpec {
     std::optional<std::string> seriesSlug;
     std::optional<std::vector<std::string>> categorySlugs;
     std::optional<std::vector<std::string>> sceneTagSlugs;
+    // "" titles it "Event <externalKey>". Last, so the many positional
+    // { key, start, status } specs stay valid.
+    std::string title;
 };
 int64_t AddEvent(Transaction& transaction, DatabaseHelper databaseHelper, const World& world,
                  const EventSpec& spec);

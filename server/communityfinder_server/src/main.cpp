@@ -14,6 +14,7 @@
 #include "util/types.h"
 #include "util/logging.h"
 #include "sql_util/database_access/production_transaction_provider.h"
+#include "sql_util/database_access/schema_check.h"
 #include "business_logic/app_database_config.h"
 #include "business_logic/auth/server_config.h"
 #include "business_logic/auth/cookie_manager.h"
@@ -38,6 +39,13 @@ int main() {
     std::unique_ptr<DbSchema::DatabaseInfo> databaseInfo;
     databaseInfo = std::make_unique<DbSchema::DatabaseInfo>(
         DbSchema::MakeDatabaseInfo(App::kDatabaseName));
+
+    // A database older than this build (CM3 Phase 2 §8.2): one warning naming
+    // every missing table and column. First, so it's logged even when a later
+    // startup step trips over the same gap. The server keeps running.
+    transactionProvider->RunInTransaction([&](Transaction& transaction) {
+        DbMeta::WarnIfDatabaseIsOlderThanBuild(transaction, *databaseInfo);
+    });
 
     // At-rest secrets bootstrap (sequence matters):
     //   1. Build a plaintext SecretsHelper just to read the prod-mode flag.

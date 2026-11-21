@@ -133,29 +133,8 @@ export class EventSubmissionsMockAccess implements EventSubmissionsAccess {
     if (personId === null) {
       return throwError(() => problem(401, '', '', 'Sign in to add a flyer'));
     }
-    const id = String(submissionId);
-    return forkJoin({
-      submission: this.rows('event_submissions', [{ column_name: 'id', column_value: id }]),
-      pending: this.rows('events', [
-        { column_name: 'submission_id', column_value: id },
-        { column_name: 'status', column_value: 'pending' },
-      ]),
-    }).pipe(
-      switchMap(({ submission, pending }) => {
-        const row = submission[0];
-        if (!row || row['submitted_by_person_id'] !== personId) {
-          return throwError(() => problem(404, '', '', 'Submission not found'));
-        }
-        if (pending.length === 0) {
-          return throwError(() =>
-            problem(
-              400,
-              'NOTHING_PENDING',
-              '',
-              'Nothing in this submission is waiting for review.',
-            ),
-          );
-        }
+    return this.waitingDatesOf(submissionId, personId).pipe(
+      switchMap((pending) => {
         if (imageType !== 'jpeg' && imageType !== 'png') {
           return throwError(() =>
             problem(400, 'BAD_IMAGE_TYPE', '', 'The flyer must be a JPEG or PNG image.'),
@@ -176,6 +155,37 @@ export class EventSubmissionsMockAccess implements EventSubmissionsAccess {
           })),
         );
       }),
+    );
+  }
+
+  // As the server's RemoveFlyer: the photo comes off each waiting date that
+  // has one, and only those are named. A listed date keeps its photo.
+  removeFlyer(submissionId: number): Observable<FlyerResult> {
+    const personId = this.personId();
+    if (personId === null) {
+      return throwError(() => problem(401, '', '', 'Sign in to remove a flyer'));
+    }
+    return this.waitingDatesOf(submissionId, personId).pipe(
+      switchMap((pending) =>
+        forkJoin(
+          pending.map((event) => {
+            const eventId = Number(event['id']);
+            return this.photos
+              .hasPhoto('events', eventId)
+              .pipe(
+                switchMap((reply) =>
+                  reply.has_photo
+                    ? this.photos.deletePhoto('events', eventId).pipe(map(() => eventId))
+                    : of(0),
+                ),
+              );
+          }),
+        ),
+      ),
+      map((removed) => ({
+        submission_id: submissionId,
+        event_ids: removed.filter((eventId) => eventId !== 0),
+      })),
     );
   }
 
@@ -236,6 +246,41 @@ export class EventSubmissionsMockAccess implements EventSubmissionsAccess {
   private personId(): string | null {
     const authData = this.auth.authData;
     return authData.isAuth ? String(authData.personId) : null;
+  }
+
+  // The flyer routes' checks, as the server makes them: someone else's
+  // submission is a 404, and one with nothing waiting is NOTHING_PENDING.
+  // Otherwise its waiting dates.
+  private waitingDatesOf(
+    submissionId: number,
+    personId: string,
+  ): Observable<Record<string, string>[]> {
+    const id = String(submissionId);
+    return forkJoin({
+      submission: this.rows('event_submissions', [{ column_name: 'id', column_value: id }]),
+      pending: this.rows('events', [
+        { column_name: 'submission_id', column_value: id },
+        { column_name: 'status', column_value: 'pending' },
+      ]),
+    }).pipe(
+      switchMap(({ submission, pending }) => {
+        const row = submission[0];
+        if (!row || row['submitted_by_person_id'] !== personId) {
+          return throwError(() => problem(404, '', '', 'Submission not found'));
+        }
+        if (pending.length === 0) {
+          return throwError(() =>
+            problem(
+              400,
+              'NOTHING_PENDING',
+              '',
+              'Nothing in this submission is waiting for review.',
+            ),
+          );
+        }
+        return of(pending);
+      }),
+    );
   }
 
   private checkLimits(

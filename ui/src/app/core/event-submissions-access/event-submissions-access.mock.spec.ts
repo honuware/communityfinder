@@ -324,4 +324,45 @@ describe('EventSubmissionsMockAccess', () => {
       await expect(firstValueFrom(access.withdraw(999))).rejects.toMatchObject({ status: 404 });
     });
   });
+
+  // CM3 Phase 2 §11: Ada's submission 1 has two waiting dates, 201 and 202.
+  describe('the flyer', () => {
+    const JPEG = () => new Uint8Array([0xff, 0xd8, 0xff, 0xe0]).buffer;
+
+    it('goes on every waiting date, and comes off them again', async () => {
+      const { access } = setUp(ADA);
+      const attached = await firstValueFrom(access.attachFlyer(1, JPEG(), 'jpeg'));
+      expect([...attached.event_ids].sort()).toEqual([201, 202]);
+      let [mine] = await firstValueFrom(access.getMine());
+      expect(mine.dates.map((date) => date.has_photo)).toEqual([true, true]);
+
+      const removed = await firstValueFrom(access.removeFlyer(1));
+      expect(removed.submission_id).toBe(1);
+      expect([...removed.event_ids].sort()).toEqual([201, 202]);
+      [mine] = await firstValueFrom(access.getMine());
+      expect(mine.dates.map((date) => date.has_photo)).toEqual([false, false]);
+
+      // Nothing left to take off: it works, and names no date.
+      expect((await firstValueFrom(access.removeFlyer(1))).event_ids).toEqual([]);
+    });
+
+    it('asks a signed-out visitor to sign in', async () => {
+      const { access } = setUp(null);
+      await expect(firstValueFrom(access.removeFlyer(1))).rejects.toMatchObject({ status: 401 });
+    });
+
+    it('checks whose it is, and that something is waiting', async () => {
+      const { access, signInAs } = setUp(GRACE);
+      await expect(firstValueFrom(access.removeFlyer(1))).rejects.toMatchObject({ status: 404 });
+      signInAs(ADA);
+      await firstValueFrom(access.withdraw(1));
+      await expect(firstValueFrom(access.removeFlyer(1))).rejects.toMatchObject({
+        status: 400,
+        error_code: 'NOTHING_PENDING',
+      });
+      await expect(firstValueFrom(access.attachFlyer(1, JPEG(), 'jpeg'))).rejects.toMatchObject({
+        error_code: 'NOTHING_PENDING',
+      });
+    });
+  });
 });

@@ -17,6 +17,8 @@ target_sources(communityfinder_core PRIVATE
     gallery_settings.cpp
     past_event_settings.h
     past_event_settings.cpp
+    photo_removal_request_helper.h
+    photo_removal_request_helper.cpp
     photo_visibility.h
     photo_visibility.cpp
     submission_email.h
@@ -36,6 +38,7 @@ target_sources(communityfinder_test_cases PUBLIC
     events_key_value_table_test.cpp
     gallery_settings_test.cpp
     past_event_settings_test.cpp
+    photo_removal_request_helper_test.cpp
     photo_visibility_test.cpp
     submission_email_test.cpp
     submission_helper_test.cpp

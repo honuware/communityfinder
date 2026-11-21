@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "sql_util/database_access/database_helper.h"
@@ -31,11 +32,27 @@ struct SampleDataReport {
     int eventsUpdated = 0;  // moved to this run's dates, or otherwise changed
     int eventsUnchanged = 0;
     int eventsApproved = 0;  // by this run
+    // CM3 (OQ22): generated art (shapes and colour, never people) as the main
+    // photo on a few events and one series, a three-photo gallery on one event,
+    // and the demo video on one event and one series. A re-run leaves what's
+    // there alone: each photo, the gallery and each video counts once in
+    // mediaAlreadyThere instead.
+    int photosAdded = 0;
+    int galleryPhotosAdded = 0;
+    int videosAdded = 0;
+    int mediaAlreadyThere = 0;
+    // No administrator to record the gallery's consent against (reviewer id
+    // 0), so the gallery was left out.
+    bool gallerySkippedNoReviewer = false;
     // "scene tag bear", "neighborhood ballard": slugs this database lacks.
     std::vector<std::string> missingVocabulary;
 };
 
+// The demo video (CM3 OQ18), the same one the offline demo shows.
+inline constexpr std::string_view kSampleVideoUrl = "https://www.youtube.com/watch?v=lVhJ_A8XUgc";
+
 // `reviewerPersonId` is recorded as the approver of the sample events (a plain
-// id, as EventHelper::ReviewEvent stores it).
+// id, as EventHelper::ReviewEvent stores it), and as who confirmed consent for
+// the sample gallery; with 0 the gallery is skipped.
 SampleDataReport PopulateSampleData(
     Transaction& transaction, DatabaseHelper databaseHelper, int64_t reviewerPersonId);

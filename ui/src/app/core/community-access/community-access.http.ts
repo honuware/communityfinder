@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { DataResults, HONUWARE_API_BASE } from '@honuware/ui/access';
-import { CommunityAccess, HealthInfo, SiteInfo } from './community-access';
+import { CommunityAccess, HealthInfo, PhotoRemovalRequest, SiteInfo } from './community-access';
 import {
   buildEventsQueryString,
   buildPastEventsQueryString,
@@ -47,6 +47,14 @@ export class CommunityHttpAccess implements CommunityAccess {
 
   getSiteInfo(): Observable<SiteInfo> {
     return this.http.get<SiteInfo>(`${this.apiBase}/site_info`, { withCredentials: true });
+  }
+
+  // A signed-out visitor has no CSRF cookie; the server lets this one route
+  // through without it.
+  requestPhotoRemoval(request: PhotoRemovalRequest): Observable<void> {
+    return this.http
+      .post<unknown>(`${this.apiBase}/photo_removal_requests`, request, { withCredentials: true })
+      .pipe(map(() => undefined));
   }
 
   getUpcomingEvents(query: UpcomingEventsQuery = {}): Observable<UpcomingEvents> {

@@ -223,3 +223,27 @@ describe('CommunityHttpAccess (events)', () => {
     });
   });
 });
+
+// CM3 Phase 2 §12.
+describe('CommunityHttpAccess (photo-removal requests)', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it('posts the request as it is', async () => {
+    const { access, http } = setUp();
+    const request = {
+      page_path: '/events/103',
+      page_title: 'Leather Night',
+      photo: 'photo 2 of 3',
+      message: '',
+      reply_email: 'me@example.com',
+      website: '',
+    };
+    const result = firstValueFrom(access.requestPhotoRemoval(request));
+    const sent = http.expectOne('/api/photo_removal_requests');
+    expect(sent.request.method).toBe('POST');
+    expect(sent.request.withCredentials).toBe(true);
+    expect(sent.request.body).toEqual(request);
+    sent.flush({ sent: true });
+    expect(await result).toBeUndefined();
+  });
+});

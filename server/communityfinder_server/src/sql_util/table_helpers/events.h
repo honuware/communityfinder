@@ -98,6 +98,25 @@ public:
     KeyValueTableArray GetPendingStartedBefore(
         Transaction& transaction, int64_t nowUs, int64_t limit) const;
 
+    // READ — CM3 Phase 2 §9, the curator's event finder: events in EVERY status
+    // whose title contains `searchText`, ignoring case. A %, _ or \ in it is
+    // taken literally. At most `limit`, in two runs:
+    //   - first those that haven't ended by `nowUs` (one still running counts),
+    //     soonest start first;
+    //   - then those that have, most recent start first.
+    // Ties go by id. An event with no end ends `defaultDurationUs` after its
+    // start.
+    KeyValueTableArray FindByTitle(
+        Transaction& transaction, std::string_view searchText, int64_t nowUs,
+        int64_t defaultDurationUs, int64_t limit) const;
+
+    // READ — the finder's "Coming up" list: events in EVERY status that haven't
+    // ended by `nowUs`, soonest start first (then id), at most `limit`. The
+    // same end rule as FindByTitle.
+    KeyValueTableArray GetNotEndedBy(
+        Transaction& transaction, int64_t nowUs, int64_t defaultDurationUs,
+        int64_t limit) const;
+
     // READ — CM3's photo picker: whose photo each event shows (its own, else its
     // series', else its venue's), in one query against honuware's
     // table_item_photos. Each row has `id`, kPhotoOwnerTable and kPhotoOwnerId,

@@ -918,6 +918,71 @@ TEST(SubmissionHelperTest, AFlyerIsRefusedWithoutWritingAnything) {
     });
 }
 
+// CM3 Phase 2 §11 — "Remove the flyer", the undo of AttachFlyer.
+TEST(SubmissionHelperTest, RemovingTheFlyerTakesItOffThePendingDatesOnly) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("RemovingTheFlyerTakesItOffThePendingDatesOnly", [&](Transaction& transaction) {
+        DatabaseHelper db = testDb.GetDatabaseHelper();
+        MakeWorld(transaction, db);
+        TableHelpers::PhotoTest::EnsurePhotoSupport(transaction, db, DbSchema::kEventsTable);
+        Secrets::SecretsHelperPtr secrets = Secrets::MakeSecretsHelper(db);
+        int64_t personId = AddVerifiedPerson(transaction, db, "submitter@example.com");
+        SubmissionHelper helper(db);
+        SubmitResult submitted = helper.Submit(transaction, *secrets, MakeRequest(NowUs(transaction), 3), personId);
+        ASSERT_TRUE(submitted.ok);
+        ASSERT_TRUE(helper.AttachFlyer(transaction, secrets, submitted.submissionId, personId,
+                                       "jpeg", TableHelpers::PhotoTest::MakeTestJpeg(64, 48)).ok);
+        // Approved after the flyer went on: the decided date keeps it.
+        ASSERT_TRUE(helper.ReviewDate(transaction, submitted.eventIds[0], ReviewAction::Approve,
+                                      kCuratorId, "", {}).review.ok);
+
+        FlyerResult removed = helper.RemoveFlyer(transaction, submitted.submissionId, personId);
+        ASSERT_TRUE(removed.ok) << removed.errorCode;
+        EXPECT_EQ(removed.eventIds, (std::vector<int64_t>{ submitted.eventIds[1], submitted.eventIds[2] }));
+        Images::ImageHelper images(db);
+        EXPECT_TRUE(images.HasPhoto(transaction, DbSchema::kEventsTable, submitted.eventIds[0]));
+        EXPECT_FALSE(images.HasPhoto(transaction, DbSchema::kEventsTable, submitted.eventIds[1]));
+        EXPECT_FALSE(images.HasPhoto(transaction, DbSchema::kEventsTable, submitted.eventIds[2]));
+
+        // Again, with nothing there: still fine, nothing changes.
+        FlyerResult again = helper.RemoveFlyer(transaction, submitted.submissionId, personId);
+        EXPECT_TRUE(again.ok) << again.errorCode;
+        EXPECT_TRUE(again.eventIds.empty());
+
+        // And it can go back on: add, replace, remove and add again all work.
+        ASSERT_TRUE(helper.AttachFlyer(transaction, secrets, submitted.submissionId, personId,
+                                       "jpeg", TableHelpers::PhotoTest::MakeTestJpeg(32, 24)).ok);
+        EXPECT_TRUE(images.HasPhoto(transaction, DbSchema::kEventsTable, submitted.eventIds[1]));
+    });
+}
+
+TEST(SubmissionHelperTest, RemovingTheFlyerChecksWhoseItIsAndThatSomethingIsWaiting) {
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("RemovingTheFlyerChecksWhoseItIsAndThatSomethingIsWaiting", [&](Transaction& transaction) {
+        DatabaseHelper db = testDb.GetDatabaseHelper();
+        MakeWorld(transaction, db);
+        TableHelpers::PhotoTest::EnsurePhotoSupport(transaction, db, DbSchema::kEventsTable);
+        Secrets::SecretsHelperPtr secrets = Secrets::MakeSecretsHelper(db);
+        int64_t personId = AddVerifiedPerson(transaction, db, "submitter@example.com");
+        int64_t otherId = AddVerifiedPerson(transaction, db, "other@example.com");
+        SubmissionHelper helper(db);
+        SubmitResult submitted = helper.Submit(transaction, *secrets, MakeRequest(NowUs(transaction)), personId);
+        ASSERT_TRUE(submitted.ok);
+        ASSERT_TRUE(helper.AttachFlyer(transaction, secrets, submitted.submissionId, personId,
+                                       "jpeg", TableHelpers::PhotoTest::MakeTestJpeg(64, 48)).ok);
+
+        EXPECT_EQ(helper.RemoveFlyer(transaction, submitted.submissionId, otherId).errorCode,
+                  kSubmissionErrorNotYours);
+        EXPECT_EQ(helper.RemoveFlyer(transaction, 999999, personId).errorCode, kSubmissionErrorNotYours);
+        // Someone else's attempt took nothing off.
+        EXPECT_TRUE(Images::ImageHelper(db).HasPhoto(transaction, DbSchema::kEventsTable, submitted.eventIds[0]));
+
+        ASSERT_TRUE(helper.Withdraw(transaction, submitted.submissionId, personId).ok);
+        EXPECT_EQ(helper.RemoveFlyer(transaction, submitted.submissionId, personId).errorCode,
+                  kSubmissionErrorNothingPending);
+    });
+}
+
 // --- The curator's side and the decision email ---
 
 TEST(SubmissionHelperTest, TheNoticeComesOnceAfterTheLastPendingDate) {

@@ -5,19 +5,10 @@ import {
   provideBrowserGlobalErrorListeners,
   provideZoneChangeDetection,
 } from '@angular/core';
-import {
-  HTTP_INTERCEPTORS,
-  provideHttpClient,
-  withInterceptorsFromDi,
-} from '@angular/common/http';
+import { HTTP_INTERCEPTORS, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideRouter, withInMemoryScrolling } from '@angular/router';
-import {
-  CsrfInterceptor,
-  HONUWARE_API_BASE,
-  PhotoUrlBuilder,
-  provideHonuwareAccess,
-} from '@honuware/ui/access';
+import { CsrfInterceptor, HONUWARE_API_BASE } from '@honuware/ui/access';
 import {
   AUTH_ROUTES,
   AuthRoutes,
@@ -25,17 +16,11 @@ import {
   ErrorInterceptor,
   tryTokenLoginInitializer,
 } from '@honuware/ui/auth';
-import { provideHonuwareAccessMock } from '@honuware/ui/testing';
 
 import { routes } from './app.routes';
 import { environment } from '../environments/environment';
-import { provideCommunityAccess } from './core/community-access/community-access.providers';
-import { provideAdminUsersAccess } from './core/admin-users-access/admin-users-access.providers';
-import { provideEventsAdminAccess } from './core/events-admin-access/events-admin-access.providers';
-import { provideEventSubmissionsAccess } from './core/event-submissions-access/event-submissions-access.providers';
+import { provideAppAccess } from './core/app-access-providers';
 import { SiteConfigService } from './core/services/site-config.service';
-import { HONUWARE_MOCK_OPTIONS } from './core/mock/honuware-mock';
-import { DemoPhotoUrlBuilder, seedDemoPhotos } from './core/mock/demo-photo-art';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -54,32 +39,13 @@ export const appConfig: ApplicationConfig = {
     // X-CSRF-Token header before ErrorInterceptor sees the response.
     { provide: HTTP_INTERCEPTORS, useClass: CsrfInterceptor, multi: true },
     { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true },
-    // @honuware/ui's Crud/Auth/Photo access — the in-memory mock offline (the
-    // `local` build config sets useMock), the real HTTP impls otherwise. This is
-    // the DI swap the plan calls for. In mock mode we seed a demo admin + a small
-    // CRUD schema/rows so the admin editor is fully navigable offline.
-    // Offline there's no photo scaler either, so the events photos are drawn
-    // (CM3's placeholder art: shapes and color fields, never people), and the
-    // photo store is told which demo rows have one.
-    ...(environment.useMock
-      ? [
-          ...provideHonuwareAccessMock(HONUWARE_MOCK_OPTIONS, seedDemoPhotos),
-          { provide: PhotoUrlBuilder, useClass: DemoPhotoUrlBuilder },
-        ]
-      : provideHonuwareAccess()),
-    // CommunityFinder's app-specific access (health + site_info). The guide's
-    // seam isn't here: the lazy /guide routes provide it (GD3 OQ7 (d)).
-    provideCommunityAccess(environment.useMock),
-    // Admin user-management access (create user + reset password) — the two
-    // bespoke, admin_portal-gated endpoints the generic CRUD doesn't cover.
-    provideAdminUsersAccess(environment.useMock),
-    // The curator's events actions the generic CRUD doesn't cover: reviewing
-    // an event or a whole submission, and the submission settings
-    // (manage_events gated).
-    provideEventsAdminAccess(environment.useMock),
-    // The submitter's side (EV3): the submit form, "My submissions", withdraw,
-    // and whether the form is open.
-    provideEventSubmissionsAccess(environment.useMock),
+    // The data access: @honuware/ui's Crud/Auth/Photo, and CommunityFinder's
+    // own (the public site, the admin's users, the curator's events, the
+    // submitter's side). The real server's here; the `local` build swaps the
+    // file for the offline demo's (fileReplacements, CM3 Phase 2 §14), so
+    // production carries none of the mock code. The guide's seam isn't here:
+    // the lazy /guide routes provide it (GD3 OQ7 (d)).
+    ...provideAppAccess(),
     // Bootstrap-time silent login (me() → on 401 remember() → me()). Registered
     // after the interceptors so its calls are CSRF-stamped + error-handled.
     provideAppInitializer(() => {

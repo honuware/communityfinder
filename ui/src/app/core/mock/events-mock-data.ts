@@ -223,10 +223,10 @@ export const MOCK_GALLERY: readonly MockGalleryRow[] = [
   },
 ];
 
-// Leather Night's video. A made-up id of the right shape, so the offline demo
-// shows the play tile and builds the player without pointing at anyone's
-// real video (pressing play shows YouTube's "unavailable").
-export const MOCK_VIDEO: VideoRef = { provider: 'youtube', id: 'demoVideo01' };
+// Leather Night's video: the demo video Mason chose (CM3 OQ18), the same one
+// database_helper --populate_sample_data puts on the sample data. The CRUD
+// seed's video_url is built from this id.
+export const MOCK_VIDEO: VideoRef = { provider: 'youtube', id: 'lVhJ_A8XUgc' };
 export const MOCK_VIDEO_EVENT_ID = 103;
 
 function ownPhoto(table: keyof typeof MOCK_PHOTO_OWNERS, id: number | null): PhotoRef | null {

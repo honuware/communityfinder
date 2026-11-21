@@ -70,6 +70,35 @@ constexpr std::string_view kSqlGetStartedBefore =
     "SELECT * FROM events WHERE status = $1 AND starts_at_us < $2 "
     "ORDER BY starts_at_us ASC, id ASC LIMIT $3";
 
+// $1 the ILIKE pattern, $2 now, $3 the no-end duration, $4 the limit. The
+// first key puts the events that haven't ended first; the second orders them
+// soonest first and is NULL (one tie) for the rest, which the third orders
+// newest first.
+constexpr std::string_view kSqlFindByTitle =
+    "SELECT * FROM events WHERE title ILIKE $1 ESCAPE '\\' "
+    "ORDER BY (COALESCE(ends_at_us, starts_at_us + $3) >= $2) DESC, "
+    "CASE WHEN COALESCE(ends_at_us, starts_at_us + $3) >= $2 THEN starts_at_us END ASC, "
+    "starts_at_us DESC, id ASC LIMIT $4";
+
+// $1 now, $2 the no-end duration, $3 the limit.
+constexpr std::string_view kSqlGetNotEndedBy =
+    "SELECT * FROM events WHERE COALESCE(ends_at_us, starts_at_us + $2) >= $1 "
+    "ORDER BY starts_at_us ASC, id ASC LIMIT $3";
+
+// "%<text>%" with LIKE's own characters escaped, so the text is matched as
+// written: "100%" finds "100% Pop", not every title with "100" in it.
+std::string ContainsPattern(std::string_view text) {
+    std::string pattern = "%";
+    for (char c : text) {
+        if (c == '%' || c == '_' || c == '\\') {
+            pattern += '\\';
+        }
+        pattern += c;
+    }
+    pattern += '%';
+    return pattern;
+}
+
 // $1 an array literal; $2–$4 the candidate tables, in the order they're tried.
 // The first candidate with a table_item_photos row wins; none leaves the two
 // owner columns NULL.
@@ -209,6 +238,22 @@ KeyValueTableArray Events::GetPendingStartedBefore(
     return transaction.RunSqlStatementReturningKeyValueTableArray(
         std::string(kSqlGetStartedBefore), DbSchema::kEventsStatusPending,
         StringFromInt(nowUs), StringFromInt(limit));
+}
+
+KeyValueTableArray Events::FindByTitle(
+    Transaction& transaction, std::string_view searchText, int64_t nowUs,
+    int64_t defaultDurationUs, int64_t limit) const {
+    return transaction.RunSqlStatementReturningKeyValueTableArray(
+        std::string(kSqlFindByTitle), ContainsPattern(searchText), StringFromInt(nowUs),
+        StringFromInt(defaultDurationUs), StringFromInt(limit));
+}
+
+KeyValueTableArray Events::GetNotEndedBy(
+    Transaction& transaction, int64_t nowUs, int64_t defaultDurationUs,
+    int64_t limit) const {
+    return transaction.RunSqlStatementReturningKeyValueTableArray(
+        std::string(kSqlGetNotEndedBy), StringFromInt(nowUs), StringFromInt(defaultDurationUs),
+        StringFromInt(limit));
 }
 
 KeyValueTableArray Events::GetPhotoOwners(

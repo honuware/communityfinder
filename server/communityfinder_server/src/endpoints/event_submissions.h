@@ -77,4 +77,16 @@ Json::Value PostEventSubmissionPhoto(
     int64_t submissionId,
     std::string_view imageType);
 
+// DELETE /api/event_submissions/<int>/photo — CM3 Phase 2 §11, "Remove the
+// flyer": the submission's pending dates lose their photo (decided dates keep
+// theirs). Someone else's submission (or none) is a 404; nothing pending is a
+// 400 with `error_code` NOTHING_PENDING (SubmissionHelper::RemoveFlyer).
+// Responds {"submission_id", "event_ids"}: the dates whose photo went. Rides
+// PostEventSubmission's anchor, like the other submitter routes.
+Json::Value DeleteEventSubmissionPhoto(
+    EndpointAuthHelper& endpointAuthHelper,
+    const crow::request& req,
+    crow::response& resp,
+    int64_t submissionId);
+
 }  // namespace Endpoints

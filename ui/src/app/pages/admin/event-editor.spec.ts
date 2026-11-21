@@ -29,7 +29,7 @@ const NOW_US = pacificWallClockToUs(2026, 8, 12, 15);
 // category bar (1) and scene leather (2) of its own, the demo's video, and a
 // gallery.
 const LEATHER_NIGHT = '103';
-const LEATHER_NIGHT_VIDEO = 'https://www.youtube.com/watch?v=demoVideo01';
+const LEATHER_NIGHT_VIDEO = 'https://www.youtube.com/watch?v=lVhJ_A8XUgc';
 const BAR = 1;
 const COMMUNITY = 12;
 const BEAR = 1;

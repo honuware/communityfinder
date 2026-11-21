@@ -283,11 +283,43 @@
               [displayWith]="displayOption"
               (optionSelected)="onSearchSelected($event)"
             >
-              @for (option of searchOptions(); track option.value) {
-                <mat-option [value]="option">{{ option.display }}</mat-option>
+              @for (option of searchOptions(); track option.id) {
+                <mat-option [value]="option" class="manage-events__match-option">
+                  <span class="manage-events__match-title">{{ option.title }}</span>
+                  <span class="manage-events__match-line">{{ matchLine(option) }}</span>
+                </mat-option>
               }
             </mat-autocomplete>
           </mat-form-field>
+
+          <section class="manage-events__coming-up" aria-labelledby="coming-up-heading">
+            <h3 id="coming-up-heading" class="manage-events__coming-up-heading">Coming up</h3>
+            @if (loadingComingUp()) {
+              <p class="manage-events__hint">Loading…</p>
+            } @else if (comingUpFailed()) {
+              <p class="manage-events__hint">The list of what's coming up couldn't be loaded.</p>
+            } @else if (comingUp().length === 0) {
+              <p class="manage-events__hint">Nothing is coming up.</p>
+            } @else {
+              <ul class="manage-events__coming-up-list">
+                @for (match of comingUp(); track match.id) {
+                  <li>
+                    <button
+                      type="button"
+                      class="manage-events__coming-up-item"
+                      [class.manage-events__coming-up-item--open]="isEditing(match)"
+                      [attr.aria-current]="isEditing(match) ? 'true' : null"
+                      (click)="editEvent(match.id.toString())"
+                    >
+                      <span class="manage-events__match-title">{{ match.title }}</span>
+                      <span class="manage-events__match-line">{{ matchLine(match) }}</span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+          </section>
+
           @if (editRequest(); as request) {
             <app-event-editor
               [request]="request"
@@ -299,7 +331,8 @@
             />
           } @else {
             <p class="manage-events__hint">
-              Search for an event by its title, or press Edit on one in the queue.
+              Search for an event by its title, pick one coming up, or press Edit on one in the
+              queue.
             </p>
           }
         </div>

@@ -541,6 +541,55 @@ TEST(EventSubmissionsEndpointTest, TheFlyerGoesOnYourWaitingDates) {
     Auth::ServerConfig::Shutdown();
 }
 
+crow::response RemoveFlyer(EndpointTestHelper& helper, int64_t submissionId) {
+    return Request(helper, crow::HTTPMethod::Delete,
+                   "/api/event_submissions/" + StringFromInt(submissionId) + "/photo");
+}
+
+// CM3 Phase 2 §11 — "Remove the flyer": only the submitter, only while a date
+// is waiting, and it takes the flyer off every waiting date.
+TEST(EventSubmissionsEndpointTest, RemovingTheFlyerTakesItOffYourWaitingDates) {
+    Auth::ServerConfig::Shutdown();
+    Auth::ServerConfig::InitializeTestMode();
+    TestDatabaseUtil testDb;
+    testDb.RunInTransaction("RemovingTheFlyerTakesItOffYourWaitingDates", [&](Transaction& transaction) {
+        EndpointTestHelper helper(transaction, testDb);
+        DatabaseHelper databaseHelper = testDb.GetDatabaseHelper();
+        TableHelpers::PhotoTest::EnsurePhotoSupport(transaction, databaseHelper, DbSchema::kEventsTable);
+        const std::vector<char> jpegBytes = TableHelpers::PhotoTest::MakeTestJpeg(64, 48);
+        const std::string jpeg(jpegBytes.begin(), jpegBytes.end());
+        EXPECT_EQ(RemoveFlyer(helper, 1).code, 401);
+
+        SignIn(transaction, testDb, helper, "submitter@example.com", false);
+        crow::response submitted = Submit(helper, Form(NowUs(transaction), 2));
+        ASSERT_EQ(submitted.code, 200) << submitted.body;
+        const Json::Value submittedBody = Json::Value::FromText(submitted.body);
+        const int64_t submissionId = submittedBody["submission_id"].Get<int64_t>();
+        ASSERT_EQ(Flyer(helper, submissionId, "jpeg", jpeg).code, 200);
+
+        SignIn(transaction, testDb, helper, "other@example.com", false);
+        crow::response notYours = RemoveFlyer(helper, submissionId);
+        EXPECT_EQ(notYours.code, 404) << notYours.body;
+
+        SwitchTo(transaction, testDb, helper, "submitter@example.com");
+        crow::response resp = RemoveFlyer(helper, submissionId);
+        ASSERT_EQ(resp.code, 200) << resp.body;
+        const Json::Value body = Json::Value::FromText(resp.body);
+        EXPECT_EQ(body["submission_id"].Get<int64_t>(), submissionId);
+        EXPECT_EQ(body["event_ids"].GetArray().size(), 2u);
+        Images::ImageHelper images(databaseHelper);
+        for (const Json::Value& eventId : submittedBody["event_ids"].GetArray()) {
+            EXPECT_FALSE(images.HasPhoto(transaction, DbSchema::kEventsTable, eventId.Get<int64_t>()));
+        }
+
+        ASSERT_EQ(Withdraw(helper, submissionId).code, 200);
+        crow::response late = RemoveFlyer(helper, submissionId);
+        ASSERT_EQ(late.code, 400) << late.body;
+        EXPECT_EQ(ErrorCodeOf(late), Events::kSubmissionErrorNothingPending);
+    });
+    Auth::ServerConfig::Shutdown();
+}
+
 // CM3 §5.7: "My submissions" carries each date's photo flag and video, the
 // video in the events' own {provider, id} shape and a real null without one.
 TEST(EventSubmissionsEndpointTest, MineSaysWhichDatesHaveAFlyerAndAVideo) {

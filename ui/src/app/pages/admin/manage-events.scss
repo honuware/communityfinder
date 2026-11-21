@@ -207,6 +207,69 @@
   width: 100%;
 }
 
+// CM3 Phase 2 §9: a result or a coming-up row reads as the title over the
+// day, time, place and status, so each date of a series stands apart.
+.manage-events__match-title {
+  display: block;
+  font-weight: 500;
+}
+
+.manage-events__match-line {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// The autocomplete's two-line options need more than one line's height.
+.manage-events__match-option {
+  --mat-option-label-text-line-height: 1.3;
+  padding-block: 6px;
+}
+
+.manage-events__coming-up {
+  margin-bottom: 16px;
+}
+
+.manage-events__coming-up-heading {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.manage-events__coming-up-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.manage-events__coming-up-item {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--mat-sys-surface-container);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+  }
+}
+
+.manage-events__coming-up-item--open {
+  border-color: var(--mat-sys-primary);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
 .manage-events__wide {
   width: 100%;
 }

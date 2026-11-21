@@ -34,9 +34,10 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTabsModule } from '@angular/material/tabs';
-import { FkOption, FkOptionsResponse, HONUWARE_CRUD_ACCESS } from '@honuware/ui/access';
+import { FkOption, HONUWARE_CRUD_ACCESS } from '@honuware/ui/access';
 import { ToastService } from '@honuware/ui/foundation';
 import {
+  CuratorEventMatch,
   EVENTS_ADMIN_ACCESS,
   REJECT_REASONS,
   RejectReason,
@@ -44,10 +45,14 @@ import {
   ReviewDecision,
 } from '../../core/events-admin-access/events-admin-access';
 import { EventVocabulariesService } from '../../core/services/event-vocabularies.service';
-import { dataResultsToRecords } from '../../core/types/events.types';
+import { dataResultsToRecords, EventStatus } from '../../core/types/events.types';
 import { DuplicateCandidate, isPossibleDuplicate } from '../../core/utils/duplicate-hints';
 import { eventPagePath } from '../../core/utils/event-links';
-import { formatEventShortDate, formatEventTimeRange } from '../../core/utils/events-date.utils';
+import {
+  formatEventShortDate,
+  formatEventTime,
+  formatEventTimeRange,
+} from '../../core/utils/events-date.utils';
 import { relationshipLabel } from '../../core/utils/submission-labels';
 import { EditRequest, EventEditor, SavedEvent, TagChoice } from './event-editor';
 
@@ -122,9 +127,12 @@ export type RejectTarget =
 //   and a message to the submitter.
 // - A banner while submissions are paused, so the switch isn't left on.
 // - Two tabs below: New Event, and Edit Event, which finds an event by title,
-//   or opens one from the queue's Edit or from an event page's "Edit" link
-//   (?edit=<id>). Each tab has its own EventEditor, so switching tabs keeps
-//   what was typed in the other. A newly added event opens in Edit Event.
+//   lists the next ten coming up (CM3 Phase 2 §9), or opens one from the
+//   queue's Edit or from an event page's "Edit" link (?edit=<id>). Search
+//   results and the list both show each date's day, time, venue and status,
+//   so a series' dates can be told apart. Each tab has its own EventEditor, so
+//   switching tabs keeps what was typed in the other. A newly added event
+//   opens in Edit Event.
 @Component({
   selector: 'app-manage-events',
   imports: [
@@ -197,12 +205,17 @@ export class ManageEventsPage implements OnInit {
   readonly selectedTab = signal(NEW_EVENT_TAB);
   // What the Edit Event tab has open; null until an event is picked.
   readonly editRequest = signal<EditRequest | null>(null);
-  readonly searchControl = new FormControl<string | FkOption>('', { nonNullable: true });
-  readonly searchOptions = signal<FkOption[]>([]);
+  readonly searchControl = new FormControl<string | CuratorEventMatch>('', { nonNullable: true });
+  readonly searchOptions = signal<CuratorEventMatch[]>([]);
+  // The Edit Event tab's "Coming up": the next ten, in every status.
+  readonly comingUp = signal<CuratorEventMatch[]>([]);
+  readonly loadingComingUp = signal(true);
+  readonly comingUpFailed = signal(false);
 
   ngOnInit(): void {
     this.loadQueue();
     this.loadPickers();
+    this.loadComingUp();
     this.eventsAdmin
       .getSubmissionSettings()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -227,12 +240,12 @@ export class ManageEventsPage implements OnInit {
         distinctUntilChanged(),
         switchMap((text) =>
           text
-            ? this.crud.getFkOptions('events', text, 10)
-            : of<FkOptionsResponse>({ total_count: 0, options: [] }),
+            ? this.eventsAdmin.findEvents(text).pipe(catchError(() => of<CuratorEventMatch[]>([])))
+            : of<CuratorEventMatch[]>([]),
         ),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe((response) => this.searchOptions.set(response.options));
+      .subscribe((matches) => this.searchOptions.set(matches));
 
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const id = params.get('edit');
@@ -242,13 +255,32 @@ export class ManageEventsPage implements OnInit {
     });
   }
 
-  displayOption(option: FkOption | string): string {
-    return typeof option === 'string' ? option : (option?.display ?? '');
+  displayOption(option: CuratorEventMatch | string): string {
+    return typeof option === 'string' ? option : (option?.title ?? '');
   }
 
   onSearchSelected(event: MatAutocompleteSelectedEvent): void {
-    this.editEvent((event.option.value as FkOption).value);
+    this.editEvent(String((event.option.value as CuratorEventMatch).id));
     this.searchControl.setValue('', { emitEvent: false });
+  }
+
+  // "Thu, Nov 20 · 7:00 PM · Cafe Mox · Pending": what tells one date of a
+  // series from the next. The place is left out when there's none.
+  matchLine(match: CuratorEventMatch): string {
+    const where = match.venue_name || match.location_text;
+    return [
+      formatEventShortDate(match.starts_at_us),
+      formatEventTime(match.starts_at_us),
+      where,
+      statusLabel(match.status),
+    ]
+      .filter((part) => !!part)
+      .join(' · ');
+  }
+
+  // Whether the Edit Event tab has this event open.
+  isEditing(match: CuratorEventMatch): boolean {
+    return this.editRequest()?.id === String(match.id);
   }
 
   // Opens the event in the Edit Event tab.
@@ -268,6 +300,7 @@ export class ManageEventsPage implements OnInit {
   // opens in Edit Event (its New Event form is blank again).
   onSaved(saved: SavedEvent): void {
     this.loadQueue();
+    this.loadComingUp();
     if (saved.added) {
       this.editEvent(saved.id);
     }
@@ -575,6 +608,25 @@ export class ManageEventsPage implements OnInit {
     };
   }
 
+  private loadComingUp(): void {
+    this.loadingComingUp.set(true);
+    this.eventsAdmin
+      .findEvents('')
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (matches) => {
+          this.comingUp.set(matches);
+          this.comingUpFailed.set(false);
+          this.loadingComingUp.set(false);
+        },
+        error: () => {
+          this.comingUp.set([]);
+          this.comingUpFailed.set(true);
+          this.loadingComingUp.set(false);
+        },
+      });
+  }
+
   private loadPickers(): void {
     forkJoin({
       venues: this.crud.getFkOptions('venues', '', PAGE_SIZE),
@@ -620,6 +672,17 @@ function toCandidate(row: Record<string, string>): DuplicateCandidate {
 
 function targetKey(target: RejectTarget): string {
   return target.kind === 'event' ? `e${target.event.id}` : target.group.key;
+}
+
+const STATUS_LABELS: Record<EventStatus, string> = {
+  pending: 'Pending',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  archived: 'Archived',
+};
+
+function statusLabel(status: EventStatus): string {
+  return STATUS_LABELS[status] ?? status;
 }
 
 // The toast's word on the decision email (`decision_emailed`).

@@ -2,7 +2,7 @@ import { Component, computed, DestroyRef, inject, OnInit, signal, viewChild } fr
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormArray, FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { catchError, defer, map, Observable, of, switchMap } from 'rxjs';
+import { catchError, map, Observable, of, switchMap, throwError } from 'rxjs';
 import {
   MatAutocompleteModule,
   MatAutocompleteSelectedEvent,
@@ -19,12 +19,11 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatSelectModule } from '@angular/material/select';
 import { AuthService } from '@honuware/ui/auth';
 import { SimpleDateComponent } from '@honuware/ui/controls';
-import { PhotoUploadComponent } from '@honuware/ui/photos';
+import { PhotoUploadComponent, PreparedImage } from '@honuware/ui/photos';
 import { COMMUNITY_ACCESS } from '../../core/community-access/community-access';
 import {
   EMAIL_NOT_VERIFIED,
   EVENT_SUBMISSIONS_ACCESS,
-  FlyerImageType,
   SUBMISSIONS_PAUSED,
   SubmissionProblem,
   SubmissionRelationship,
@@ -55,7 +54,9 @@ import {
   dateRowTimes,
   EMPTY_SUBMIT_DATE,
   FLYER_TYPE_MESSAGE,
+  FlyerNotReady,
   flyerImageType,
+  flyerPreparationProblem,
   MAX_SUBMISSION_DATES,
   PlaceMode,
   SubmitDateValue,
@@ -124,6 +125,10 @@ function dateGroup(value: SubmitDateValue = EMPTY_SUBMIT_DATE) {
 //   in, to /api/event_submissions/<id>/photo/<type>, which puts it on every
 //   pending date; if that fails the submission still stands and the thanks
 //   says the flyer didn't make it.
+// - CM3 Phase 2 §13.3: before anything is sent, the flyer is shrunk and
+//   re-encoded as a JPEG as every upload is, and checked against the upload
+//   limit; one that's still too big (or can't be read) is refused at its
+//   field, and nothing is sent.
 @Component({
   selector: 'app-submit-event',
   imports: [
@@ -353,20 +358,29 @@ export class SubmitEventPage implements OnInit {
       return;
     }
     // Taken now: the picker goes away with the form once it's sent.
-    const flyer = this.flyerPicker()?.pendingFile ?? null;
-    const flyerType = flyer ? flyerImageType(flyer) : null;
-    if (flyer && !flyerType) {
+    const picker = this.flyerPicker();
+    const flyer = picker?.pendingFile ?? null;
+    if (flyer && !flyerImageType(flyer)) {
       this.showProblem('flyer', null, FLYER_TYPE_MESSAGE);
       return;
     }
     this.sending.set(true);
-    this.submissions
-      .submit(composed.request)
+    // The flyer is shrunk and re-encoded first, as every upload is (CM3
+    // Phase 2 §13.3), so one still over the upload limit is refused here,
+    // before anything is sent, rather than after the submission is in.
+    (picker ? picker.preparePendingPhoto() : of(null))
       .pipe(
-        switchMap((result) =>
-          this.attachFlyer(result, flyer, flyerType).pipe(
-            map((flyerOutcome) => ({ result, flyerOutcome })),
-          ),
+        catchError((error: unknown) => throwError(() => new FlyerNotReady(error))),
+        switchMap((prepared) =>
+          this.submissions
+            .submit(composed.request)
+            .pipe(
+              switchMap((result) =>
+                this.attachFlyer(result, prepared).pipe(
+                  map((flyerOutcome) => ({ result, flyerOutcome })),
+                ),
+              ),
+            ),
         ),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -378,6 +392,10 @@ export class SubmitEventPage implements OnInit {
         },
         error: (error: unknown) => {
           this.sending.set(false);
+          if (error instanceof FlyerNotReady) {
+            this.showProblem('flyer', null, flyerPreparationProblem(error.reason));
+            return;
+          }
           this.onRefused(toSubmissionProblem(error));
         },
       });
@@ -436,14 +454,12 @@ export class SubmitEventPage implements OnInit {
   // send (submission_id 0) has nothing to attach to, and is told nothing.
   private attachFlyer(
     result: SubmissionResult,
-    flyer: File | null,
-    flyerType: FlyerImageType | null,
+    flyer: PreparedImage | null,
   ): Observable<FlyerOutcome | null> {
-    if (!flyer || !flyerType || !result.submission_id) {
+    if (!flyer || !result.submission_id) {
       return of(null);
     }
-    return defer(() => flyer.arrayBuffer()).pipe(
-      switchMap((bytes) => this.submissions.attachFlyer(result.submission_id, bytes, flyerType)),
+    return this.submissions.attachFlyer(result.submission_id, flyer.buffer, 'jpeg').pipe(
       map(() => ({ ok: true, message: 'Your flyer is attached.' })),
       catchError((error: unknown) =>
         of({
